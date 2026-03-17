@@ -1,0 +1,53 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  medias       Media[]
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+model Media {
+  id            Int               @id @default(autoincrement())
+  type          MediaType
+  originalName  String
+  mimeType      String
+  size          Int
+  uploaderId    Int
+  createdAt     DateTime          @default(now())
+  uploader      User              @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  inferenceRuns InferenceResult[]
+}
+
+model InferenceResult {
+  id            Int      @id @default(autoincrement())
+  mediaId       Int
+  model         String
+  task          String
+  detections    Json?
+  rawResponse   Json?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  media         Media     @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+}

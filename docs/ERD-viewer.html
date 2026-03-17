@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ERD 시각화 - Hanhwa Final</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body { font-family: 'Malgun Gothic', sans-serif; margin: 24px; background: #f5f5f5; }
+    h1 { color: #1a1a2e; }
+    h2 { color: #16213e; margin-top: 2rem; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem; }
+    .diagram { background: #fff; border-radius: 8px; padding: 24px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: auto; }
+    .mermaid { display: flex; justify-content: center; }
+  </style>
+</head>
+<body>
+  <h1>데이터베이스 ERD 시각화</h1>
+  <p>SAR·CCTV 다중 센서 융합 관제 — 현재 스키마 및 확장 예정 엔티티</p>
+
+  <h2>1. 현재 구현된 ERD (Prisma 스키마 기준)</h2>
+  <div class="diagram">
+    <div class="mermaid" id="erd-current">
+erDiagram
+  User ||--o{ Media : "업로드"
+  Media ||--o{ InferenceResult : "추론 실행"
+
+  User {
+    int id PK
+    string email UK
+    string passwordHash
+    string name "nullable"
+    datetime createdAt
+    datetime updatedAt
+  }
+
+  Media {
+    int id PK
+    enum type "IMAGE | VIDEO"
+    string originalName
+    string mimeType
+    int size
+    int uploaderId FK
+    datetime createdAt
+  }
+
+  InferenceResult {
+    int id PK
+    int mediaId FK
+    string model "yolo, mast3r 등"
+    string task "detect, reconstruct-3d 등"
+    json detections "nullable"
+    json rawResponse "nullable"
+    string errorMessage "nullable"
+    datetime createdAt
+  }
+    </div>
+  </div>
+
+  <h2>2. 확장 예정 ERD (SAR 지도·거리 분석·위협/경로)</h2>
+  <div class="diagram">
+    <div class="mermaid" id="erd-extended">
+erDiagram
+  User ||--o{ Media : "업로드"
+  Media ||--o{ InferenceResult : "추론"
+  User ||--o{ SarDetection : "조회"
+  SarDetection ||--o{ ThreatZone : "기반"
+  SarDetection ||--o{ DistanceLog : "거리 이력"
+  Route ||--o{ RouteSegment : "구간"
+
+  User {
+    int id PK
+    string email UK
+    string passwordHash
+    string name "nullable"
+    datetime createdAt
+    datetime updatedAt
+  }
+
+  Media {
+    int id PK
+    enum type "IMAGE | VIDEO"
+    string originalName
+    string mimeType
+    int size
+    int uploaderId FK
+    datetime createdAt
+  }
+
+  InferenceResult {
+    int id PK
+    int mediaId FK
+    string model
+    string task
+    json detections "nullable"
+    json rawResponse "nullable"
+    string errorMessage "nullable"
+    datetime createdAt
+  }
+
+  SarDetection {
+    int id PK
+    float latitude
+    float longitude
+    string source "SAR | CCTV"
+    string targetType "tank 등"
+    datetime detectedAt
+    string metadata "json, optional"
+  }
+
+  ThreatZone {
+    int id PK
+    int sarDetectionId FK "nullable"
+    float centerLat
+    float centerLng
+    float radiusMeters
+    string threatLevel "high | medium | low"
+    datetime createdAt
+  }
+
+  DistanceLog {
+    int id PK
+    int sarDetectionId FK "nullable"
+    float distanceMeters
+    string unit
+    datetime measuredAt
+  }
+
+  Route {
+    int id PK
+    int userId FK "nullable"
+    string name
+    string origin "WKT or lat,lng"
+    string destination
+    datetime createdAt
+  }
+
+  RouteSegment {
+    int id PK
+    int routeId FK
+    int seq
+    float fromLat
+    float fromLng
+    float toLat
+    float toLng
+    string roadInfo "optional"
+  }
+    </div>
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+  </script>
+</body>
+</html>

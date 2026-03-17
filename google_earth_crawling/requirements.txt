@@ -1,0 +1,6 @@
+# Google Earth 크롤링 전용 의존성
+earthengine-api>=1.4.0
+sentinelsat>=1.2.0
+geopandas>=0.14.0
+shapely>=2.0.0
+requests>=2.28.0

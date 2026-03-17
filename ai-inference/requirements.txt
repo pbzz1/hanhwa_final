@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+ultralytics
+opencv-python
+numpy
+scikit-learn
+
+# MASt3R / DUSt3R dependencies (repo cloned under ai-inference/mast3r)
+-r mast3r/requirements.txt
+-r mast3r/dust3r/requirements.txt

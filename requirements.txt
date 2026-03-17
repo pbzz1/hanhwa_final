@@ -1,0 +1,2 @@
+# 메인 프로젝트 의존성 (필요 시 추가)
+# Google Earth 크롤링용 패키지는 google_earth_crawling/requirements.txt 사용
