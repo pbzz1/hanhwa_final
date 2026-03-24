@@ -5,8 +5,12 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const isProd = process.env.NODE_ENV === 'production';
   app.enableCors({
-    origin: ['http://localhost:5173'],
+    origin: isProd
+      ? (process.env.FRONTEND_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean) ??
+        ['http://localhost:5173'])
+      : true,
   });
   app.useGlobalPipes(
     new ValidationPipe({
@@ -15,6 +19,7 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  await app.listen(process.env.PORT ?? 3000);
+  const port = Number(process.env.PORT) || 3308;
+  await app.listen(port);
 }
 void bootstrap();

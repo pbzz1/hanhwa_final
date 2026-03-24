@@ -197,10 +197,71 @@
   gap: 8px;
 }
 
+.sim-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.sim-speed-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.sim-speed-label select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.sim-progress-wrap {
+  flex: 1;
+  min-width: 120px;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.sim-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #7c3aed);
+  border-radius: 999px;
+  transition: width 0.08s linear;
+}
+
+.sim-progress-label {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.road-path-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .map-title {
   margin: 0;
   font-size: 18px;
   color: #0f172a;
+}
+
+/* overflow:hidden 은 CustomOverlay 핀이 컨테이너 밖(특히 상단)으로 그려질 때 잘려
+   "반만 보이다가 사라진 것처럼" 보일 수 있어 visible 유지 */
+.map-with-radar-hover {
+  position: relative;
+  width: 100%;
 }
 
 .maplibre-container {
@@ -208,8 +269,737 @@
   height: 420px;
   border-radius: 14px;
   border: 1px solid #e2e8f0;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  position: relative;
+  z-index: 0;
+}
+
+/* FMCW 범위 내 적 핀 강조 */
+.enemy-pin--in-radar .tactical-marker__frame {
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.85);
+  border-radius: 4px;
+}
+
+.radar-enemy-hover-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: min(360px, calc(100% - 20px));
+  max-height: min(92vh, 520px);
+  overflow: auto;
+  z-index: 25;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #f8fafc 0%, #e0f2fe 100%);
+  border: 1px solid #7dd3fc;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.radar-enemy-hover-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.radar-enemy-hover-panel__badge {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0369a1;
+}
+
+.radar-enemy-hover-panel__title {
+  margin: 0;
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.radar-enemy-hover-panel__sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.radar-enemy-hover-panel__close {
+  border: none;
+  background: #fff;
+  color: #64748b;
+  font-size: 22px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.radar-enemy-hover-panel__close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.radar-enemy-hover-panel__hint {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.radar-enemy-hover-panel__canvas {
+  border: 1px solid #bae6fd;
+  background: #0f172a;
+}
+
+.radar-enemy-hover-panel__metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.radar-enemy-hover-panel__metrics div {
+  margin: 0;
+}
+
+.radar-enemy-hover-panel__metrics dt {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.radar-enemy-hover-panel__metrics dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* FMCW 레이더 — VoD 스타일 포인트 탐지 데모 */
+.radar-fmcw-panel {
+  margin: 0.75rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #bae6fd;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.radar-fmcw-panel__title {
+  margin: 0 0 0.35rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 14px;
+  color: #0c4a6e;
+}
+
+.radar-fmcw-panel__chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: #0369a1;
+  color: #fff;
+}
+
+.radar-fmcw-panel__text {
+  margin: 0.25rem 0;
+  font-size: 12px;
+}
+
+.radar-methodology {
+  margin: 0.65rem 0 0.35rem;
+  border-radius: 10px;
+  border: 1px solid #7dd3fc;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.radar-methodology__summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.5rem 0.65rem;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0c4a6e;
+}
+
+.radar-methodology__summary::-webkit-details-marker {
+  display: none;
+}
+
+.radar-methodology__summary::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.radar-methodology[open] .radar-methodology__summary::before {
+  transform: rotate(90deg);
+}
+
+.radar-methodology__body {
+  padding: 0 0.65rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.radar-methodology__section {
+  margin: 0;
+}
+
+.radar-methodology__section--demo {
+  padding: 0.5rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(254, 243, 199, 0.55);
+  border: 1px solid #fcd34d;
+}
+
+.radar-methodology__h {
+  margin: 0 0 0.3rem;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.radar-methodology__section p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.radar-fmcw-panel__stats {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.radar-fmcw-panel__stats li {
+  margin: 0.2rem 0;
+}
+
+.radar-inline-viz {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #bae6fd;
+}
+
+@media (max-width: 960px) {
+  .radar-inline-viz {
+    grid-template-columns: 1fr;
+  }
+}
+
+.radar-inline-viz__heading {
+  margin: 0 0 0.35rem;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0c4a6e;
+}
+
+.radar-inline-viz__hint {
+  margin: 0 0 0.5rem;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.radar-inline-viz__block--2d .radar-charts-2d {
+  margin-top: 0;
+}
+
+.radar-inline-viz__canvas3d {
+  border: 1px solid #7dd3fc;
+  border-radius: 10px;
+}
+
+.radar-charts-2d {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.radar-charts-2d__plot {
+  min-width: 0;
+}
+
+.radar-charts-2d__caption {
+  margin: 0 0 0.25rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.radar-charts-2d__canvas {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.radar-site-pin-anchor {
+  cursor: default;
+  pointer-events: auto;
+  z-index: 5;
+}
+
+.radar-site-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #38bdf8, #0369a1);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(3, 105, 161, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-site-icon-inner {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.radar-detection-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  padding: 0;
+  cursor: pointer;
+}
+
+.radar-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: #0ea5e9;
+  color: #fff;
+  margin-bottom: 0.35rem;
+}
+
+.map-hover-side-card--radar {
+  max-width: 220px;
+}
+
+/* 카카오맵 CustomOverlay: 전술도 부호 스타일 마커 */
+.kakao-tactical-pin-anchor {
+  cursor: pointer;
+  user-select: none;
+  pointer-events: auto;
+  z-index: 3;
+}
+
+.tactical-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 48px;
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.35));
+}
+
+.tactical-marker__ticks {
+  height: 6px;
+  width: 100%;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tactical-marker__ticks--none {
+  height: 2px;
+}
+
+.tactical-marker__ticks--reinforced::before,
+.tactical-marker__ticks--reinforced::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-left: 2px solid #1d4ed8;
+  border-top: 2px solid #1d4ed8;
+  transform: rotate(45deg);
+}
+
+.tactical-marker__ticks--reinforced::before {
+  left: 22%;
+}
+
+.tactical-marker__ticks--reinforced::after {
+  right: 22%;
+}
+
+.tactical-marker__ticks--reduced::before,
+.tactical-marker__ticks--reduced::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid #1d4ed8;
+}
+
+.tactical-marker__ticks--reduced::before {
+  left: 24%;
+}
+
+.tactical-marker__ticks--reduced::after {
+  right: 24%;
+}
+
+.tactical-marker__frame {
+  width: 38px;
+  height: 30px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: rgba(219, 234, 254, 0.55);
+}
+
+.tactical-glyph-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tactical-marker--friendly .tactical-marker__frame {
+  border: 2px solid #1d4ed8;
+  color: #1e3a8a;
+}
+
+.tactical-marker--loc-planned .tactical-marker__frame {
+  border-style: dashed;
+  background: rgba(224, 231, 255, 0.45);
+}
+
+.tactical-marker--enemy .tactical-marker__frame,
+.tactical-marker__frame--double {
+  border: 3px double #b91c1c;
+  background: rgba(254, 226, 226, 0.5);
+  color: #7f1d1d;
+}
+
+.tactical-marker--enemy-strongpoint .tactical-marker__frame {
+  border-radius: 16px 16px 2px 2px;
+}
+
+.tactical-marker__echelon {
+  font-size: 10px;
+  font-weight: 800;
+  color: #1e40af;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.tactical-marker__echelon--enemy {
+  color: #991b1b;
+}
+
+.unit-map-overlay {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+  border: 1px solid #e2e8f0;
+}
+
+.unit-infowindow {
+  min-width: 250px;
+  max-width: 320px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.unit-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.unit-badge-friendly {
+  background: #2563eb;
+  color: #fff;
+}
+
+.unit-infowindow h4 {
+  margin: 0 0 6px;
+  padding-left: 8px;
+  border-left: 4px solid #2563eb;
+  font-size: 13px;
+}
+
+.enemy-badge {
+  background: #dc2626;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.unit-infowindow p {
+  margin: 2px 0;
+}
+
+.map-hover-side-card {
+  transform: translate(14px, -50%);
+  pointer-events: auto;
+}
+
+.map-hover-video-hint {
+  margin: 10px 0 0 !important;
+  padding-top: 8px;
+  border-top: 1px dashed #cbd5e1;
+  font-size: 11px !important;
+  color: #64748b !important;
+  font-weight: 600;
+}
+
+.map-hover-side-card--enemy .map-hover-video-hint {
+  border-top-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca !important;
+}
+
+.enemy-infowindow {
+  min-width: 248px;
+  max-width: 300px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  font-size: 12px;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 12px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.35);
+}
+
+.enemy-infowindow .enemy-infowindow-title {
+  margin: 0 0 6px;
+  padding-left: 8px;
+  border-left: 4px solid #dc2626;
+  font-size: 13px;
+  color: #f8fafc;
+}
+
+.enemy-infowindow p {
+  margin: 2px 0;
+  color: #e2e8f0;
+}
+
+.map-video-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.map-video-modal {
+  width: min(920px, 100%);
+  max-height: min(90vh, 880px);
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #334155;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.map-video-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #334155;
+  background: #1e293b;
+}
+
+.map-video-modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.map-video-modal-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #94a3b8 !important;
+}
+
+.map-video-modal-close {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: #334155;
+  color: #f8fafc;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.map-video-modal-close:hover {
+  background: #475569;
+}
+
+.map-video-modal-body {
+  padding: 12px 16px 16px;
+  flex: 1;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-video-modal-video {
+  width: 100%;
+  max-height: min(72vh, 720px);
+  border-radius: 10px;
+  background: #020617;
+}
+
+.map-video-modal-empty {
+  margin: 0;
+  text-align: center;
+  padding: 32px 16px;
+}
+
+.enemy-video-overlay {
+  width: 280px;
+  border: 1px solid #fca5a5;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  color: #f8fafc;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.enemy-video-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(185, 28, 28, 0.22);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.35);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.enemy-video-header em {
+  font-style: normal;
+}
+
+.enemy-video-overlay p {
+  margin: 6px 10px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.enemy-video-overlay video {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  background: #020617;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.map-legend-tactical {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.map-legend-title {
+  margin: 0;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.map-legend-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  line-height: 1.65;
+  font-size: 12px;
+  color: #475569;
+}
+
+.map-legend-list li {
+  margin-bottom: 4px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.legend-icon-friendly {
+  background: #2563eb;
+  border: 2px solid #1d4ed8;
+  clip-path: polygon(50% 0%, 100% 30%, 100% 70%, 50% 100%, 0% 70%, 0% 30%);
+}
+
+.legend-icon-enemy {
+  background: #dc2626;
+  border: 2px solid #b91c1c;
+  transform: rotate(45deg);
 }
 
 .severity.high {
@@ -266,8 +1056,12 @@
 .dataset-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 720px;
+  min-width: 960px;
   background: #fff;
+}
+
+.small-cell {
+  font-size: 11px;
 }
 
 .dataset-table th,
@@ -291,6 +1085,33 @@
 
 .dataset-table tbody tr:hover {
   background: #f8fbff;
+}
+
+.table-row-friendly {
+  border-left: 3px solid #2563eb;
+}
+
+.table-row-enemy {
+  border-left: 3px solid #dc2626;
+}
+
+.table-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.table-badge-friendly {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.table-badge-enemy {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .status-chip {
@@ -511,6 +1332,485 @@ button:disabled {
   color: #991b1b;
 }
 
+/* ----- 다중 센서 파이프라인 (프로토타입) ----- */
+.sensor-pipeline-page .sensor-pipeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sensor-autoplay-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sensor-flow-overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.sensor-flow-overview-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+
+.sensor-flow-overview-card--scenario {
+  border-color: #c7d2fe;
+  background: linear-gradient(160deg, #eef2ff 0%, #fff 55%);
+}
+
+.sensor-flow-overview-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.sensor-flow-overview-list {
+  margin: 0;
+  padding: 0 0 0 0;
+  list-style: none;
+  counter-reset: flow-step;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sensor-flow-overview-list li {
+  position: relative;
+  margin: 0;
+  padding: 10px 12px 10px 40px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #475569;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+  background: #f8fafc;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.sensor-flow-overview-list li.sensor-flow-overview-li--active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1e293b;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+}
+
+.sensor-flow-overview-idx {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.sensor-flow-overview-li--active .sensor-flow-overview-idx {
+  background: #2563eb;
+  color: #fff;
+}
+
+.sensor-pipeline-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.sensor-step-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+.sensor-step-rail li {
+  position: relative;
+}
+
+.sensor-step-rail li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 100%;
+  width: 2px;
+  height: 10px;
+  background: linear-gradient(#cbd5e1, #94a3b8);
+}
+
+.sensor-step-btn {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  padding: 12px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  margin-bottom: 10px;
+}
+
+.sensor-step-btn:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.12);
+}
+
+.sensor-step-btn--active {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.15);
+}
+
+.sensor-step-btn--done:not(.sensor-step-btn--active) {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.sensor-step-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.sensor-step-btn--active .sensor-step-num {
+  background: #2563eb;
+  color: #fff;
+}
+
+.sensor-step-btn--done .sensor-step-num {
+  background: #22c55e;
+  color: #fff;
+}
+
+.sensor-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sensor-step-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.sensor-step-tag {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.sensor-pipeline-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sensor-viewport-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0f172a;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12);
+}
+
+.sensor-viewport-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sensor-viewport-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.sensor-sar-plate {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-height: min(52vh, 520px);
+  background: #1e293b;
+  overflow: hidden;
+}
+
+.sensor-sar-plate--sat {
+  background-image:
+    repeating-linear-gradient(
+      -18deg,
+      rgba(148, 163, 184, 0.12) 0 2px,
+      transparent 2px 14px
+    ),
+    linear-gradient(145deg, #334155 0%, #0f172a 45%, #1e293b 100%);
+  filter: contrast(1.15) saturate(0.35);
+}
+
+.sensor-sar-plate--uav {
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgba(226, 232, 240, 0.08) 0 1px,
+      transparent 1px 6px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(226, 232, 240, 0.06) 0 1px,
+      transparent 1px 6px
+    ),
+    linear-gradient(160deg, #475569 0%, #1e293b 50%, #0f172a 100%);
+  filter: contrast(1.25) saturate(0.45);
+}
+
+.sensor-sar-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.25) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.sensor-sar-grid--fine {
+  background-size: 18px 18px;
+  opacity: 0.5;
+}
+
+.sensor-sar-hotspots span,
+.sensor-sar-hotspots--tight span {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 4px;
+  background: rgba(251, 191, 36, 0.85);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.4), 0 0 24px rgba(251, 113, 133, 0.5);
+  animation: sensor-pulse 2.2s ease-in-out infinite;
+}
+
+.sensor-sar-hotspots--tight span {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+}
+
+@keyframes sensor-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+.sensor-radar-wrap {
+  position: relative;
+  aspect-ratio: 1;
+  max-height: min(52vh, 520px);
+  margin: 0 auto;
+  width: 100%;
+  max-width: 520px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #0f172a 0%, #020617 72%);
+  box-shadow: inset 0 0 80px rgba(34, 197, 94, 0.06);
+  overflow: hidden;
+}
+
+.sensor-radar-rings {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.08),
+    inset 0 0 0 22px rgba(34, 197, 94, 0.06),
+    inset 0 0 0 44px rgba(34, 197, 94, 0.05),
+    inset 0 0 0 66px rgba(34, 197, 94, 0.04);
+}
+
+.sensor-radar-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgba(34, 197, 94, 0.22) 8deg,
+    rgba(34, 197, 94, 0.05) 28deg,
+    transparent 42deg
+  );
+  animation: radar-sweep-spin 3.5s linear infinite;
+}
+
+@keyframes radar-sweep-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sensor-radar-blips .blip {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 10px #22c55e;
+}
+
+.sensor-radar-blips .blip--dim {
+  opacity: 0.45;
+  background: #86efac;
+}
+
+.sensor-drone-wrap {
+  aspect-ratio: 16 / 9;
+  max-height: min(52vh, 520px);
+  background: #000;
+}
+
+.sensor-drone-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: min(52vh, 520px);
+  object-fit: contain;
+}
+
+.sensor-detail-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: #fafafa;
+}
+
+.sensor-detail-lead {
+  margin: 0 0 14px;
+  line-height: 1.65;
+  color: #334155;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sensor-detail-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sensor-detail-block {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.sensor-detail-block--scenario {
+  border-color: #c7d2fe;
+  background: #f5f7ff;
+}
+
+.sensor-detail-block-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.sensor-detail-block--scenario .sensor-detail-block-title {
+  color: #4338ca;
+}
+
+.sensor-detail-block-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.sensor-meta-grid {
+  margin: 0 0 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.sensor-meta-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px;
+  font-size: 14px;
+  align-items: baseline;
+}
+
+.sensor-meta-row dt {
+  margin: 0;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.sensor-meta-row dd {
+  margin: 0;
+  color: #0f172a;
+}
+
+.sensor-nav-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -531,6 +1831,39 @@ button:disabled {
 
   .dataset-filters {
     flex-direction: column;
+  }
+
+  .sensor-pipeline-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sensor-step-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sensor-step-rail li:not(:last-child)::after {
+    display: none;
+  }
+
+  .sensor-step-btn {
+    margin-bottom: 0;
+    flex: 1 1 calc(50% - 8px);
+    min-width: 140px;
+  }
+
+  .sensor-meta-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .sensor-flow-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sensor-detail-split {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -51,3 +51,88 @@ model InferenceResult {
   createdAt     DateTime @default(now())
   media         Media     @relation(fields: [mediaId], references: [id], onDelete: Cascade)
 }
+
+enum UnitLevel {
+  소대
+  중대
+  대대
+}
+
+enum Readiness {
+  양호
+  경계
+  최고
+}
+
+/// 전술도 부호: 보병(X), 포병(점), 기갑(타원) 등 (참조 차트 기준)
+enum TacticalSymbol {
+  INFANTRY
+  ARTILLERY
+  ARMOR
+  MECHANIZED_INFANTRY
+  RECON
+  ENGINEER
+  ADA
+}
+
+/// 현재 지점(실선) / 예정 지점(점선)
+enum TacticalLocationStatus {
+  CURRENT
+  PLANNED
+}
+
+/// 증강/감소 표시 (차트 상단 틱)
+enum StrengthModifier {
+  NONE
+  REINFORCED
+  REDUCED
+}
+
+model Unit {
+  id                 Int                     @id @default(autoincrement())
+  name               String
+  level              UnitLevel
+  branch             String
+  lat                Float
+  lng                Float
+  personnel          Int
+  equipment          String
+  readiness          Readiness
+  mission            String
+  symbolType         TacticalSymbol          @default(INFANTRY)
+  locationStatus     TacticalLocationStatus  @default(CURRENT)
+  strengthModifier   StrengthModifier        @default(NONE)
+  /// 아군 상황·정찰 영상 (지도 마커 클릭 시 재생). 없으면 null
+  situationVideoUrl  String? @db.Text
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+}
+
+enum ThreatLevel {
+  낮음
+  중간
+  높음
+}
+
+/// 적 부대(이중 실선 사각) / 적 진지(호 형태를 단순화한 이중 호)
+enum EnemyTacticalSymbol {
+  ENEMY_UNIT
+  ENEMY_STRONGPOINT
+}
+
+model InfiltrationPoint {
+  id               Int                 @id @default(autoincrement())
+  codename         String
+  lat              Float
+  lng              Float
+  threatLevel      ThreatLevel
+  estimatedCount   Int
+  observedAt       DateTime
+  riskRadiusMeter  Int
+  droneVideoUrl    String
+  enemySymbol      EnemyTacticalSymbol @default(ENEMY_UNIT)
+  /// 적 병과 표시용 (전차/포병 등)
+  enemyBranch      String              @default("미상")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}

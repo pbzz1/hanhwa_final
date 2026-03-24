@@ -7,11 +7,11 @@
 - **backend/** - NestJS API 서버
 - **frontend/** - React + Vite 프론트엔드
 - **ai-inference/** - AI 추론 서버 (MASt3R, YOLO 등)
-- **gaussian-splatting/** - 3D Gaussian Splatting (별도 clone 필요)
+- **gaussian/** - 3D Gaussian 관련 노트북/스크립트/문서
+- **gaussian-splatting/** - 3D Gaussian Splatting 엔진 코드 (별도 clone/실행)
 - **tank_sar_crawling/** - 전차 SAR 데이터 크롤링
 - **google_earth_crawling/** - Google Earth SAR 크롤링
-- **notebooks/** - Colab 학습 노트북
-- **docs/** - 프로젝트 문서
+- **docs/** - 공통 프로젝트 문서
 
 ## 환경 설정
 
@@ -37,6 +37,24 @@ cp backend/.env.example backend/.env
 
 ## 실행
 
+**한 번에 띄우기 (루트 폴더에서)** — 백엔드·프론트를 각 터미널에서 따로 치지 않아도 됩니다.
+
+```bash
+# 루트에서 최초 1회
+npm install
+npm run install:all   # backend + frontend 의존성
+
+# 백엔드 + 프론트 동시 실행 (가장 자주 쓰는 조합)
+npm run dev
+
+# AI 추론 서버(8001)까지 같이 (총 3개 프로세스)
+npm run dev:all
+```
+
+`dev:all`은 `ai-inference/.venv`(또는 `venv`) 안의 Python으로 `uvicorn`을 띄웁니다. 가상환경이 없으면 `ai-inference/README.md`대로 먼저 만드세요.
+
+개별 실행이 필요할 때만:
+
 ```bash
 # Backend
 cd backend && npm install && npx prisma generate && npm run start:dev
@@ -44,9 +62,15 @@ cd backend && npm install && npx prisma generate && npm run start:dev
 # Frontend
 cd frontend && npm install && npm run dev
 
-# AI Inference
-# run_ai_inference.bat 또는 python ai-inference/main.py
+# AI Inference (수동)
+cd ai-inference && uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
+
+### 지도 드론 영상 (로컬 MP4 예시)
+
+- `frontend/public/media/demo-drone-map.mp4`가 Vite로 **`/media/demo-drone-map.mp4`** URL로 제공됩니다.
+- 시드 후 DB의 `적군-ALPHA` 침투 지점 `droneVideoUrl`이 위 경로를 가리키므로, 홈 지도에서 해당 적 마커에 마우스를 올리면 **동일 출처** 영상이 재생됩니다.
+- 시드 반영: `cd backend && npx prisma db seed`
 
 ## 라이선스
 
