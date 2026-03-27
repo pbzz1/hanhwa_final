@@ -1,6 +1,5 @@
 /**
- * 근거리 FMCW 레이더 스냅샷 (데모)
- * — VoD는 3+1D 레이더를 포인트 클라우드 등으로 제공; 여기서는 동일 물리량(R, Az, El, Doppler)을 API로 노출
+ * 데모용 이중 레이더 스냅샷 — 펄스(광역·점 표시) + FMCW(근거리·위상·방향·예측 궤적)
  */
 
 export type RadarSiteDto = {
@@ -14,6 +13,13 @@ export type RadarSiteDto = {
   elevationBeamDeg: number;
 };
 
+/** 펄스 레이더 탐지 — 지도에는 점만 */
+export type PulseDetectionDto = {
+  id: string;
+  lat: number;
+  lng: number;
+};
+
 export type RadarDetectionDto = {
   id: string;
   lat: number;
@@ -23,9 +29,19 @@ export type RadarDetectionDto = {
   elevationDeg: number;
   dopplerMps: number;
   confidence: number;
+  /** FMCW 위상(도) — 근거리 고해상도 */
+  phaseDeg: number;
 };
 
-/** 발표·시연용 — 민간 차량 시나리오, 예측 파이프라인, 전처리·학습 개요 */
+export type FmcwTrackDto = {
+  /** 표적 예측 진행 방위(북 기준) */
+  bearingDeg: number;
+  /** 위상 기준선 대비(도) — 데모 각도 */
+  phaseRefDeg: number;
+  /** 예측 이동 경로(지도 폴리라인) */
+  predictedPath: Array<{ lat: number; lng: number }>;
+};
+
 export type RadarMethodologyDto = {
   scenarioNote: string;
   poseAndDistanceNote: string;
@@ -35,17 +51,24 @@ export type RadarMethodologyDto = {
 };
 
 export type RadarSnapshotDto = {
-  radar: RadarSiteDto;
-  meta: {
-    sensor: 'FMCW';
-    representationNote: string;
-    vodReferenceNote: string;
-    methodology: RadarMethodologyDto;
+  pulse: {
+    radar: RadarSiteDto;
+    detections: PulseDetectionDto[];
   };
-  detections: RadarDetectionDto[];
+  fmcw: {
+    radar: RadarSiteDto;
+    meta: {
+      sensor: 'FMCW';
+      representationNote: string;
+      vodReferenceNote: string;
+      methodology: RadarMethodologyDto;
+    };
+    detections: RadarDetectionDto[];
+    /** 주 표적에 대한 예측 궤적·방위(없으면 null) */
+    track: FmcwTrackDto | null;
+  };
 };
 
-/** 방위각(북 기준 시계방향, 도)과 거리(m)로 위경도 오프셋 */
 export function polarToLatLng(
   originLat: number,
   originLng: number,

@@ -64,6 +64,7 @@ logs/
 gaussian-splatting/
 ai-inference/mast3r/
 tank_sar_crawling/downloaded_tank_sar/
+ai/radar-cruw/vendor/
 
 # ===== 기타 =====
 /generated/

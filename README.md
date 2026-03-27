@@ -7,6 +7,8 @@
 - **backend/** - NestJS API 서버
 - **frontend/** - React + Vite 프론트엔드
 - **ai-inference/** - AI 추론 서버 (MASt3R, YOLO 등)
+- **ai/** - CRUW 레이더 학습 등 AI 노트북·요구사항 (`ai/README.md`, `ai/radar-cruw/`)
+- **vod-devkit/** - View-of-Delft(VoD) 데이터 로더·시각화·레이더 문서 (`PP-Radar.md` 등)
 - **gaussian/** - 3D Gaussian 관련 노트북/스크립트/문서
 - **gaussian-splatting/** - 3D Gaussian Splatting 엔진 코드 (별도 clone/실행)
 - **tank_sar_crawling/** - 전차 SAR 데이터 크롤링

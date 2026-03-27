@@ -7,6 +7,8 @@ export type RadarDetectionPoint = {
   elevationDeg: number
   dopplerMps: number
   confidence: number
+  /** FMCW 위상(도) — 차트에는 미표시 가능 */
+  phaseDeg?: number
 }
 
 function dopplerToColor(d: number): string {

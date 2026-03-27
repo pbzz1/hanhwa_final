@@ -257,6 +257,310 @@
   color: #0f172a;
 }
 
+.map-battalion-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: stretch;
+  margin-top: 10px;
+}
+
+@media (max-width: 1100px) {
+  .map-battalion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-main-overview,
+  .map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-inset-tactical {
+    height: 440px;
+  }
+}
+
+/* SAR 접촉 후: 전술 대치 열을 넓히고 인셋 지도를 키움 */
+.map-battalion-grid.map-battalion-grid--tactical-focus {
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-main-overview {
+  height: 400px;
+}
+
+.map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-inset-tactical {
+  height: 560px;
+}
+
+.map-subtitle-hint--tactical-minimal {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.map-inset-stack.map-inset-stack--focus {
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 3px rgba(250, 204, 21, 0.55),
+    0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 22px 52px rgba(15, 23, 42, 0.28);
+  outline: 1px solid rgba(250, 204, 21, 0.35);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .map-inset-stack.map-inset-stack--focus {
+    animation: tactical-inset-focus-breathe 3s ease-in-out infinite;
+  }
+}
+
+@keyframes tactical-inset-focus-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px rgba(250, 204, 21, 0.45),
+      0 0 0 1px rgba(15, 23, 42, 0.06),
+      0 18px 44px rgba(15, 23, 42, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(250, 204, 21, 0.72),
+      0 0 0 1px rgba(15, 23, 42, 0.08),
+      0 26px 60px rgba(15, 23, 42, 0.32);
+  }
+}
+
+.map-hover-side-card--minimal {
+  padding: 10px 12px !important;
+  max-width: 220px;
+}
+
+.map-hover-minimal-line {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.map-overview-stack {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.scenario-red-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid #dc2626;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.2), 0 8px 22px rgba(127, 29, 29, 0.1);
+  color: #7f1d1d;
+  font-size: 14px;
+}
+
+.scenario-red-alert__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.scenario-standby-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #475569;
+  font-size: 13px;
+}
+
+.scenario-standby-banner__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #94a3b8;
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.scenario-sar-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid #d97706;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.15), 0 8px 20px rgba(120, 53, 15, 0.08);
+  color: #92400e;
+  font-size: 14px;
+}
+
+.scenario-sar-alert__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #d97706;
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.scenario-discover-alert {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 12px 0 8px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 3px solid #059669;
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 55%, #6ee7b7 100%);
+  box-shadow:
+    0 0 0 1px rgba(5, 150, 105, 0.25),
+    0 12px 32px rgba(6, 78, 59, 0.22),
+    0 0 48px rgba(16, 185, 129, 0.2);
+  color: #064e3b;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.scenario-discover-alert strong {
+  font-weight: 800;
+  color: #022c22;
+}
+
+.scenario-discover-alert__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  box-shadow: 0 3px 14px rgba(5, 150, 105, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scenario-discover-alert {
+    animation: scenario-discover-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes scenario-discover-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(5, 150, 105, 0.25),
+      0 12px 32px rgba(6, 78, 59, 0.22),
+      0 0 48px rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(5, 150, 105, 0.35),
+      0 16px 40px rgba(6, 78, 59, 0.28),
+      0 0 64px rgba(16, 185, 129, 0.35);
+  }
+}
+
+.scenario-dmz-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 2px solid #ea580c;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  color: #9a3412;
+  font-size: 14px;
+}
+
+.scenario-dmz-alert__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #ea580c;
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.map-subtitle {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.map-subtitle-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sar-tank-loss-label {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fecaca;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.map-c2-distance-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fde047;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  white-space: nowrap;
+}
+
+.kakao-tactical-pin-anchor--c2 .tactical-marker__frame {
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.95);
+}
+
 /* overflow:hidden 은 CustomOverlay 핀이 컨테이너 밖(특히 상단)으로 그려질 때 잘려
    "반만 보이다가 사라진 것처럼" 보일 수 있어 visible 유지 */
 .map-with-radar-hover {
@@ -275,10 +579,177 @@
   z-index: 0;
 }
 
-/* FMCW 범위 내 적 핀 강조 */
-.enemy-pin--in-radar .tactical-marker__frame {
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.85);
+/* SAR 광역·전술 대치 — 동일 높이 */
+.maplibre-container.map-main-overview,
+.maplibre-container.map-inset-tactical {
+  height: 440px;
+}
+
+.map-inset-stack {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.inset-corner-converge {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+
+.inset-corner-converge__arm {
+  position: absolute;
+  width: 28%;
+  height: 28%;
+  border: 2px solid rgba(250, 204, 21, 0.55);
   border-radius: 4px;
+  animation: inset-corner-pull 2.4s ease-in-out infinite;
+}
+
+.inset-corner-converge__arm--tl {
+  top: 6%;
+  left: 6%;
+  border-right: none;
+  border-bottom: none;
+  transform-origin: top left;
+  --pull-x: 85%;
+  --pull-y: 85%;
+}
+
+.inset-corner-converge__arm--tr {
+  top: 6%;
+  right: 6%;
+  border-left: none;
+  border-bottom: none;
+  transform-origin: top right;
+  animation-delay: 0.12s;
+  --pull-x: -85%;
+  --pull-y: 85%;
+}
+
+.inset-corner-converge__arm--bl {
+  bottom: 6%;
+  left: 6%;
+  border-right: none;
+  border-top: none;
+  transform-origin: bottom left;
+  animation-delay: 0.24s;
+  --pull-x: 85%;
+  --pull-y: -85%;
+}
+
+.inset-corner-converge__arm--br {
+  bottom: 6%;
+  right: 6%;
+  border-left: none;
+  border-top: none;
+  transform-origin: bottom right;
+  animation-delay: 0.36s;
+  --pull-x: -85%;
+  --pull-y: -85%;
+}
+
+@keyframes inset-corner-pull {
+  0%,
+  100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.35;
+  }
+  45% {
+    transform: scale(0.38) translate(var(--pull-x, 0), var(--pull-y, 0));
+    opacity: 0.85;
+  }
+}
+
+.radar-sweep-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background:
+    conic-gradient(
+      from 0deg at 50% 55%,
+      transparent 0deg,
+      transparent 52deg,
+      rgba(56, 189, 248, 0.14) 58deg,
+      rgba(125, 211, 252, 0.22) 72deg,
+      transparent 88deg,
+      transparent 360deg
+    );
+  animation: radar-sweep-spin 3.2s linear infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes radar-sweep-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 38선 부근(시뮬 위도) — 주황 점선 링 */
+.kakao-tactical-pin-anchor.enemy-pin--dmz-near .enemy-pin-wrap {
+  position: relative;
+}
+
+.kakao-tactical-pin-anchor.enemy-pin--dmz-near .enemy-pin-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border: 2px dashed rgba(234, 88, 12, 0.85);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* 레이더 락(시뮬 위치 기준): 스타크래프트식 얇은 선택 테두리만 */
+.kakao-tactical-pin-anchor.enemy-pin--radar-lock .enemy-pin-wrap {
+  position: relative;
+}
+
+.kakao-tactical-pin-anchor.enemy-pin--radar-lock .enemy-pin-wrap::after {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border: 2px solid rgba(34, 197, 94, 0.98);
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 0 16px 3px rgba(34, 197, 94, 0.65),
+    0 0 28px 4px rgba(52, 211, 153, 0.35);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kakao-tactical-pin-anchor.enemy-pin--radar-lock .enemy-pin-wrap::after {
+    animation: enemy-radar-lock-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes enemy-radar-lock-pulse {
+  0%,
+  100% {
+    opacity: 0.92;
+    transform: scale(1);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 0 16px 3px rgba(34, 197, 94, 0.55),
+      0 0 28px 4px rgba(52, 211, 153, 0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.45),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+      0 0 22px 6px rgba(34, 197, 94, 0.85),
+      0 0 40px 8px rgba(52, 211, 153, 0.5);
+  }
 }
 
 .radar-enemy-hover-panel {
@@ -286,7 +757,8 @@
   top: 10px;
   right: 10px;
   width: min(360px, calc(100% - 20px));
-  max-height: min(92vh, 520px);
+  /* 지도 박스(.maplibre-container 420px) 안에만 두어 하단 콘텐츠 클릭을 막지 않음 */
+  max-height: min(400px, calc(100% - 20px));
   overflow: auto;
   z-index: 25;
   padding: 12px 14px;
@@ -555,12 +1027,12 @@
 }
 
 .radar-site-icon {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #38bdf8, #0369a1);
-  border: 2px solid #fff;
-  box-shadow: 0 2px 8px rgba(3, 105, 161, 0.45);
+  background: radial-gradient(circle at 30% 30%, rgba(125, 211, 252, 0.95), rgba(56, 189, 248, 0.75));
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 6px rgba(3, 105, 161, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -573,12 +1045,63 @@
   letter-spacing: -0.02em;
 }
 
-.radar-detection-dot {
-  width: 11px;
-  height: 11px;
+.radar-site-icon--fmcw {
+  background: radial-gradient(circle at 30% 30%, rgba(56, 189, 248, 0.98), rgba(2, 132, 199, 0.82));
+}
+
+.radar-pulse-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  background: #a78bfa;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 4px rgba(91, 33, 182, 0.35);
+}
+
+.radar-fmcw-track-label {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #ffedd5;
+  font-size: 11px;
+  line-height: 1.4;
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  max-width: 240px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+}
+
+.radar-fmcw-track-label__title {
+  display: block;
+  font-weight: 800;
+  color: #fb923c;
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.radar-fmcw-track-label__row {
+  display: block;
+  color: #e2e8f0;
+}
+
+.radar-fmcw-panel__pulse-strip {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.07);
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.radar-detection-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+  opacity: 0.88;
   padding: 0;
   cursor: pointer;
 }
@@ -716,6 +1239,13 @@
 
 .tactical-marker__echelon--enemy {
   color: #991b1b;
+}
+
+/* 적군 마커: 전술 부호만 (과한 RTS 조준·줄무늬 제거) */
+.enemy-pin-wrap {
+  display: inline-block;
+  line-height: 0;
+  filter: drop-shadow(0 1px 3px rgba(15, 23, 42, 0.28));
 }
 
 .unit-map-overlay {
@@ -1875,5 +2405,152 @@ button:disabled {
   .video-summary-grid,
   .video-preview-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* 경보 구역 (강서구) 페이지 */
+.alert-zone-page .alert-zone-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  gap: 20px;
+  align-items: stretch;
+  margin-top: 1.25rem;
+}
+
+.alert-zone-log {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px 16px;
+  max-height: min(72vh, 640px);
+  overflow: auto;
+}
+
+.alert-zone-log-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.alert-zone-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alert-zone-log-item {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.alert-zone-log-item time {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.alert-zone-log-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  margin-right: 6px;
+}
+
+.alert-zone-log-item--경고 {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.alert-zone-log-item--경고 .alert-zone-log-badge {
+  background: #dc2626;
+  color: #fff;
+}
+
+.alert-zone-log-item--주의 {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.alert-zone-log-item--주의 .alert-zone-log-badge {
+  background: #d97706;
+  color: #fff;
+}
+
+.alert-zone-log-item--정보 {
+  border-color: #e2e8f0;
+}
+
+.alert-zone-log-item--정보 .alert-zone-log-badge {
+  background: #334155;
+  color: #fff;
+}
+
+.alert-zone-log-item p {
+  margin: 0;
+}
+
+.alert-zone-map-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.alert-zone-map-canvas {
+  min-height: min(72vh, 520px);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.alert-zone-map-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+.alert-zone-map-label {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.25);
+  text-align: center;
+}
+
+.alert-zone-map-label strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.alert-zone-map-label span {
+  display: block;
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+@media (max-width: 900px) {
+  .alert-zone-page .alert-zone-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-zone-log {
+    max-height: none;
   }
 }
