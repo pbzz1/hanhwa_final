@@ -226,23 +226,68 @@
 
 .sim-progress-wrap {
   flex: 1;
-  min-width: 120px;
-  height: 8px;
+  min-width: 140px;
+  height: 10px;
   background: #e2e8f0;
   border-radius: 999px;
   overflow: hidden;
+}
+
+.sim-progress-wrap--seekable {
+  position: relative;
+  overflow: visible;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.sim-progress-wrap--seekable:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2563eb;
+}
+
+.sim-progress-wrap--seekable.sim-progress-wrap--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.sim-progress-wrap--seekable:not(.sim-progress-wrap--dragging) .sim-progress-bar {
+  transition: width 0.1s ease-out;
 }
 
 .sim-progress-bar {
   height: 100%;
   background: linear-gradient(90deg, #2563eb, #7c3aed);
   border-radius: 999px;
-  transition: width 0.08s linear;
+}
+
+.sim-progress-thumb {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #4f46e5;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .sim-progress-label {
   font-size: 12px;
   white-space: nowrap;
+}
+
+.sim-progress-label__kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
 }
 
 .road-path-hint {
@@ -259,36 +304,127 @@
 
 .map-battalion-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 18px;
   align-items: stretch;
   margin-top: 10px;
 }
 
+.map-battalion-grid.map-battalion-grid--overview-solo,
+.map-battalion-grid.map-battalion-grid--pip-active {
+  grid-template-columns: 1fr;
+}
+
 @media (max-width: 1100px) {
-  .map-battalion-grid {
-    grid-template-columns: 1fr;
+  .maplibre-container.map-main-overview {
+    height: 400px;
   }
 
-  .map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-main-overview,
-  .map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-inset-tactical {
-    height: 440px;
+  .map-tactical-pip__body {
+    height: 200px;
+  }
+
+  .maplibre-container.map-inset-tactical--pip {
+    height: 200px !important;
   }
 }
 
-/* SAR 접촉 후: 전술 대치 열을 넓히고 인셋 지도를 키움 */
-.map-battalion-grid.map-battalion-grid--tactical-focus {
-  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
-  gap: 20px;
-  align-items: start;
+.map-pip-hint {
+  color: #b45309;
+  font-weight: 600;
 }
 
-.map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-main-overview {
-  height: 400px;
+/* SAR 광역 위 우하단 전술 PiP — 숨김 시에도 동일 픽셀 박스 유지(카카오 relayout 안정) */
+.map-overview-stack.map-overview-stack--has-pip {
+  min-height: 0;
 }
 
-.map-battalion-grid.map-battalion-grid--tactical-focus .maplibre-container.map-inset-tactical {
-  height: 560px;
+.map-tactical-pip {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 8;
+  width: min(340px, 46vw);
+  max-width: calc(100% - 28px);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f172a;
+  box-shadow:
+    0 14px 44px rgba(15, 23, 42, 0.38),
+    0 0 0 2px rgba(250, 204, 21, 0.42);
+  transition:
+    opacity 0.22s ease,
+    visibility 0.22s ease;
+}
+
+.map-tactical-pip--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.map-tactical-pip--visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.map-tactical-pip__chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 11px;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-bottom: 1px solid rgba(250, 204, 21, 0.28);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fde68a;
+}
+
+.map-tactical-pip__chrome-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 10px;
+}
+
+.map-tactical-pip__dist {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.map-tactical-pip__drone-rec {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #e0f2fe;
+  background: rgba(14, 165, 233, 0.35);
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 12px rgba(2, 132, 199, 0.35);
+}
+
+.map-tactical-pip__body {
+  position: relative;
+  height: 232px;
+}
+
+.maplibre-container.map-inset-tactical--pip {
+  height: 232px !important;
+  width: 100%;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+}
+
+.map-tactical-pip .map-inset-stack {
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .map-subtitle-hint--tactical-minimal {
@@ -326,6 +462,13 @@
       0 0 0 4px rgba(250, 204, 21, 0.72),
       0 0 0 1px rgba(15, 23, 42, 0.08),
       0 26px 60px rgba(15, 23, 42, 0.32);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* PiP: box-shadow 무한 애니 + 스윕 레이어 회전이 겹치면 GPU에서 깜빡임 — 고정 테두리만 */
+  .map-tactical-pip .map-inset-stack.map-inset-stack--focus {
+    animation: none;
   }
 }
 
@@ -374,6 +517,40 @@
   font-weight: 800;
   font-size: 12px;
   letter-spacing: 0.04em;
+}
+
+.scenario-drone-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid #0ea5e9;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.2), 0 8px 22px rgba(3, 105, 161, 0.12);
+  color: #0c4a6e;
+  font-size: 14px;
+}
+
+.scenario-drone-banner__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.scenario-drone-banner strong {
+  font-weight: 800;
+  color: #075985;
 }
 
 .scenario-standby-banner {
@@ -427,6 +604,35 @@
   padding: 4px 10px;
   border-radius: 8px;
   background: #d97706;
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.scenario-pulse-uncertain-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 6px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid #7c3aed;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.12), 0 8px 22px rgba(76, 29, 149, 0.1);
+  color: #4c1d95;
+  font-size: 14px;
+}
+
+.scenario-pulse-uncertain-banner__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #7c3aed;
   color: #fff;
   font-weight: 800;
   font-size: 12px;
@@ -546,6 +752,37 @@
   border: 1px solid rgba(248, 113, 113, 0.45);
 }
 
+/* SAR 광역: 대대 지휘통제실 단일 표시 */
+.sar-overview-c2-anchor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.sar-overview-c2-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #facc15 0%, #ca8a04 100%);
+  border: 2px solid #fff;
+  box-shadow:
+    0 0 0 2px rgba(234, 179, 8, 0.95),
+    0 4px 12px rgba(15, 23, 42, 0.35);
+}
+
+.sar-overview-c2-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #0f172a;
+  text-shadow: 0 0 2px #fff, 0 0 4px #fff;
+  line-height: 1;
+}
+
 .map-c2-distance-chip {
   padding: 6px 12px;
   border-radius: 999px;
@@ -663,26 +900,36 @@
   }
 }
 
+/* 전술 인셋 레이더 스윕: 단일 레이어·부드러운 페더 — 과한 채도/이중 스윕 제거 */
 .radar-sweep-overlay {
   pointer-events: none;
   position: absolute;
   inset: 0;
   z-index: 4;
-  background:
-    conic-gradient(
-      from 0deg at 50% 55%,
-      transparent 0deg,
-      transparent 52deg,
-      rgba(56, 189, 248, 0.14) 58deg,
-      rgba(125, 211, 252, 0.22) 72deg,
-      transparent 88deg,
-      transparent 360deg
-    );
-  animation: radar-sweep-spin 3.2s linear infinite;
-  mix-blend-mode: screen;
+  isolation: isolate;
+  background: conic-gradient(
+    from 0deg at 50% 55%,
+    transparent 0deg,
+    transparent 52deg,
+    rgba(56, 189, 248, 0.06) 56deg,
+    rgba(125, 211, 252, 0.18) 64deg,
+    rgba(56, 189, 248, 0.06) 72deg,
+    transparent 78deg,
+    transparent 360deg
+  );
+  animation: tactical-pip-radar-sweep-spin 5s linear infinite;
+  opacity: 0.82;
 }
 
-@keyframes radar-sweep-spin {
+@media (prefers-reduced-motion: reduce) {
+  .radar-sweep-overlay {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* App.css 하단 .sensor-radar-sweep 과 키프레임 이름이 겹치면 나중 규칙이 덮어써 스윕이 끊겨 보일 수 있음 */
+@keyframes tactical-pip-radar-sweep-spin {
   from {
     transform: rotate(0deg);
   }
@@ -749,6 +996,74 @@
       inset 0 0 0 1px rgba(255, 255, 255, 0.18),
       0 0 22px 6px rgba(34, 197, 94, 0.85),
       0 0 40px 8px rgba(52, 211, 153, 0.5);
+  }
+}
+
+/* 펄스 불확실 구간(15~40km): 전술 핀 숨기고 점만 */
+.kakao-tactical-pin-anchor.enemy-pin--pulse-uncertain-only {
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+}
+
+.kakao-tactical-pin-anchor.enemy-pin--pulse-uncertain-only .enemy-pin-wrap {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  filter: none;
+}
+
+.kakao-tactical-pin-anchor.enemy-pin--pulse-uncertain-only .enemy-pin-wrap .tactical-marker {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.kakao-tactical-pin-anchor.enemy-pin--pulse-uncertain-only .enemy-pin-wrap::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #dc2626;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 12px rgba(220, 38, 38, 0.65);
+  pointer-events: none;
+}
+
+/* ≤15km 드론 촬영(데모): 주 적 핀에 하늘색 글로우 */
+.kakao-tactical-pin-anchor.enemy-pin--drone-filming .enemy-pin-wrap {
+  box-shadow:
+    0 0 0 2px rgba(14, 165, 233, 0.92),
+    0 0 16px 3px rgba(2, 132, 199, 0.5),
+    0 0 28px 5px rgba(56, 189, 248, 0.28);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kakao-tactical-pin-anchor.enemy-pin--drone-filming .enemy-pin-wrap {
+    animation: enemy-drone-filming-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes enemy-drone-filming-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(14, 165, 233, 0.85),
+      0 0 14px 2px rgba(2, 132, 199, 0.42),
+      0 0 24px 4px rgba(56, 189, 248, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(56, 189, 248, 0.98),
+      0 0 22px 6px rgba(2, 132, 199, 0.62),
+      0 0 36px 8px rgba(125, 211, 252, 0.38);
   }
 }
 
@@ -884,6 +1199,15 @@
   color: #fff;
 }
 
+.radar-fmcw-panel__chip--live {
+  background: #15803d;
+}
+
+.radar-fmcw-panel__chip--warn {
+  background: #b45309;
+  cursor: help;
+}
+
 .radar-fmcw-panel__text {
   margin: 0.25rem 0;
   font-size: 12px;
@@ -994,6 +1318,175 @@
 .radar-inline-viz__canvas3d {
   border: 1px solid #7dd3fc;
   border-radius: 10px;
+}
+
+.radar-inline-viz--below-sync {
+  grid-template-columns: 1fr;
+}
+
+.radar-inline-viz__block--wide {
+  grid-column: 1 / -1;
+}
+
+.radar-fmcw-insights {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #93c5fd;
+  background: linear-gradient(180deg, #f0f9ff 0%, #fff 70%);
+}
+
+.radar-fmcw-insights__title {
+  margin: 0 0 0.65rem;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0c4a6e;
+}
+
+.radar-fmcw-insights__dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.5rem 1.25rem;
+  margin: 0;
+}
+
+.radar-fmcw-insights__dl div {
+  margin: 0;
+}
+
+.radar-fmcw-insights__dl dt {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.radar-fmcw-insights__dl dd {
+  margin: 0.15rem 0 0;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.radar-fmcw-conclusion {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #bae6fd;
+}
+
+.radar-fmcw-conclusion__title {
+  margin: 0 0 0.4rem;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0369a1;
+}
+
+.radar-fmcw-conclusion__list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.radar-fmcw-synced {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .radar-fmcw-synced {
+    grid-template-columns: 1fr;
+  }
+}
+
+.radar-fmcw-synced__pane {
+  min-width: 0;
+  padding: 0.65rem;
+  border-radius: 10px;
+  border: 1px solid #e0f2fe;
+  background: #fff;
+}
+
+.radar-fmcw-synced__cap {
+  margin: 0 0 0.25rem;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0c4a6e;
+}
+
+.radar-fmcw-synced__hint {
+  margin: 0 0 0.5rem;
+  font-size: 11px;
+}
+
+.radar-fmcw-synced__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #0f172a;
+}
+
+.radar-fmcw-synced__placeholder {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.radar-fmcw-synced-note {
+  margin: 0.65rem 0 0;
+  padding: 0.55rem 0.75rem;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #1e3a5f;
+  background: #eff6ff;
+  border-radius: 8px;
+  border-left: 4px solid #2563eb;
+}
+
+.radar-fmcw-lidar-review {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #bbf7d0;
+  background: linear-gradient(180deg, #f0fdf4 0%, #fff 65%);
+}
+
+.radar-fmcw-lidar-review__title {
+  margin: 0 0 0.5rem;
+  font-size: 14px;
+  font-weight: 800;
+  color: #14532d;
+}
+
+.radar-fmcw-lidar-review__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.radar-fmcw-lidar-review__stats {
+  margin: 0.65rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.radar-fmcw-lidar-review__stats li {
+  margin: 0.2rem 0;
 }
 
 .radar-charts-2d {
@@ -2218,10 +2711,13 @@ button:disabled {
     rgba(34, 197, 94, 0.05) 28deg,
     transparent 42deg
   );
-  animation: radar-sweep-spin 3.5s linear infinite;
+  animation: sensor-radar-sweep-spin 3.5s linear infinite;
 }
 
-@keyframes radar-sweep-spin {
+@keyframes sensor-radar-sweep-spin {
+  from {
+    transform: rotate(0deg);
+  }
   to {
     transform: rotate(360deg);
   }
@@ -2240,6 +2736,106 @@ button:disabled {
 .sensor-radar-blips .blip--dim {
   opacity: 0.45;
   background: #86efac;
+}
+
+.sensor-radar-live {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 280px;
+  padding: 4px 0;
+}
+
+.sensor-radar-live__hero {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .sensor-radar-live__hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sensor-radar-live__mini {
+  margin: 0 auto;
+  transform: scale(0.92);
+  transform-origin: top center;
+}
+
+.sensor-radar-live__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sensor-radar-live__badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: #15803d;
+  color: #fff;
+}
+
+.sensor-radar-live__badge--warn {
+  background: #b45309;
+}
+
+.sensor-radar-live__charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .sensor-radar-live__charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sensor-radar-live__cap {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sensor-radar-live__hint {
+  margin: 0 0 8px;
+  font-size: 11px;
+}
+
+.sensor-radar-live__table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.sensor-radar-live__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sensor-radar-live__table th,
+.sensor-radar-live__table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sensor-radar-live__table th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.sensor-radar-live__tr--primary td {
+  background: rgba(254, 226, 226, 0.35);
 }
 
 .sensor-drone-wrap {
@@ -2553,4 +3149,1438 @@ button:disabled {
   .alert-zone-log {
     max-height: none;
   }
+}
+
+/* SAR 전·후 비교(1단계) */
+.sar-compare-phase {
+  margin: 1.25rem 0 2rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #fafafa 0%, #fff 40%);
+}
+
+.sar-compare-phase__head {
+  margin-bottom: 1rem;
+}
+
+.sar-compare-phase__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.sar-compare-phase__lead {
+  margin: 0;
+  max-width: 58rem;
+  line-height: 1.55;
+}
+
+.sar-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 960px) {
+  .sar-compare-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sar-compare-col__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.sar-compare-map {
+  min-height: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+}
+
+.sar-compare-chip {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+
+.sar-compare-chip--before {
+  background: #dcfce7;
+  color: #14532d;
+  border: 1px solid #86efac;
+}
+
+.sar-compare-chip--after {
+  background: #fee2e2;
+  color: #7f1d1d;
+  border: 1px solid #fca5a5;
+}
+
+.sar-compare-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* 2단계: UAV — 지도와 분리, 미디어 플레이스홀더 */
+.uav-tracking-phase {
+  margin-top: 1.25rem;
+  padding: 1rem 0 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.uav-tracking-phase__head {
+  margin-bottom: 1rem;
+}
+
+.uav-tracking-phase__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  color: #0c4a6e;
+}
+
+.uav-tracking-phase__lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 52rem;
+}
+
+.uav-tracking-phase__media {
+  margin: 1rem 0;
+}
+
+.uav-tracking-phase__media-frame {
+  position: relative;
+  max-width: 960px;
+  margin: 0 auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  border: 2px dashed rgba(14, 165, 233, 0.45);
+  background: linear-gradient(160deg, #ecfeff 0%, #e0f2fe 40%, #f0f9ff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.uav-tracking-phase__media-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 1.5rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #0369a1;
+}
+
+.uav-tracking-phase__media-placeholder small {
+  display: block;
+  font-weight: 500;
+  font-size: 12px;
+  color: #64748b;
+  max-width: 280px;
+  line-height: 1.4;
+}
+
+.uav-tracking-phase__note {
+  margin: 0 0 1rem;
+  font-size: 13px;
+  max-width: 52rem;
+}
+
+.uav-tracking-phase__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* 0단계: 전체 흐름 요약 */
+.scenario-flow-overview {
+  margin: 1.25rem 0 2rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(165deg, #f8fafc 0%, #fff 45%);
+}
+
+.scenario-flow-overview__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.scenario-flow-overview__lead {
+  margin: 0 0 1.25rem;
+  max-width: 52rem;
+  line-height: 1.55;
+}
+
+.scenario-flow-overview__track {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem 0.25rem;
+}
+
+.scenario-flow-overview__node {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex: 1 1 140px;
+  min-width: 120px;
+  position: relative;
+}
+
+.scenario-flow-overview__node-badge {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scenario-flow-overview__node-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.scenario-flow-overview__node-name {
+  display: block;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.scenario-flow-overview__node-desc {
+  margin: 0.2rem 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.scenario-flow-overview__arrow {
+  display: none;
+}
+
+.scenario-flow-overview__footnote {
+  margin: 0 0 1rem;
+  font-size: 12px;
+  max-width: 48rem;
+  line-height: 1.5;
+}
+
+.scenario-flow-overview__actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* 센서 인트로 공통 */
+.sensor-intro-page {
+  margin: 1.25rem 0 2rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.sensor-intro-page__step {
+  margin: 0 0 0.25rem;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sensor-intro-page__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.sensor-intro-page__lead {
+  margin: 0 0 1.25rem;
+  max-width: 52rem;
+  line-height: 1.55;
+}
+
+.sensor-intro-page__panel {
+  margin-bottom: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.sensor-intro-page__panel--model {
+  background: linear-gradient(180deg, #f1f5f9 0%, #fff 70%);
+}
+
+.sensor-intro-page__panel--io {
+  flex: 1;
+  min-width: 0;
+}
+
+.sensor-intro-page__h {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #334155;
+}
+
+.sensor-intro-page__model-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.sensor-intro-page__model-body p {
+  margin: 0;
+}
+
+.sensor-intro-page__io {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 800px) {
+  .sensor-intro-page__io {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sensor-intro-page__list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.sensor-intro-page__viz {
+  margin: 1rem 0 1.25rem;
+}
+
+.sensor-intro-page__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sar-compare-phase--embedded {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.sar-compare-phase__embed-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.pulse-radar-mock__canvas {
+  display: block;
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid #334155;
+}
+
+.pulse-radar-mock__caption {
+  margin: 0.5rem 0 0;
+  font-size: 12px;
+  max-width: 440px;
+  line-height: 1.45;
+}
+
+.fmcw-intro-vod {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid #bae6fd;
+  background: linear-gradient(160deg, #f8fafc 0%, #e0f2fe 55%, #f0f9ff 100%);
+  box-shadow: 0 10px 28px rgba(14, 165, 233, 0.08);
+}
+
+.fmcw-intro-vod__title {
+  margin: 0 0 0.65rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0c4a6e;
+}
+
+.fmcw-intro-vod__status {
+  margin: 0.35rem 0 0;
+  line-height: 1.5;
+}
+
+.fmcw-intro-vod__meta {
+  margin: 0.25rem 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fmcw-intro-vod__chip-row {
+  margin: 0.5rem 0 0;
+}
+
+.fmcw-intro-vod__chip {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fmcw-intro-vod__chip--live {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(5, 150, 105, 0.45);
+  color: #065f46;
+}
+
+.fmcw-intro-vod__bullets {
+  margin: 0.75rem 0 0;
+}
+
+.fmcw-intro-vod__bullets ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.55;
+}
+
+.fmcw-intro-vod__h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0369a1;
+}
+
+.fmcw-intro-vod__split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .fmcw-intro-vod__split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fmcw-intro-vod__pane {
+  min-width: 0;
+}
+
+.fmcw-intro-vod__cap {
+  margin: 0 0 0.35rem;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.fmcw-intro-vod__img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+}
+
+.fmcw-intro-vod__placeholder {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px dashed #94a3b8;
+  font-size: 13px;
+}
+
+.fmcw-intro-vod__sub {
+  margin: 0.5rem 0 0;
+  font-size: 13px;
+}
+
+.fmcw-intro-vod__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.fmcw-intro-vod__lidar {
+  margin-top: 0.75rem;
+}
+
+.fmcw-intro-vod__lidar-body {
+  margin: 0.35rem 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.fmcw-intro-vod__lidar-stats {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.scenario-theory-apply-panel {
+  margin: 0 0 0.85rem;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #c4b5fd;
+  background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 50%, #eef2ff 100%);
+  box-shadow: 0 6px 20px rgba(91, 33, 182, 0.08);
+}
+
+.scenario-theory-apply-panel__title {
+  margin: 0 0 0.4rem;
+  font-size: 15px;
+  font-weight: 800;
+  color: #5b21b6;
+}
+
+.scenario-theory-apply-panel__lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.scenario-theory-apply-panel__bullets {
+  margin: 0.5rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.scenario-theory-apply-panel__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 16px;
+  margin: 0.65rem 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(139, 92, 246, 0.22);
+}
+
+.scenario-theory-apply-panel__metrics dt {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b21a8;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.scenario-theory-apply-panel__metrics dd {
+  margin: 0.15rem 0 0;
+  font-size: 13px;
+  color: #1e1b4b;
+}
+
+.scenario-theory-apply-panel__pending {
+  margin: 0.5rem 0 0;
+  font-size: 13px;
+}
+
+.fmcw-intro-viz {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .fmcw-intro-viz {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fmcw-intro-viz__block {
+  min-width: 0;
+}
+
+.fmcw-intro-viz__label {
+  margin: 0 0 0.35rem;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.fmcw-intro-viz__scatter {
+  min-height: 240px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+}
+
+/* 3~5단계: 지도 / 무지도 / 비교 레이아웃 */
+.tactical-phase-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.tactical-phase-body--compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+}
+
+.tactical-phase-body--schematic,
+.tactical-phase-body--canvasScope {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1100px) {
+  .tactical-phase-body--compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tactical-phase-pane--map {
+  min-width: 0;
+}
+
+.tactical-phase-pane--dashboard {
+  min-width: 0;
+}
+
+.tactical-ui-mode {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tactical-ui-mode__label {
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.tactical-ui-mode__btn.tactical-ui-mode__btn--active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.tactical-compare-right-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.tactical-compare-right-select select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: #fff;
+  max-width: 140px;
+}
+
+.tactical-alt-drone-row {
+  margin-top: 12px;
+}
+
+/* 간소 SVG 도식 */
+.tactical-schematic {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  overflow: hidden;
+}
+
+.tactical-schematic__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+}
+
+.tactical-schematic__dist-hud {
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.12));
+}
+
+.tactical-schematic__legend {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  padding: 10px 14px 12px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+
+.tactical-schematic__legend dt {
+  margin: 0;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.tactical-schematic__legend dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Canvas PPI */
+.tactical-radar-canvas-wrap {
+  border-radius: 12px;
+  border: 1px solid #1e293b;
+  overflow: hidden;
+  background: #0b1220;
+}
+
+.tactical-radar-canvas {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.tactical-radar-canvas__note {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-size: 11px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #94a3b8;
+}
+
+/* 무지도 전술 대시보드 */
+.tactical-dash {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(165deg, #f8fafc 0%, #fff 45%);
+  padding: 1rem 1.1rem 1.25rem;
+}
+
+.tactical-dash__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .tactical-dash__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tactical-dash__card {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 12px 14px;
+  min-height: 120px;
+}
+
+.tactical-dash__card--fmcw-wide {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+.tactical-dash__h {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.tactical-dash__km {
+  margin: 0 0 10px;
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: #1e293b;
+  letter-spacing: -0.03em;
+}
+
+.tactical-dash__hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tactical-dash__gauge-track {
+  position: relative;
+  height: 10px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  overflow: visible;
+}
+
+.tactical-dash__gauge-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #22c55e 0%, #eab308 45%, #f97316 70%, #dc2626 100%);
+  transition: width 0.35s ease-out;
+}
+
+.tactical-dash__gauge-tick {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 18px;
+  margin-left: -1px;
+  background: #334155;
+  border-radius: 1px;
+  z-index: 1;
+}
+
+.tactical-dash__gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.tactical-dash__axis {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.tactical-dash__node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  flex: 0 0 auto;
+  max-width: 120px;
+}
+
+.tactical-dash__node-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #eab308;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.35);
+}
+
+.tactical-dash__node-dot--enemy {
+  background: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35);
+}
+
+.tactical-dash__node-label {
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 6px;
+  color: #334155;
+}
+
+.tactical-dash__node-sub {
+  font-size: 10px;
+  color: #64748b;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.tactical-dash__axis-line-wrap {
+  flex: 1;
+  min-width: 40px;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  position: relative;
+}
+
+.tactical-dash__axis-line {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #facc15, #f97316);
+  margin-left: auto;
+  transition: width 0.35s ease-out;
+}
+
+.tactical-dash__radar-face {
+  position: relative;
+  height: 140px;
+  border-radius: 50%;
+  max-width: 140px;
+  margin: 0 auto;
+  background: radial-gradient(circle at 50% 55%, #0f172a 0%, #1e293b 55%, #0f172a 100%);
+  border: 2px solid #334155;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tactical-dash__radar-face--on {
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.25);
+}
+
+.tactical-dash__radar-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg at 50% 55%,
+    transparent 0deg,
+    transparent 52deg,
+    rgba(56, 189, 248, 0.14) 58deg,
+    rgba(125, 211, 252, 0.22) 72deg,
+    transparent 88deg,
+    transparent 360deg
+  );
+  animation: tactical-dash-sweep 3.2s linear infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes tactical-dash-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tactical-dash__radar-idle {
+  font-size: 11px;
+  text-align: center;
+  padding: 0 12px;
+  color: #94a3b8;
+}
+
+.tactical-dash__radar-caption {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92%;
+  text-align: center;
+  font-size: 10px;
+  color: #e2e8f0;
+  line-height: 1.35;
+  text-shadow: 0 1px 4px #000;
+}
+
+.tactical-dash__radar-caption--fmcw {
+  color: #7dd3fc;
+}
+
+.tactical-dash__fmcw-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+@media (max-width: 800px) {
+  .tactical-dash__fmcw-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tactical-dash__viz-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.tactical-dash__canvas3d {
+  width: 100%;
+  min-height: 200px;
+}
+
+.tactical-dash__drone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.tactical-dash__drone-btn {
+  flex-shrink: 0;
+}
+
+.tactical-dash__drone-note {
+  font-size: 12px;
+}
+
+/* FMCW + LiDAR 검증 프로토타입 */
+.fusion-proto-page {
+  max-width: 1180px;
+}
+
+.fusion-proto-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 1.25rem;
+}
+
+.fusion-proto-lead {
+  max-width: 52rem;
+  line-height: 1.55;
+  margin: 0.35rem 0 0;
+}
+
+.fusion-proto-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.fusion-proto-timeline {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.fusion-proto-step {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  opacity: 0.72;
+}
+
+.fusion-proto-step--active {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #fff 70%);
+  opacity: 1;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.12);
+}
+
+.fusion-proto-step--done {
+  border-color: #86efac;
+  background: #f0fdf4;
+  opacity: 1;
+}
+
+.fusion-proto-step-num {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fusion-proto-step--active .fusion-proto-step-num {
+  background: #2563eb;
+}
+
+.fusion-proto-step--done .fusion-proto-step-num {
+  background: #16a34a;
+}
+
+.fusion-proto-step p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.fusion-proto-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 960px) {
+  .fusion-proto-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fusion-proto-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+}
+
+.fusion-proto-card--wide {
+  grid-column: 1 / -1;
+}
+
+.fusion-proto-card--log {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 961px) {
+  .fusion-proto-card--log {
+    grid-column: auto;
+  }
+  .fusion-proto-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.fusion-proto-card-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.fusion-proto-card-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.fusion-proto-progress {
+  height: 10px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.fusion-proto-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  border-radius: 6px;
+  transition: width 0.12s ease;
+}
+
+.fusion-proto-progress-label {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.fusion-proto-ok {
+  margin: 0 0 10px;
+  font-weight: 700;
+  color: #15803d;
+}
+
+.fusion-proto-dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.fusion-proto-dl > div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.fusion-proto-dl dt {
+  margin: 0;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.fusion-proto-dl dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.fusion-proto-mono {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.fusion-proto-pre {
+  margin: 0;
+  min-height: 140px;
+  max-height: 200px;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.fusion-proto-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .fusion-proto-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fusion-proto-chart-block {
+  min-width: 0;
+}
+
+.fusion-proto-viz-cap {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.fusion-proto-scatter-3d {
+  min-height: 220px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  overflow: hidden;
+}
+
+.fusion-proto-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.fusion-proto-table th,
+.fusion-proto-table td {
+  border: 1px solid #e2e8f0;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.fusion-proto-table th {
+  background: #f1f5f9;
+  font-weight: 700;
+}
+
+.fusion-proto-table-row--primary {
+  background: #fef2f2;
+  font-weight: 700;
+}
+
+.fusion-proto-bev-wrap {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(200px, 280px);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .fusion-proto-bev-wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fusion-proto-bev {
+  position: relative;
+}
+
+.fusion-proto-bev-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid #334155;
+}
+
+.fusion-proto-bev-placeholder {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 8px;
+}
+
+.fusion-proto-metrics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fusion-proto-metrics li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+}
+
+.fusion-proto-metrics span {
+  color: #64748b;
+}
+
+.fusion-proto-verdict {
+  color: #15803d;
+}
+
+.fusion-proto-card--summary {
+  grid-column: 1 / -1;
+  background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+}
+
+.fusion-proto-bullets {
+  margin: 0;
+  padding-left: 1.2rem;
+  line-height: 1.6;
+  font-size: 14px;
+  color: #334155;
+}
+
+.fusion-proto-bullets li {
+  margin-bottom: 8px;
+}
+
+.fusion-proto-fab {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.fusion-proto-done-msg {
+  margin: 0;
+  text-align: center;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.fusion-proto-card--real {
+  margin-bottom: 1.25rem;
+  border-color: #93c5fd;
+  background: linear-gradient(180deg, #f8fafc 0%, #fff 55%);
+}
+
+.fusion-proto-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.fusion-proto-file-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.fusion-proto-file-label input[type='file'] {
+  font-size: 12px;
+}
+
+.fusion-proto-file-name {
+  font-weight: 500;
+  color: #64748b;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.fusion-proto-real-actions {
+  margin-bottom: 8px;
+}
+
+.fusion-proto-real-actions--row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.fusion-proto-real-err {
+  margin: 8px 0 0;
+}
+
+.fusion-proto-real-out {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.fusion-proto-real-meta {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.fusion-proto-yolo-img-el {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.fusion-proto-dl--lidar {
+  margin-top: 12px;
+}
+
+.fusion-proto-yolo-list {
+  margin: 10px 0 0;
+  padding-left: 1.2rem;
+  font-size: 13px;
+  color: #475569;
 }

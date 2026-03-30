@@ -1,36 +1,62 @@
 /**
  * 대대(지휘통제실) 압축 시나리오 — 큰 지도(SAR)·작은 지도(대치) 공통 상수
- * 아군·적 표적 모두 남한 좌표 → 시뮬 시 남하 침투(데모)
+ * 아군: 휴전선 이남 / 적: 이북 — 시뮬 남하 침공(데모)
  */
+
+/**
+ * 대대(지휘통제실) 기준 거리(데모).
+ * 개념 순서: 위성 SAR → UAV SAR(40km 밖) → 펄스(40km 이내) → FMCW(15km 이내).
+ */
+export const SCENARIO_RANGES_KM = {
+  /** 군사분계선(펄스 권역 시작) — 이보다 멀면 UAV SAR 추적 단계로 표현 */
+  PULSE_MAX: 40,
+  FMCW_MAX: 15,
+  /** 정찰 드론 출동·현장 EO/IR 촬영(데모) — C2~주 적 거리 기준, FMCW 권과 동일 */
+  DRONE_DISPATCH_MAX_KM: 15,
+  PULSE_UNCERTAIN_MIN: 15,
+} as const
+
 export const BATTALION_SCENARIO = {
   title: '제1기갑대대 작전구역',
   subtitle: '지휘통제실 중심 전술 상황 (데모)',
 
-  /** 광역 SAR·전장 개요 (큰 지도) — 남·북 권역 */
-  overviewBounds: {
-    sw: { lat: 37.62, lng: 126.52 },
-    ne: { lat: 38.52, lng: 127.38 },
+  /** 1단계 SAR 전·후 비교 지도 (북측 전차 소실) */
+  sarCompareBounds: {
+    sw: { lat: 38.02, lng: 126.72 },
+    ne: { lat: 38.32, lng: 127.12 },
   },
-  overviewMapLevel: 9,
+
+  /** 광역 SAR — DMZ 인접 권역만 잘라 확대(너무 축소된 느낌 완화) */
+  overviewBounds: {
+    sw: { lat: 37.68, lng: 126.48 },
+    ne: { lat: 38.42, lng: 127.42 },
+  },
+  /** 카카오맵: 레벨이 클수록 도면이 더 상세(1=광역 ~ 14=최대 확대) */
+  overviewMapLevel: 10,
 
   /** 적 침공 시뮬 종료 지점(남한 측, DMZ 인근 가상) — OSRM 실패 시 직선 보간 */
   invasionTarget: { lat: 37.792, lng: 126.982 },
 
-  /** 적·아군 대치 (작은 지도) — 접촉 표적·지휘통제실 동시에 보이도록 */
+  /**
+   * 전술 대치 — 침투·C2 축을 확대(서해~동측 전방 부대까지 포함)
+   */
   insetBounds: {
-    sw: { lat: 37.72, lng: 126.52 },
-    ne: { lat: 38.45, lng: 127.38 },
+    sw: { lat: 37.66, lng: 126.72 },
+    ne: { lat: 38.27, lng: 127.4 },
   },
-  insetMapLevel: 4,
+  insetMapLevel: 10,
 
-  /** SAR 변화분석 의심 구역 1곳만, 연한 강조 */
+  /** 전술 PiP(40km 이내): 높은 레벨 = 더 확대된 타일(광역 insetMapLevel:3 대비) */
+  insetPipMapLevel: 10,
+
+  /** SAR 변화분석 — 북측 전차 신호 소실 의심 (광역 지도 원) */
   sarTankLossZones: [
     {
       id: 'sar-1',
-      lat: 37.94,
-      lng: 126.93,
-      radiusM: 2200,
-      label: '전차 신호 소실 A',
+      lat: 38.145,
+      lng: 126.94,
+      radiusM: 2000,
+      label: '북측 전차 신호 소실 A',
     },
   ],
 } as const

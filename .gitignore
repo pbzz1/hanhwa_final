@@ -36,6 +36,16 @@ dist-ssr/
 # ===== 데이터/모델 (용량 큼, 개인 데이터 가능) =====
 data/
 *.zip
+
+# VoD 직접 수신(vod-devkit/vod-received): 압축 해제본은 커밋 제외, 폴더 골격만 유지
+vod-devkit/vod-received/zips/*
+!vod-devkit/vod-received/zips/.gitkeep
+vod-devkit/vod-received/view_of_delft_detection_PUBLIC/**
+!vod-devkit/vod-received/view_of_delft_detection_PUBLIC/.gitkeep
+vod-devkit/vod-received/view_of_delft_prediction_PUBLIC/**
+!vod-devkit/vod-received/view_of_delft_prediction_PUBLIC/.gitkeep
+vod-devkit/vod-received/label_2_with_track_ids/**
+!vod-devkit/vod-received/label_2_with_track_ids/.gitkeep
 *.pth
 *.ckpt
 *.safetensors

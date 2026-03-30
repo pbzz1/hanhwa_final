@@ -54,6 +54,9 @@ AI_INFERENCE_URL=http://localhost:8001
 - `POST /infer/video` (multipart: `file`)
 - `POST /infer/reconstruct-3d` (multipart: `fileA`, `fileB`)
 - `POST /infer/reconstruct-3d-multi` (multipart: `files` x N)
+- `POST /infer/vod/radar-fusion` — VoD **레이더 N×7 `.bin`** (필수) + **카메라 `.jpg`** (선택, YOLO) + **LiDAR `.bin`** (선택, 클러스터 주변 점 수 검증). 레이더는 DBSCAN 기하 클러스터, 학습 가중치 없음. 환경변수 `VOD_RADAR_DBSCAN_EPS`, `VOD_RADAR_DBSCAN_MIN_SAMPLES`로 튜닝 가능.
+
+Nest 프록시: `POST /ai/vod/radar-fusion` (JWT), 필드명 `radar`, `image`, `lidar`.
 
 ## 6) MASt3R 멀티뷰 3D 복원 설정
 

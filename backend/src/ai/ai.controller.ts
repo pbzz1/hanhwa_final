@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   Post,
@@ -79,6 +80,33 @@ export class AiController {
     }
 
     return this.aiService.reconstructPoints(fileA, fileB, req.user.userId);
+  }
+
+  @Post('vod/radar-fusion')
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'radar', maxCount: 1 },
+      { name: 'image', maxCount: 1 },
+      { name: 'lidar', maxCount: 1 },
+    ]),
+  )
+  inferVodRadarFusion(
+    @Req() req: Request & { user: { userId: number } },
+    @UploadedFiles()
+    files?: { radar?: UploadFile[]; image?: UploadFile[]; lidar?: UploadFile[] },
+  ) {
+    const radar = files?.radar?.[0];
+    if (!radar) {
+      throw new BadRequestException('레이더 바이너리(radar)가 필요합니다. (.bin)');
+    }
+
+    return this.aiService.inferVodRadarFusion(radar, files?.image?.[0], files?.lidar?.[0]);
+  }
+
+  /** 로컬 VoD 폴더에서 동기 프레임을 자동 선택 후 추론 (파일 업로드 불필요) */
+  @Post('vod/radar-fusion/auto')
+  inferVodRadarFusionAuto(@Body() body?: { seed?: number }) {
+    return this.aiService.inferVodRadarFusionAuto(body?.seed);
   }
 
   @Post('reconstruct/points-multi')

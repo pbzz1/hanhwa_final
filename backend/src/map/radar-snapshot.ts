@@ -50,6 +50,48 @@ export type RadarMethodologyDto = {
   demoImplementationNote: string;
 };
 
+/** `source=live` 병합 시 Python DBSCAN·YOLO 파이프라인 실행 요약 */
+export type FmcwLiveRunDto = {
+  ok: boolean;
+  frameId?: string;
+  inferMs?: number;
+  radarPipeline?: string;
+  radarPointCount?: number;
+  error?: string;
+};
+
+/** live 파이프라인에서 카메라·YOLO·LiDAR 검증까지 묶어 UI에 전달 */
+export type RadarInsightsDto = {
+  frameId?: string;
+  yoloModel?: string;
+  /** YOLO 오버레이 JPEG base64 (data URL 없이 raw) */
+  annotatedImageBase64?: string | null;
+  yoloDetections?: Array<{
+    label: string;
+    confidence: number;
+    bbox: number[];
+  }>;
+  /** 면적 최대 박스 기준 주요 객체 */
+  primaryObject?: { label: string; confidence: number } | null;
+  lidarValidation?: {
+    matched?: boolean;
+    pointsInRoi?: number;
+    deltaRangeM?: number | null;
+    deltaBearingDeg?: number | null;
+    verdict?: string;
+    lidarClusterRangeM?: number | null;
+    radarRangeM?: number | null;
+    iouBevProxy?: number;
+    meanDistanceM?: number | null;
+  } | null;
+  /** 획득 정보 요약 (불릿) */
+  conclusionBullets?: string[];
+  /** LiDAR 기하 검증 설명 (문장) */
+  lidarReviewParagraph?: string;
+  /** 카메라·3D 동기 시점 안내 */
+  syncedViewNote?: string;
+};
+
 export type RadarSnapshotDto = {
   pulse: {
     radar: RadarSiteDto;
@@ -62,10 +104,12 @@ export type RadarSnapshotDto = {
       representationNote: string;
       vodReferenceNote: string;
       methodology: RadarMethodologyDto;
+      liveRun?: FmcwLiveRunDto | null;
     };
     detections: RadarDetectionDto[];
     /** 주 표적에 대한 예측 궤적·방위(없으면 null) */
     track: FmcwTrackDto | null;
+    insights?: RadarInsightsDto | null;
   };
 };
 

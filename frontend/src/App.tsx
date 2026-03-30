@@ -5,8 +5,12 @@ import {
   useRef,
   useState,
 } from 'react'
-import type { MutableRefObject } from 'react'
-import type { FormEvent } from 'react'
+import type {
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MutableRefObject,
+  PointerEvent,
+} from 'react'
 import {
   NavLink,
   Navigate,
@@ -16,10 +20,20 @@ import {
   useNavigate,
 } from 'react-router-dom'
 import * as THREE from 'three'
+import { FusionValidationPrototype } from './FusionValidationPrototype'
 import { AlertZonePage } from './AlertZonePage'
 import { FmcwRadarScatter3D } from './FmcwRadarScatter3D'
 import { RadarCharts2D } from './RadarCharts2D'
+import { AirborneSarPage } from './AirborneSarPage'
+import { FmcwRadarIntroPage } from './FmcwRadarIntroPage'
+import { PulseRadarIntroPage } from './PulseRadarIntroPage'
+import { ScenarioFlowOverview } from './ScenarioFlowOverview'
+import { UavSarPage } from './UavSarPage'
+import { TacticalPhaseDashboard } from './TacticalPhaseDashboard'
+import { TacticalRadarCanvas } from './TacticalRadarCanvas'
+import { computeSchematicBounds, TacticalSchematicMap } from './TacticalSchematicMap'
 import {
+  bearingDeg,
   computeRadarTargetMetrics,
   isEnemyInRadarCoverage,
   type RadarSite,
@@ -29,6 +43,7 @@ import {
   isBattalionC2Unit,
   isEnemyNearDmz38,
   pickPrimaryEnemyForDistance,
+  SCENARIO_RANGES_KM,
 } from './scenarioBattalion'
 import './App.css'
 
@@ -159,6 +174,14 @@ type RadarSnapshot = {
         trainingNote: string
         demoImplementationNote: string
       }
+      liveRun?: {
+        ok: boolean
+        frameId?: string
+        inferMs?: number
+        radarPipeline?: string
+        radarPointCount?: number
+        error?: string
+      } | null
     }
     detections: Array<{
       id: string
@@ -175,6 +198,27 @@ type RadarSnapshot = {
       bearingDeg: number
       phaseRefDeg: number
       predictedPath: Array<{ lat: number; lng: number }>
+    } | null
+    insights?: {
+      frameId?: string
+      yoloModel?: string
+      annotatedImageBase64?: string | null
+      yoloDetections?: Array<{ label: string; confidence: number; bbox: number[] }>
+      primaryObject?: { label: string; confidence: number } | null
+      lidarValidation?: {
+        matched?: boolean
+        pointsInRoi?: number
+        deltaRangeM?: number | null
+        deltaBearingDeg?: number | null
+        verdict?: string
+        lidarClusterRangeM?: number | null
+        radarRangeM?: number | null
+        iouBevProxy?: number
+        meanDistanceM?: number | null
+      } | null
+      conclusionBullets?: string[]
+      lidarReviewParagraph?: string
+      syncedViewNote?: string
     } | null
   }
 }
@@ -348,8 +392,14 @@ const THREAT_COLOR: Record<EnemyInfiltration['threatLevel'], string> = {
 const SIM_PATH_STEPS = 200
 /** 1배속일 때 재생에 걸리는 시간(초) */
 const SIM_DURATION_SEC = 45
-/** 시뮬 진행률이 이 값 이상이면 레이더 이펙트·경보 2단계(데모) */
-const RADAR_REVEAL_PROGRESS = 0.12
+
+function formatSimClock(progress: number, durationSec: number): string {
+  const clamped = Math.max(0, Math.min(1, progress))
+  const totalSec = Math.round(clamped * durationSec)
+  const m = Math.floor(totalSec / 60)
+  const r = totalSec % 60
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
 
 type SimPoint = { lat: number; lng: number }
 
@@ -358,23 +408,10 @@ type SimPathBundle = {
   enemy: Map<number, SimPoint[]>
 }
 
-function buildFriendlyPath(baseLat: number, baseLng: number, seed: number): SimPoint[] {
-  const out: SimPoint[] = []
-  for (let i = 0; i <= SIM_PATH_STEPS; i += 1) {
-    const t = i / SIM_PATH_STEPS
-    // t=0, t=1 에서 원점(부대 좌표)으로 돌아오도록 envelope 적용
-    const envelope = Math.sin(t * Math.PI)
-    const wobbleLat =
-      envelope *
-      (0.12 * Math.sin(t * Math.PI * 2.2 + seed * 0.07) +
-        0.06 * Math.sin(t * Math.PI * 5 + seed * 0.03))
-    const wobbleLng =
-      envelope *
-      (0.1 * Math.cos(t * Math.PI * 1.9 + seed * 0.09) +
-        0.05 * Math.cos(t * Math.PI * 4.5 + seed * 0.05))
-    out.push({ lat: baseLat + wobbleLat, lng: baseLng + wobbleLng })
-  }
-  return out
+/** 아군: 시뮬 재생 중에도 초기 좌표 고정(이동 없음) */
+function buildFriendlyPath(baseLat: number, baseLng: number, _seed: number): SimPoint[] {
+  const p: SimPoint = { lat: baseLat, lng: baseLng }
+  return Array.from({ length: SIM_PATH_STEPS + 1 }, () => ({ ...p }))
 }
 
 function buildEnemyPath(baseLat: number, baseLng: number, seed: number): SimPoint[] {
@@ -450,6 +487,24 @@ function samplePath(path: SimPoint[], progress: number): SimPoint {
   }
 }
 
+/** 궤적 접선 방향(북 0° 시계방향) — 시뮬 시점 표적 이동 헤딩 */
+function movementBearingAlongPath(path: SimPoint[], progress: number): number | null {
+  if (path.length < 2) return null
+  const p = Math.min(1, Math.max(0, progress))
+  const delta = Math.max(0.002, 1 / Math.max(8, path.length * 3))
+  const p2 = Math.min(1, p + delta)
+  if (p2 <= p + 1e-9) return null
+  const A = samplePath(path, p)
+  const B = samplePath(path, p2)
+  return bearingDeg(A.lat, A.lng, B.lat, B.lng)
+}
+
+function bearingToCardinalKo(deg: number): string {
+  const x = ((deg % 360) + 360) % 360
+  const labels = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'] as const
+  return labels[Math.round(x / 45) % 8]
+}
+
 function haversineKm(a: SimPoint, b: SimPoint): number {
   const R = 6371
   const dLat = ((b.lat - a.lat) * Math.PI) / 180
@@ -460,6 +515,50 @@ function haversineKm(a: SimPoint, b: SimPoint): number {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(la) * Math.cos(lb) * Math.sin(dLng / 2) ** 2
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/** 시뮬 진행 시점에서 지휘통제실–우선 적 거리(km) */
+function enemyDistanceFromC2Km(
+  paths: SimPathBundle | null,
+  progress: number,
+  c2Id: number | null,
+  enemyId: number | null,
+): number | null {
+  if (!paths || c2Id == null || enemyId == null) return null
+  const c2Path = paths.friendly.get(c2Id)
+  const ePath = paths.enemy.get(enemyId)
+  if (!c2Path || !ePath) return null
+  const a = samplePath(c2Path, progress)
+  const b = samplePath(ePath, progress)
+  return haversineKm(a, b)
+}
+
+/** C2–적 구간 주변만 보이도록 바운드(전술 PiP 확대용) */
+function tightBoundsAroundC2Enemy(c2: SimPoint, enemy: SimPoint, padKm: number): { sw: SimPoint; ne: SimPoint } {
+  const minSpanLat = 0.038
+  const minSpanLng = 0.048
+  let minLat = Math.min(c2.lat, enemy.lat)
+  let maxLat = Math.max(c2.lat, enemy.lat)
+  let minLng = Math.min(c2.lng, enemy.lng)
+  let maxLng = Math.max(c2.lng, enemy.lng)
+  const midLat = (minLat + maxLat) / 2
+  const padLat = padKm / 111
+  const padLng = padKm / (111 * Math.cos((midLat * Math.PI) / 180))
+  if (maxLat - minLat < minSpanLat) {
+    const h = minSpanLat / 2
+    minLat = midLat - h
+    maxLat = midLat + h
+  }
+  if (maxLng - minLng < minSpanLng) {
+    const midLng = (minLng + maxLng) / 2
+    const w = minSpanLng / 2
+    minLng = midLng - w
+    maxLng = midLng + w
+  }
+  return {
+    sw: { lat: minLat - padLat, lng: minLng - padLng },
+    ne: { lat: maxLat + padLat, lng: maxLng + padLng },
+  }
 }
 
 function offsetLatLng(lat: number, lng: number, bearingDeg: number, distKm: number): SimPoint {
@@ -586,18 +685,7 @@ async function buildRoadAwareSimPaths(
   const inv = BATTALION_SCENARIO.invasionTarget
 
   units.forEach((u) => {
-    jobs.push(
-      (async () => {
-        const { points, fromRoad } = await fetchRoadRoundTripPath(
-          u.lat,
-          u.lng,
-          u.id * 17 + u.name.length,
-          false,
-        )
-        friendly.set(u.id, points)
-        if (fromRoad) roadCount += 1
-      })(),
-    )
+    friendly.set(u.id, buildFriendlyPath(u.lat, u.lng, u.id * 17 + u.name.length))
   })
 
   enemies.forEach((e) => {
@@ -647,6 +735,7 @@ type KakaoMap = {
     paddingBottom?: number,
     paddingLeft?: number,
   ) => void
+  setLevel: (level: number) => void
   setZoomable: (zoomable: boolean) => void
 }
 
@@ -743,8 +832,45 @@ type ApplySimFrameOpts = {
   radarSite: RadarSite | null
   primaryEnemyId: number | null
   sarContact: boolean
+  /** C2–적 거리(km); 펄스 불확실 구간에서 핀·원 표현 분기 */
+  primaryEnemyDistanceKm?: number | null
+  /** true일 때만 FMCW 섹터 내 락·탐지 콜백 처리 */
+  fmcwRadarActive?: boolean
+  /** SAR 접촉 후 C2 기준 ≤15km — 드론 출동·현장 촬영(데모) */
+  droneFilmingActive?: boolean
+  /** 통합 시뮬 5단계일 때만 드론 UI·핀 스타일 적용 */
+  scenarioIntegratedSimActive?: boolean
   onPrimaryEnemyRadarDetect?: (detected: boolean) => void
   onPrimaryEnemyNearDmz38?: (near: boolean) => void
+}
+
+function mergeSimFrameOpts(
+  base: ApplySimFrameOpts | undefined,
+  dist: number | null,
+): ApplySimFrameOpts {
+  const b =
+    base ??
+    ({
+      radarSite: null,
+      primaryEnemyId: null,
+      sarContact: false,
+      scenarioIntegratedSimActive: false,
+    } satisfies ApplySimFrameOpts)
+  return {
+    radarSite: b.radarSite ?? null,
+    primaryEnemyId: b.primaryEnemyId ?? null,
+    sarContact: b.sarContact,
+    scenarioIntegratedSimActive: b.scenarioIntegratedSimActive === true,
+    onPrimaryEnemyRadarDetect: b.onPrimaryEnemyRadarDetect,
+    onPrimaryEnemyNearDmz38: b.onPrimaryEnemyNearDmz38,
+    primaryEnemyDistanceKm: dist,
+    fmcwRadarActive: dist != null && dist <= SCENARIO_RANGES_KM.FMCW_MAX,
+    droneFilmingActive:
+      b.scenarioIntegratedSimActive === true &&
+      b.sarContact &&
+      dist != null &&
+      dist <= SCENARIO_RANGES_KM.DRONE_DISPATCH_MAX_KM,
+  }
 }
 
 function applySimulationFrame(
@@ -794,7 +920,8 @@ function applySimulationFrame(
       circle.setOptions?.({ center: ll })
     }
 
-    if (opts?.radarSite && opts.sarContact) {
+    const fmcwActive = opts?.fmcwRadarActive === true
+    if (opts?.radarSite && opts.sarContact && fmcwActive) {
       const inCov = isEnemyInRadarCoverage(lat, lng, opts.radarSite)
       const showLock = inCov && progress > 0.02
       pinEl.classList.toggle('enemy-pin--radar-lock', showLock)
@@ -814,6 +941,26 @@ function applySimulationFrame(
       opts?.onPrimaryEnemyNearDmz38?.(nearDmz)
     } else {
       pinEl.classList.remove('enemy-pin--dmz-near')
+    }
+
+    if (id === opts?.primaryEnemyId) {
+      const d = opts?.primaryEnemyDistanceKm
+      if (d != null) {
+        const uncertain =
+          d > SCENARIO_RANGES_KM.PULSE_UNCERTAIN_MIN && d <= SCENARIO_RANGES_KM.PULSE_MAX
+        pinEl.classList.toggle('enemy-pin--pulse-uncertain-only', uncertain)
+        if (uncertain) {
+          circle.setMap(null)
+        } else {
+          circle.setMap(map)
+        }
+      } else {
+        pinEl.classList.remove('enemy-pin--pulse-uncertain-only')
+        circle.setMap(map)
+      }
+      pinEl.classList.toggle('enemy-pin--drone-filming', opts?.droneFilmingActive === true)
+    } else {
+      pinEl.classList.remove('enemy-pin--drone-filming')
     }
   })
 
@@ -908,6 +1055,8 @@ type AttachPinsCtx = {
   enableRadarHoverPanel: boolean
   /** SAR 접촉 후 인셋: 지휘통제실·우선 적만(간략 UI) */
   insetMinimal?: boolean
+  /** SAR 광역 지도: 아군은 대대(지휘통제실)만 단일 점으로 표시 */
+  overviewSarC2Dot?: boolean
 }
 
 function attachKakaoTacticalPins(
@@ -924,14 +1073,17 @@ function attachKakaoTacticalPins(
     setRadarEnemyHover,
     enableRadarHoverPanel,
     insetMinimal = false,
+    overviewSarC2Dot = false,
   } = ctx
 
   const primaryForInset = insetMinimal
     ? pickPrimaryEnemyForDistance(enemyInfiltrations)
     : null
-  const friendlySource = insetMinimal
+  const friendlySource = overviewSarC2Dot
     ? friendlyUnits.filter(isBattalionC2Unit)
-    : friendlyUnits
+    : insetMinimal
+      ? friendlyUnits.filter(isBattalionC2Unit)
+      : friendlyUnits
   const enemySource = insetMinimal
     ? primaryForInset
       ? enemyInfiltrations.filter((e) => e.id === primaryForInset.id)
@@ -946,35 +1098,44 @@ function attachKakaoTacticalPins(
     const markerColor = UNIT_LEVEL_MARKER_COLOR[unit.level]
 
     const pinEl = document.createElement('div')
-    pinEl.className = 'kakao-tactical-pin-anchor'
-    if (isBattalionC2Unit(unit)) {
-      pinEl.classList.add('kakao-tactical-pin-anchor--c2')
+    if (overviewSarC2Dot) {
+      pinEl.className = 'sar-overview-c2-anchor'
+      pinEl.title = `${unit.name} · 대대 지휘통제실`
+      pinEl.innerHTML =
+        '<div class="sar-overview-c2-dot" aria-hidden="true"></div><span class="sar-overview-c2-label">C2</span>'
+    } else {
+      pinEl.className = 'kakao-tactical-pin-anchor'
+      if (isBattalionC2Unit(unit)) {
+        pinEl.classList.add('kakao-tactical-pin-anchor--c2')
+      }
+      pinEl.title = `아군 · ${unit.level} | ${unit.name} · ${TACTICAL_SYMBOL_LABEL[unit.symbolType]}`
+      pinEl.innerHTML = buildFriendlyTacticalPinHTML(unit)
     }
-    pinEl.title = `아군 · ${unit.level} | ${unit.name} · ${TACTICAL_SYMBOL_LABEL[unit.symbolType]}`
-    pinEl.innerHTML = buildFriendlyTacticalPinHTML(unit)
 
     const pinOverlay = new kakaoMaps.CustomOverlay({
       map,
       position,
-      yAnchor: 1,
-      xAnchor: 0.5,
+      yAnchor: overviewSarC2Dot ? 0.5 : 1,
+      xAnchor: overviewSarC2Dot ? 0.5 : 0.5,
       content: pinEl,
       zIndex: 3,
     })
 
     const infoContent = document.createElement('div')
-    infoContent.className = insetMinimal
-      ? 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly map-hover-side-card--minimal'
-      : 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly'
-    infoContent.innerHTML = insetMinimal
-      ? `
+    infoContent.className =
+      overviewSarC2Dot || insetMinimal
+        ? 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly map-hover-side-card--minimal'
+        : 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly'
+    infoContent.innerHTML =
+      overviewSarC2Dot || insetMinimal
+        ? `
                 <span class="unit-badge unit-badge-friendly">C2</span>
                 <h4 style="border-left-color:${markerColor};">
                   ${unit.name}
                 </h4>
                 <p class="map-hover-minimal-line">지휘통제실 · 클릭 시 영상</p>
               `
-      : `
+        : `
                 <span class="unit-badge unit-badge-friendly">아군</span>
                 <h4 style="border-left-color:${markerColor};">
                   ${unit.level} · ${unit.name}
@@ -992,7 +1153,7 @@ function attachKakaoTacticalPins(
     const infoOverlay = new kakaoMaps.CustomOverlay({
       position,
       yAnchor: 0.5,
-      xAnchor: 0,
+      xAnchor: overviewSarC2Dot ? 0.5 : 0,
       content: infoContent,
       zIndex: 4,
     })
@@ -1169,6 +1330,8 @@ function HomePage({ user }: HomePageProps) {
   const [mapError, setMapError] = useState<string | null>(null)
   const [simPlaying, setSimPlaying] = useState(false)
   const [simProgress, setSimProgress] = useState(0)
+  const [simSeekDragging, setSimSeekDragging] = useState(false)
+  const simSeekTrackRef = useRef<HTMLDivElement | null>(null)
   const [simSpeed, setSimSpeed] = useState<0.5 | 1 | 2>(1)
   const [simPaths, setSimPaths] = useState<SimPathBundle | null>(null)
   const [roadPathStatus, setRoadPathStatus] = useState<
@@ -1179,16 +1342,96 @@ function HomePage({ user }: HomePageProps) {
   const openMapVideoModalRef = useRef<(p: MapVideoModalState) => void>(() => {})
   openMapVideoModalRef.current = (p) => setMapVideoModal(p)
   const [radarSnapshot, setRadarSnapshot] = useState<RadarSnapshot | null>(null)
-  /** SAR로 적 표적 확정 후 true — 노란 거리선·1차 경보 */
+  /** SAR로 적 표적 확정 후 true — UAV·전술 지도 공통 */
   const [sarContact, setSarContact] = useState(false)
+  /** 0=흐름 요약, 1=항공 SAR, 2=UAV SAR, 3=펄스 소개, 4=FMCW 소개, 5=통합 시뮬(지도) */
+  const [scenarioStep, setScenarioStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0)
+  /** 통합 시뮬(5) 내부만: 3=펄스 대기, 4=펄스, 5=FMCW — 거리로 자동 전환 */
+  const [tacticalSubStep, setTacticalSubStep] = useState<3 | 4 | 5>(3)
+  /** 3~5단계 표현 — 카카오 지도·카드·SVG·Canvas·나란히 */
+  const [tacticalPhaseUi, setTacticalPhaseUi] = useState<
+    'map' | 'dashboard' | 'schematic' | 'canvasScope' | 'compare'
+  >('map')
+  /** 나란히 비교 시 오른쪽 패널 */
+  const [compareRightPane, setCompareRightPane] = useState<
+    'dashboard' | 'schematic' | 'canvasScope'
+  >('schematic')
   const [radarEnemyHover, setRadarEnemyHover] = useState<EnemyInfiltration | null>(null)
   const radarHoverLeaveTimerRef = useRef<number | null>(null)
 
-  const radarEngaged = sarContact && simProgress >= RADAR_REVEAL_PROGRESS
-  /** FMCW: 근거리 부채꼴·상세 탐지·예측 경로 */
-  const radarFmcwForMap = radarEngaged && radarSnapshot ? radarSnapshot : null
-  /** 펄스: 광역(약 40km) — SAR 확정 후 점 탐지만 */
-  const radarPulseForMap = sarContact && radarSnapshot ? radarSnapshot : null
+  const c2UnitForSim = useMemo(
+    () => friendlyUnits.find(isBattalionC2Unit) ?? null,
+    [friendlyUnits],
+  )
+  const primaryEnemyForSim = useMemo(
+    () => pickPrimaryEnemyForDistance(enemyInfiltrations),
+    [enemyInfiltrations],
+  )
+
+  const enemyDistanceKm = useMemo(() => {
+    if (scenarioStep !== 5 || !simPaths) return null
+    return enemyDistanceFromC2Km(
+      simPaths,
+      simProgress,
+      c2UnitForSim?.id ?? null,
+      primaryEnemyForSim?.id ?? null,
+    )
+  }, [scenarioStep, simPaths, simProgress, c2UnitForSim?.id, primaryEnemyForSim?.id])
+
+  /** 지휘통제실 기준 40km 이내일 때만 전술 지도 PiP + 인셋 확대(레이더 API와 무관) */
+  const showTacticalPip =
+    scenarioStep === 5 &&
+    tacticalSubStep >= 4 &&
+    sarContact &&
+    enemyDistanceKm != null &&
+    enemyDistanceKm <= SCENARIO_RANGES_KM.PULSE_MAX
+
+  const pulseInRange =
+    scenarioStep === 5 &&
+    tacticalSubStep >= 4 &&
+    sarContact &&
+    radarSnapshot != null &&
+    enemyDistanceKm != null &&
+    enemyDistanceKm <= SCENARIO_RANGES_KM.PULSE_MAX
+
+  const fmcwInRange =
+    scenarioStep === 5 &&
+    tacticalSubStep >= 5 &&
+    sarContact &&
+    radarSnapshot != null &&
+    enemyDistanceKm != null &&
+    enemyDistanceKm <= SCENARIO_RANGES_KM.FMCW_MAX
+
+  const pulseUncertainBand =
+    scenarioStep === 5 &&
+    tacticalSubStep >= 4 &&
+    pulseInRange &&
+    enemyDistanceKm != null &&
+    enemyDistanceKm > SCENARIO_RANGES_KM.PULSE_UNCERTAIN_MIN &&
+    enemyDistanceKm <= SCENARIO_RANGES_KM.PULSE_MAX
+
+  /** C2 기준 ≤15km + SAR 접촉 — 정찰 드론 출동·EO/IR 촬영·전송(데모) */
+  const droneDispatchActive =
+    scenarioStep === 5 &&
+    sarContact &&
+    enemyDistanceKm != null &&
+    enemyDistanceKm <= SCENARIO_RANGES_KM.DRONE_DISPATCH_MAX_KM
+
+  /** FMCW: ≤15km 부채꼴·상세 탐지·예측 경로 */
+  const radarFmcwForMap = fmcwInRange ? radarSnapshot : null
+  /** 펄스: ≤40km 광역 부채꼴·점 탐지 */
+  const radarPulseForMap = pulseInRange ? radarSnapshot : null
+
+  const insetMinimal =
+    sarContact &&
+    scenarioStep === 5 &&
+    tacticalSubStep >= 4 &&
+    enemyDistanceKm != null &&
+    enemyDistanceKm > SCENARIO_RANGES_KM.PULSE_UNCERTAIN_MIN &&
+    enemyDistanceKm <= SCENARIO_RANGES_KM.PULSE_MAX
+
+  const mapUiActive =
+    scenarioStep === 5 && (tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare')
 
   const radarSnapshotRef = useRef<RadarSnapshot | null>(null)
   radarSnapshotRef.current = radarSnapshot
@@ -1201,8 +1444,9 @@ function HomePage({ user }: HomePageProps) {
   const simFrameOptsRef = useRef<ApplySimFrameOpts | undefined>(undefined)
   simFrameOptsRef.current = {
     radarSite: (radarSnapshot?.fmcw.radar as RadarSite) ?? null,
-    primaryEnemyId: pickPrimaryEnemyForDistance(enemyInfiltrations)?.id ?? null,
+    primaryEnemyId: primaryEnemyForSim?.id ?? null,
     sarContact,
+    scenarioIntegratedSimActive: scenarioStep === 5,
     onPrimaryEnemyRadarDetect: (detected) => {
       if (detected && !radarDiscoveryAnnouncedRef.current) {
         radarDiscoveryAnnouncedRef.current = true
@@ -1216,6 +1460,15 @@ function HomePage({ user }: HomePageProps) {
       }
     },
   }
+
+  useEffect(() => {
+    if (scenarioStep !== 5 || enemyDistanceKm == null) return
+    if (tacticalSubStep === 3 && enemyDistanceKm <= SCENARIO_RANGES_KM.PULSE_MAX) {
+      setTacticalSubStep(4)
+    } else if (tacticalSubStep === 4 && enemyDistanceKm <= SCENARIO_RANGES_KM.FMCW_MAX) {
+      setTacticalSubStep(5)
+    }
+  }, [scenarioStep, tacticalSubStep, enemyDistanceKm])
 
   const clearRadarHoverTimer = useCallback(() => {
     if (radarHoverLeaveTimerRef.current != null) {
@@ -1263,6 +1516,110 @@ function HomePage({ user }: HomePageProps) {
     }
   }, [radarSnapshot])
 
+  const tacticalDashboardRadarCharts = useMemo(() => {
+    if (!radarSnapshot?.fmcw.detections.length) return null
+    const f = radarSnapshot.fmcw
+    return {
+      headingDeg: f.radar.headingDeg,
+      fovDeg: f.radar.fovDeg,
+      rangeMaxM: f.radar.rangeMaxM,
+      detections: f.detections,
+      track: f.track
+        ? { bearingDeg: f.track.bearingDeg, phaseRefDeg: f.track.phaseRefDeg }
+        : null,
+    }
+  }, [radarSnapshot])
+
+  const primaryEnemyPathPoints = useMemo(() => {
+    if (!simPaths || !primaryEnemyForSim) return null
+    return simPaths.enemy.get(primaryEnemyForSim.id) ?? null
+  }, [simPaths, primaryEnemyForSim?.id])
+
+  const enemyMovementBearingDeg = useMemo(() => {
+    if (!primaryEnemyPathPoints || primaryEnemyPathPoints.length < 2) return null
+    return movementBearingAlongPath(primaryEnemyPathPoints, simProgress)
+  }, [primaryEnemyPathPoints, simProgress])
+
+  const schematicBounds = useMemo(() => {
+    if (!c2UnitForSim || !primaryEnemyPathPoints?.length) return null
+    return computeSchematicBounds(
+      { lat: c2UnitForSim.lat, lng: c2UnitForSim.lng },
+      primaryEnemyPathPoints,
+    )
+  }, [c2UnitForSim, primaryEnemyPathPoints])
+
+  const tacticalSimPoints = useMemo(() => {
+    if (!simPaths || !c2UnitForSim || !primaryEnemyForSim) return null
+    const c2Path = simPaths.friendly.get(c2UnitForSim.id)
+    const ePath = simPaths.enemy.get(primaryEnemyForSim.id)
+    if (!c2Path || !ePath) return null
+    const c2 = samplePath(c2Path, simProgress)
+    const enemy = samplePath(ePath, simProgress)
+    return {
+      c2,
+      enemy,
+      bearing: bearingDeg(c2.lat, c2.lng, enemy.lat, enemy.lng),
+    }
+  }, [simPaths, simProgress, c2UnitForSim?.id, primaryEnemyForSim?.id])
+
+  const tacticalSimPointsRef = useRef(tacticalSimPoints)
+  tacticalSimPointsRef.current = tacticalSimPoints
+
+  /** PiP 확대 뷰가 시뮬 진행에 따라 너무 자주 setBounds 하지 않도록 양자화 */
+  const pipZoomTick = useMemo(
+    () => (tacticalSimPoints ? Math.round(simProgress * 40) / 40 : 0),
+    [tacticalSimPoints, simProgress],
+  )
+
+  const radarCanvasConfig = useMemo(() => {
+    if (!radarSnapshot) {
+      return { headingDeg: 35, fovDeg: 80, maxRangeKm: 48 }
+    }
+    const r = radarSnapshot.fmcw.radar
+    return {
+      headingDeg: r.headingDeg,
+      fovDeg: r.fovDeg,
+      maxRangeKm: Math.max(48, Math.ceil(r.rangeMaxM / 1000)),
+    }
+  }, [radarSnapshot])
+
+  const noMapRadarSync =
+    tacticalPhaseUi === 'dashboard' ||
+    tacticalPhaseUi === 'schematic' ||
+    tacticalPhaseUi === 'canvasScope'
+
+  /** 카카오맵을 쓰지 않는 단독 모드에서만 38선·FMCW 락 상태 동기화(비교 모드는 왼쪽 지도가 담당) */
+  useEffect(() => {
+    if (!noMapRadarSync || scenarioStep !== 5 || !simPaths || !primaryEnemyForSim) {
+      return
+    }
+    const path = simPaths.enemy.get(primaryEnemyForSim.id)
+    if (!path) return
+    const { lat, lng } = samplePath(path, simProgress)
+    const nearDmz = simProgress > 0.01 && isEnemyNearDmz38(lat)
+    if (enemyNearDmzPrevRef.current !== nearDmz) {
+      enemyNearDmzPrevRef.current = nearDmz
+      setEnemyNearDmz38(nearDmz)
+    }
+    if (radarSnapshot && fmcwInRange) {
+      const radar = radarSnapshot.fmcw.radar as RadarSite
+      const inCov = isEnemyInRadarCoverage(lat, lng, radar)
+      if (inCov && simProgress > 0.02 && !radarDiscoveryAnnouncedRef.current) {
+        radarDiscoveryAnnouncedRef.current = true
+        setEnemyRadarDiscovered(true)
+      }
+    }
+  }, [
+    noMapRadarSync,
+    scenarioStep,
+    tacticalSubStep,
+    simPaths,
+    simProgress,
+    primaryEnemyForSim,
+    radarSnapshot,
+    fmcwInRange,
+  ])
+
   useEffect(() => {
     if (!mapVideoModal) return undefined
     const onKey = (ev: KeyboardEvent) => {
@@ -1271,6 +1628,41 @@ function HomePage({ user }: HomePageProps) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [mapVideoModal])
+
+  /** 40km 밖: 전술 인셋을 광역 insetBounds로 복구 */
+  useEffect(() => {
+    if (showTacticalPip) return
+    const inset = insetSceneRef.current
+    if (!inset?.map || !inset.kakaoMaps) return
+    const k = inset.kakaoMaps
+    const ib = BATTALION_SCENARIO.insetBounds
+    const sw = new k.LatLng(ib.sw.lat, ib.sw.lng)
+    const ne = new k.LatLng(ib.ne.lat, ib.ne.lng)
+    ;(inset.map as KakaoMap).setBounds(new k.LatLngBounds(sw, ne), 18, 18, 18, 18)
+    ;(inset.map as KakaoMap).setLevel(BATTALION_SCENARIO.insetMapLevel)
+    const rel = (inset.map as unknown as { relayout?: () => void }).relayout
+    window.setTimeout(() => rel?.call(inset.map), 100)
+  }, [showTacticalPip])
+
+  /**
+   * 40km 안: C2–적 축으로 좁은 bounds.
+   * 의존성에 tacticalSimPoints 객체를 넣지 않음 — simProgress마다 참조가 바뀌어 setBounds가 ~12Hz로
+   * 반복되며 타일·오버레이가 깜빡임. pipZoomTick(양자화)일 때만 갱신하고 좌표는 ref에서 읽음.
+   */
+  useEffect(() => {
+    if (!showTacticalPip) return
+    const pts = tacticalSimPointsRef.current
+    if (!pts) return
+    const inset = insetSceneRef.current
+    if (!inset?.map || !inset.kakaoMaps) return
+    const k = inset.kakaoMaps
+    const tight = tightBoundsAroundC2Enemy(pts.c2, pts.enemy, 5.5)
+    const sw = new k.LatLng(tight.sw.lat, tight.sw.lng)
+    const ne = new k.LatLng(tight.ne.lat, tight.ne.lng)
+    ;(inset.map as KakaoMap).setBounds(new k.LatLngBounds(sw, ne), 36, 36, 36, 36)
+    const rel = (inset.map as unknown as { relayout?: () => void }).relayout
+    window.setTimeout(() => rel?.call(inset.map), 100)
+  }, [showTacticalPip, pipZoomTick])
 
   useEffect(() => {
     Promise.all([
@@ -1299,7 +1691,7 @@ function HomePage({ user }: HomePageProps) {
 
   useEffect(() => {
     let cancelled = false
-    void requestJson<RadarSnapshot>(`${API_BASE_URL}/map/radar/snapshot`)
+    void requestJson<RadarSnapshot>(`${API_BASE_URL}/map/radar/snapshot?source=live`)
       .then((snap) => {
         if (!cancelled) setRadarSnapshot(snap)
       })
@@ -1365,10 +1757,17 @@ function HomePage({ user }: HomePageProps) {
     const scene = sceneRef.current
     const inset = insetSceneRef.current
     if (!simPaths) return
-    const opts = simFrameOptsRef.current
+    const base = simFrameOptsRef.current
+    const dist = enemyDistanceFromC2Km(
+      simPaths,
+      simProgressRef.current,
+      c2UnitForSim?.id ?? null,
+      primaryEnemyForSim?.id ?? null,
+    )
+    const opts = mergeSimFrameOpts(base, dist)
     if (scene) applySimulationFrame(scene, simPaths, simProgressRef.current, opts)
     if (inset) applySimulationFrame(inset, simPaths, simProgressRef.current, opts)
-  }, [simPaths])
+  }, [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
 
   const handleSimReset = useCallback(() => {
     simProgressRef.current = 0
@@ -1378,14 +1777,99 @@ function HomePage({ user }: HomePageProps) {
     setEnemyRadarDiscovered(false)
     enemyNearDmzPrevRef.current = false
     setEnemyNearDmz38(false)
+    setScenarioStep(0)
+    setTacticalSubStep(3)
+    setSarContact(false)
     const scene = sceneRef.current
     const inset = insetSceneRef.current
-    const opts = simFrameOptsRef.current
+    const dist0 =
+      simPaths != null
+        ? enemyDistanceFromC2Km(
+            simPaths,
+            0,
+            c2UnitForSim?.id ?? null,
+            primaryEnemyForSim?.id ?? null,
+          )
+        : null
+    const opts = mergeSimFrameOpts(simFrameOptsRef.current, dist0)
     if (simPaths) {
       if (scene) applySimulationFrame(scene, simPaths, 0, opts)
       if (inset) applySimulationFrame(inset, simPaths, 0, opts)
     }
-  }, [simPaths])
+  }, [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
+
+  const simTimelineDisabled =
+    !simPaths ||
+    scenarioStep !== 5 ||
+    ((tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare') && mapLoading)
+
+  const getSeekRatioFromClientX = useCallback((clientX: number) => {
+    const el = simSeekTrackRef.current
+    if (!el) return simProgressRef.current
+    const r = el.getBoundingClientRect()
+    const w = r.width
+    if (w <= 0) return simProgressRef.current
+    return Math.min(1, Math.max(0, (clientX - r.left) / w))
+  }, [])
+
+  const applySimAtProgress = useCallback(
+    (p: number) => {
+      const clamped = Math.min(1, Math.max(0, p))
+      simProgressRef.current = clamped
+      setSimProgress(clamped)
+      if (!simPaths) return
+      const scene = sceneRef.current
+      const inset = insetSceneRef.current
+      const dist = enemyDistanceFromC2Km(
+        simPaths,
+        clamped,
+        c2UnitForSim?.id ?? null,
+        primaryEnemyForSim?.id ?? null,
+      )
+      const opts = mergeSimFrameOpts(simFrameOptsRef.current, dist)
+      if (scene) applySimulationFrame(scene, simPaths, clamped, opts)
+      if (inset) applySimulationFrame(inset, simPaths, clamped, opts)
+    },
+    [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id],
+  )
+
+  const onSimSeekPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (simTimelineDisabled) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setSimSeekDragging(true)
+    applySimAtProgress(getSeekRatioFromClientX(e.clientX))
+  }
+
+  const onSimSeekPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+    applySimAtProgress(getSeekRatioFromClientX(e.clientX))
+  }
+
+  const onSimSeekPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    setSimSeekDragging(false)
+  }
+
+  const onSimSeekKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (simTimelineDisabled) return
+    const step = e.shiftKey ? 0.1 : 0.02
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      applySimAtProgress(simProgressRef.current - step)
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      applySimAtProgress(simProgressRef.current + step)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      applySimAtProgress(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      applySimAtProgress(1)
+    }
+  }
 
   const handleSimTogglePlay = useCallback(() => {
     setSimPlaying((wasPlaying) => {
@@ -1395,13 +1879,23 @@ function HomePage({ user }: HomePageProps) {
       if (simProgressRef.current >= 0.999) {
         simProgressRef.current = 0
         setSimProgress(0)
+        setTacticalSubStep(3)
         radarDiscoveryAnnouncedRef.current = false
         setEnemyRadarDiscovered(false)
         enemyNearDmzPrevRef.current = false
         setEnemyNearDmz38(false)
         const scene = sceneRef.current
         const inset = insetSceneRef.current
-        const opts = simFrameOptsRef.current
+        const dist0 =
+          simPaths != null
+            ? enemyDistanceFromC2Km(
+                simPaths,
+                0,
+                c2UnitForSim?.id ?? null,
+                primaryEnemyForSim?.id ?? null,
+              )
+            : null
+        const opts = mergeSimFrameOpts(simFrameOptsRef.current, dist0)
         if (simPaths) {
           if (scene) applySimulationFrame(scene, simPaths, 0, opts)
           if (inset) applySimulationFrame(inset, simPaths, 0, opts)
@@ -1409,9 +1903,12 @@ function HomePage({ user }: HomePageProps) {
       }
       return true
     })
-  }, [simPaths])
+  }, [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
 
   useEffect(() => {
+    if (scenarioStep !== 5 || !mapUiActive) {
+      return
+    }
     const appKey = import.meta.env.VITE_KAKAO_MAP_APP_KEY
     if (!mapContainerRef.current || !insetMapContainerRef.current || !appKey) {
       return
@@ -1446,7 +1943,7 @@ function HomePage({ user }: HomePageProps) {
           center: mainCenter,
           level: BATTALION_SCENARIO.overviewMapLevel,
         }) as KakaoMap
-        map.setBounds(new kakaoMaps.LatLngBounds(mainSw, mainNe), 52, 52, 52, 52)
+        map.setBounds(new kakaoMaps.LatLngBounds(mainSw, mainNe), 28, 28, 28, 28)
         map.setZoomable(false)
 
         const ib = BATTALION_SCENARIO.insetBounds
@@ -1460,7 +1957,7 @@ function HomePage({ user }: HomePageProps) {
           center: insetCenter,
           level: BATTALION_SCENARIO.insetMapLevel,
         }) as KakaoMap
-        insetMap.setBounds(new kakaoMaps.LatLngBounds(insetSw, insetNe), 28, 28, 28, 28)
+        insetMap.setBounds(new kakaoMaps.LatLngBounds(insetSw, insetNe), 18, 18, 18, 18)
         insetMap.setZoomable(false)
 
         const pinCtxBase = {
@@ -1478,6 +1975,7 @@ function HomePage({ user }: HomePageProps) {
           ...pinCtxBase,
           map,
           enableRadarHoverPanel: true,
+          overviewSarC2Dot: true,
         })
 
         const radarDisposables: Array<
@@ -1704,7 +2202,7 @@ function HomePage({ user }: HomePageProps) {
           ...pinCtxBase,
           map: insetMap,
           enableRadarHoverPanel: false,
-          insetMinimal: sarContact,
+          insetMinimal,
         })
 
         const c2Unit = friendlyUnits.find(isBattalionC2Unit)
@@ -1715,7 +2213,7 @@ function HomePage({ user }: HomePageProps) {
         let c2Uid: number | undefined
         let eid: number | undefined
 
-        if (c2Unit && primaryEnemy && sarContact) {
+        if (c2Unit && primaryEnemy && sarContact && scenarioStep === 5) {
           c2Uid = c2Unit.id
           eid = primaryEnemy.id
           const p0 = new kakaoMaps.LatLng(c2Unit.lat, c2Unit.lng)
@@ -1757,7 +2255,13 @@ function HomePage({ user }: HomePageProps) {
         }
 
         if (pathsBundle.friendly.size > 0 || pathsBundle.enemy.size > 0) {
-          const o = simFrameOptsRef.current
+          const dist = enemyDistanceFromC2Km(
+            pathsBundle,
+            simProgressRef.current,
+            c2Unit?.id ?? null,
+            primaryEnemy?.id ?? null,
+          )
+          const o = mergeSimFrameOpts(simFrameOptsRef.current, dist)
           applySimulationFrame(sceneRef.current, pathsBundle, simProgressRef.current, o)
           if (insetSceneRef.current) {
             applySimulationFrame(insetSceneRef.current, pathsBundle, simProgressRef.current, o)
@@ -1799,7 +2303,19 @@ function HomePage({ user }: HomePageProps) {
         insetMapContainerRef.current.innerHTML = ''
       }
     }
-  }, [friendlyUnits, enemyInfiltrations, radarSnapshot, sarContact, radarEngaged])
+  }, [
+    friendlyUnits,
+    enemyInfiltrations,
+    radarSnapshot,
+    sarContact,
+    scenarioStep,
+    tacticalSubStep,
+    radarPulseForMap,
+    radarFmcwForMap,
+    insetMinimal,
+    tacticalPhaseUi,
+    mapUiActive,
+  ])
 
   useEffect(() => {
     if (!simPlaying || !simPaths) {
@@ -1824,7 +2340,13 @@ function HomePage({ user }: HomePageProps) {
         1,
         simProgressRef.current + (dt * simSpeed) / SIM_DURATION_SEC,
       )
-      const o = simFrameOptsRef.current
+      const dist = enemyDistanceFromC2Km(
+        simPaths,
+        simProgressRef.current,
+        c2UnitForSim?.id ?? null,
+        primaryEnemyForSim?.id ?? null,
+      )
+      const o = mergeSimFrameOpts(simFrameOptsRef.current, dist)
       applySimulationFrame(scene, simPaths, simProgressRef.current, o)
       if (inset) {
         applySimulationFrame(inset, simPaths, simProgressRef.current, o)
@@ -1846,14 +2368,43 @@ function HomePage({ user }: HomePageProps) {
 
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [simPlaying, simSpeed, simPaths])
+  }, [simPlaying, simSpeed, simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
 
   return (
     <section className="page">
       <h1>{BATTALION_SCENARIO.title}</h1>
       <p className="muted">
-        {BATTALION_SCENARIO.subtitle} — <strong>제1기갑대대 지휘통제실</strong>을 중심으로 한 작전구역입니다. 큰 지도는
-        SAR 전차 소실 의심 구역, 작은 지도는 적·아군 대치와 지휘통제실까지 거리를 보여 줍니다.
+        {scenarioStep === 0 ? (
+          <>
+            <strong>0단계</strong>에서 센서 흐름을 요약하고, <strong>1~4단계</strong>에서 항공 SAR → UAV → 펄스 → FMCW의{' '}
+            <strong>모델·입력·출력</strong>을 페이지별로 봅니다. <strong>통합 시뮬</strong>에서는 대대 지도에서 거리에
+            따라 펄스·FMCW가 연동됩니다.
+          </>
+        ) : scenarioStep === 1 ? (
+          <>
+            <strong>1단계</strong>: 항공(위성) SAR 변화분석 — 광역 타일 전·후 비교로 이상 구역을 확인합니다.
+          </>
+        ) : scenarioStep === 2 ? (
+          <>
+            <strong>2단계</strong>: UAV SAR·EO — 저고도에서 표적을 정밀 추적하는 개념과 입·출력을 정리합니다.
+          </>
+        ) : scenarioStep === 3 ? (
+          <>
+            <strong>3단계</strong>: 펄스 레이더 — 광역 점 탐지 개념과 모의 PPI 시각화입니다.
+          </>
+        ) : scenarioStep === 4 ? (
+          <>
+            <strong>4단계</strong>: FMCW·VoD — live 스냅샷으로 카메라·부가 설명을 보고, 통합 시뮬에서 점 추정·이동
+            방향을 적용합니다.
+          </>
+        ) : (
+          <>
+            <strong>통합 시뮬</strong> — 4단계의 <strong>레이더·영상 융합</strong>을 지도에 적용해 표적을{' '}
+            <strong>점</strong>으로 추정하고, <strong>현재 위치·C2 기준 방위·이동 방향</strong>을 표시합니다.{' '}
+            {BATTALION_SCENARIO.subtitle} <strong>지휘통제실</strong> 기준 거리에 따라 펄스(40km)·FMCW(15km)가
+            전환됩니다.
+          </>
+        )}
       </p>
       {user ? (
         <>
@@ -1869,6 +2420,32 @@ function HomePage({ user }: HomePageProps) {
         <p>로그인 후 전 기능을 이용할 수 있습니다.</p>
       )}
 
+      {scenarioStep === 0 && <ScenarioFlowOverview onStart={() => setScenarioStep(1)} />}
+
+      {scenarioStep === 1 && (
+        <AirborneSarPage
+          onContinue={() => {
+            setScenarioStep(2)
+            setSarContact(true)
+          }}
+        />
+      )}
+
+      {scenarioStep === 2 && <UavSarPage onContinue={() => setScenarioStep(3)} />}
+
+      {scenarioStep === 3 && <PulseRadarIntroPage onContinue={() => setScenarioStep(4)} />}
+
+      {scenarioStep === 4 && (
+        <FmcwRadarIntroPage
+          onContinue={() => {
+            setTacticalSubStep(3)
+            setScenarioStep(5)
+          }}
+        />
+      )}
+
+      {scenarioStep === 5 && (
+      <>
       <div className="kpi-grid" style={{ marginTop: '1rem' }}>
         <article className="kpi-card safe">
           <p className="kpi-label">소대 수</p>
@@ -1891,25 +2468,112 @@ function HomePage({ user }: HomePageProps) {
       {mapError && <p className="error">{mapError}</p>}
 
       <div className="map-section">
-        <h2 className="map-title">대대 전술 상황도 (지휘통제실 · SAR · 대치)</h2>
+        <h2 className="map-title">
+          통합 시뮬레이션 · 대대 전술 상황도
+          {tacticalSubStep === 3
+            ? ' · 펄스 대기(40km 권역 밖/미진입)'
+            : tacticalSubStep === 4
+              ? ' · 펄스 레이더(≤40km)'
+              : ' · FMCW(≤15km)'}
+        </h2>
+        <div className="scenario-theory-apply-panel" role="region" aria-label="4단계 이론을 통합 시뮬에 적용">
+          <h3 className="scenario-theory-apply-panel__title">4단계 이론 적용 · 표적 추정과 이동</h3>
+          <p className="scenario-theory-apply-panel__lead muted">
+            <strong>VoD·FMCW에서 본 range·azimuth·도플러</strong>를 이 지도에 올리면, 광역에서는 반사체를{' '}
+            <strong>점(펄스 탐지)</strong>으로, 근거리에서는 <strong>색점·예측 궤적(FMCW)</strong>으로 표적 위치를
+            추정합니다. 아래 수치는 시뮬 시점의 <strong>지휘통제실→표적 방위</strong>와 궤적상{' '}
+            <strong>이동 방향</strong>입니다.
+          </p>
+          <ul className="scenario-theory-apply-panel__bullets muted">
+            <li>
+              <strong>펄스(≤40km)</strong>: 레이더 시야 안 다수 점 → 지도에 보라 부채꼴·탐지 점으로 투영(데모).
+            </li>
+            <li>
+              <strong>FMCW(≤15km)</strong>: 정밀 탐지 점·도플러 색·주황 <strong>예측 경로</strong>·트랙 방위 라벨.
+            </li>
+          </ul>
+          {tacticalSimPoints && primaryEnemyForSim && c2UnitForSim ? (
+            <dl className="scenario-theory-apply-panel__metrics">
+              <div>
+                <dt>우선 표적</dt>
+                <dd>
+                  <strong>{primaryEnemyForSim.codename}</strong> · {primaryEnemyForSim.enemyBranch}
+                </dd>
+              </div>
+              <div>
+                <dt>지휘통제실→표적 방위</dt>
+                <dd>
+                  <strong>{tacticalSimPoints.bearing.toFixed(1)}°</strong> (
+                  {bearingToCardinalKo(tacticalSimPoints.bearing)} 방향)
+                </dd>
+              </div>
+              <div>
+                <dt>표적 이동 방향(궤적 접선)</dt>
+                <dd>
+                  {enemyMovementBearingDeg != null ? (
+                    <>
+                      <strong>{enemyMovementBearingDeg.toFixed(1)}°</strong> (
+                      {bearingToCardinalKo(enemyMovementBearingDeg)} 쪽으로 진행)
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>C2–표적 거리</dt>
+                <dd>
+                  {enemyDistanceKm != null ? (
+                    <strong>{enemyDistanceKm.toFixed(2)} km</strong>
+                  ) : (
+                    '시뮬 재생 후 표시'
+                  )}
+                </dd>
+              </div>
+              {radarSnapshot && pulseInRange ? (
+                <div>
+                  <dt>펄스 탐지 점(스냅샷)</dt>
+                  <dd>
+                    <strong>{radarSnapshot.pulse.detections.length}</strong>개
+                  </dd>
+                </div>
+              ) : null}
+              {radarSnapshot && fmcwInRange ? (
+                <>
+                  <div>
+                    <dt>FMCW 탐지 점(스냅샷)</dt>
+                    <dd>
+                      <strong>{radarSnapshot.fmcw.detections.length}</strong>개
+                    </dd>
+                  </div>
+                  {radarSnapshot.fmcw.track ? (
+                    <div>
+                      <dt>FMCW 트랙 방위(스냅샷)</dt>
+                      <dd>
+                        <strong>{radarSnapshot.fmcw.track.bearingDeg}°</strong>
+                      </dd>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </dl>
+          ) : (
+            <p className="muted scenario-theory-apply-panel__pending">부대·적 궤적을 불러오면 수치가 채워집니다.</p>
+          )}
+        </div>
         <p className="muted" style={{ marginBottom: '0.5rem' }}>
-          시뮬레이션은 <strong>도로·합성 궤적</strong>으로 표적 이동을 보여 줍니다. 레이더(FMCW)·위성(SAR) 탐지는 데모
-          합성 데이터입니다.
+          시뮬레이션은 <strong>도로·합성 궤적</strong>으로 표적 이동을 보여 줍니다. 적은 <strong>38선 이북</strong>에서
+          남하하며, <strong>40km 이내</strong>에서 펄스, <strong>15km 이내</strong>에서 FMCW가 활성화됩니다. SAR 접촉
+          후 표적이 지휘통제실 기준 <strong>{SCENARIO_RANGES_KM.DRONE_DISPATCH_MAX_KM}km 이내</strong>로 들어오면{' '}
+          <strong>정찰 드론이 출동해 현장 EO/IR 영상을 촬영·전송</strong>하는 설정(데모)입니다.{' '}
+          <strong>1~4단계</strong>에서 각 센서를 소개한 뒤 이 화면에서 연동을 확인합니다. 표현은 아래{' '}
+          <strong>지도 · 카드 · SVG · Canvas · 나란히</strong>에서 바꿀 수 있습니다.
         </p>
         <div className="sim-toolbar">
           <button
             type="button"
-            className="btn-secondary"
-            disabled={mapLoading || sarContact}
-            onClick={() => setSarContact(true)}
-            title="광역 SAR로 표적을 확정하면 1차 경보·거리선이 표시됩니다"
-          >
-            SAR 광역 탐지
-          </button>
-          <button
-            type="button"
             className="btn-primary"
-            disabled={!simPaths || mapLoading}
+            disabled={simTimelineDisabled}
             onClick={handleSimTogglePlay}
           >
             {simPlaying ? '일시정지' : '시뮬레이션 재생'}
@@ -1917,7 +2581,7 @@ function HomePage({ user }: HomePageProps) {
           <button
             type="button"
             className="btn-secondary"
-            disabled={!simPaths || mapLoading}
+            disabled={simTimelineDisabled}
             onClick={handleSimReset}
           >
             처음으로
@@ -1926,7 +2590,7 @@ function HomePage({ user }: HomePageProps) {
             속도
             <select
               value={simSpeed}
-              disabled={!simPaths || mapLoading}
+              disabled={simTimelineDisabled}
               onChange={(e) => setSimSpeed(Number(e.target.value) as 0.5 | 1 | 2)}
             >
               <option value={0.5}>0.5×</option>
@@ -1934,12 +2598,95 @@ function HomePage({ user }: HomePageProps) {
               <option value={2}>2×</option>
             </select>
           </label>
-          <div className="sim-progress-wrap" aria-hidden>
+          <div
+            ref={simSeekTrackRef}
+            className={`sim-progress-wrap sim-progress-wrap--seekable${simSeekDragging ? ' sim-progress-wrap--dragging' : ''}${simTimelineDisabled ? ' sim-progress-wrap--disabled' : ''}`}
+            role="slider"
+            tabIndex={simTimelineDisabled ? -1 : 0}
+            aria-label="시뮬레이션 타임라인"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(simProgress * 100)}
+            aria-valuetext={`${formatSimClock(simProgress, SIM_DURATION_SEC)} / ${formatSimClock(1, SIM_DURATION_SEC)}`}
+            aria-disabled={simTimelineDisabled}
+            onPointerDown={onSimSeekPointerDown}
+            onPointerMove={onSimSeekPointerMove}
+            onPointerUp={onSimSeekPointerUp}
+            onPointerCancel={onSimSeekPointerUp}
+            onKeyDown={onSimSeekKeyDown}
+          >
             <div className="sim-progress-bar" style={{ width: `${simProgress * 100}%` }} />
+            <div
+              className="sim-progress-thumb"
+              style={{ left: `${simProgress * 100}%` }}
+              aria-hidden
+            />
           </div>
           <span className="muted sim-progress-label">
-            {Math.round(simProgress * 100)}% · 전술 표적 이동 데모 (약 {SIM_DURATION_SEC}초 기준 1×)
+            {formatSimClock(simProgress, SIM_DURATION_SEC)} / {formatSimClock(1, SIM_DURATION_SEC)} (
+            {Math.round(simProgress * 100)}%) · 막대 클릭·드래그로 시점 이동 ·{' '}
+            <span className="sim-progress-label__kbd">←→</span> <span className="sim-progress-label__kbd">
+              Home
+            </span>
+            /
+            <span className="sim-progress-label__kbd">End</span> · 1× 기준 약 {SIM_DURATION_SEC}초 데모
           </span>
+          <div className="tactical-ui-mode" role="group" aria-label="통합 시뮬 표현 방식">
+            <span className="tactical-ui-mode__label muted">통합 시뮬</span>
+            <button
+              type="button"
+              className={`btn-secondary tactical-ui-mode__btn${tacticalPhaseUi === 'map' ? ' tactical-ui-mode__btn--active' : ''}`}
+              onClick={() => setTacticalPhaseUi('map')}
+            >
+              지도
+            </button>
+            <button
+              type="button"
+              className={`btn-secondary tactical-ui-mode__btn${tacticalPhaseUi === 'dashboard' ? ' tactical-ui-mode__btn--active' : ''}`}
+              onClick={() => setTacticalPhaseUi('dashboard')}
+            >
+              카드
+            </button>
+            <button
+              type="button"
+              className={`btn-secondary tactical-ui-mode__btn${tacticalPhaseUi === 'schematic' ? ' tactical-ui-mode__btn--active' : ''}`}
+              onClick={() => setTacticalPhaseUi('schematic')}
+              title="위·경도만 투영한 초간소 SVG (타일 없음)"
+            >
+              간소 SVG
+            </button>
+            <button
+              type="button"
+              className={`btn-secondary tactical-ui-mode__btn${tacticalPhaseUi === 'canvasScope' ? ' tactical-ui-mode__btn--active' : ''}`}
+              onClick={() => setTacticalPhaseUi('canvasScope')}
+              title="HTML Canvas 2D PPI 스코프"
+            >
+              Canvas
+            </button>
+            <button
+              type="button"
+              className={`btn-secondary tactical-ui-mode__btn${tacticalPhaseUi === 'compare' ? ' tactical-ui-mode__btn--active' : ''}`}
+              onClick={() => setTacticalPhaseUi('compare')}
+              title="왼쪽 카카오 지도 + 오른쪽 패널 선택"
+            >
+              나란히
+            </button>
+            {tacticalPhaseUi === 'compare' && (
+              <label className="tactical-compare-right-select">
+                <span className="muted">오른쪽</span>
+                <select
+                  value={compareRightPane}
+                  onChange={(e) =>
+                    setCompareRightPane(e.target.value as 'dashboard' | 'schematic' | 'canvasScope')
+                  }
+                >
+                  <option value="schematic">간소 SVG</option>
+                  <option value="dashboard">카드 대시보드</option>
+                  <option value="canvasScope">Canvas PPI</option>
+                </select>
+              </label>
+            )}
+          </div>
         </div>
         {roadPathStatus === 'loading' && (
           <p className="muted road-path-hint">
@@ -1949,7 +2696,7 @@ function HomePage({ user }: HomePageProps) {
         )}
         {roadPathStatus === 'all-road' && (
           <p className="muted road-path-hint">
-            시뮬레이션: 주 적 표적은 <strong>남하 침공 단방향</strong>, 아군은 <strong>도로 왕복</strong> 궤적입니다.
+            시뮬레이션: 주 적 표적은 <strong>남하 침공 단방향</strong>, 아군은 <strong>초기 위치 고정</strong>입니다.
           </p>
         )}
         {roadPathStatus === 'partial' && (
@@ -1964,31 +2711,61 @@ function HomePage({ user }: HomePageProps) {
             확인하세요.
           </p>
         )}
-        {mapLoading && <p className="muted">지도 데이터 로딩 중...</p>}
+        {mapLoading && (tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare') && (
+          <p className="muted">지도 데이터 로딩 중...</p>
+        )}
 
-        {!sarContact && (
+        {scenarioStep === 5 &&
+          enemyDistanceKm != null &&
+          enemyDistanceKm > SCENARIO_RANGES_KM.PULSE_MAX && (
           <div className="scenario-standby-banner" role="status">
             <span className="scenario-standby-banner__badge">대기</span>
             <span>
-              <strong>광역 SAR 탐지</strong>로 적 표적을 확정하면 1차 경보가 발령됩니다. 이후 시뮬 재생 시 남하
-              침공이 진행되면 레이더 이펙트와 2차 경보가 뜹니다.
+              적이 아직 <strong>40km 권역 밖</strong>입니다. 시뮬을 재생하면 남하하며, <strong>40km 이내</strong>로
+              들어오면 <strong>펄스 레이더</strong> 부채꼴·탐지 점이 켜집니다. (UAV 광역 추적은{' '}
+              <strong>2단계</strong>에서 확인하세요.)
             </span>
           </div>
         )}
-        {sarContact && !radarEngaged && (
-          <div className="scenario-sar-alert" role="alert">
-            <span className="scenario-sar-alert__badge">1차</span>
+        {scenarioStep === 5 && sarContact && pulseUncertainBand && (
+          <div className="scenario-pulse-uncertain-banner" role="alert">
+            <span className="scenario-pulse-uncertain-banner__badge">펄스</span>
             <span>
-              <strong>SAR 접촉</strong> — 기갑급 표적 식별. 지휘통제실–표적 거리선(노란 1선) 활성.
+              <strong>미확인 물체 확인</strong> — 지휘통제실 기준 약 15~40km 구간입니다.{' '}
+              {tacticalPhaseUi === 'map' ? (
+                <>
+                  지도에는 <strong>점 탐지</strong>만 표시하고, 우하단 <strong>전술 확대</strong> 창에서{' '}
+                  <strong>레이더 스윕</strong>이 동작합니다.
+                </>
+              ) : tacticalPhaseUi === 'compare' ? (
+                <>
+                  왼쪽 지도는 위와 동일하고, 오른쪽 패널(SVG·Canvas·카드)에서는 <strong>스캔·거리·도식</strong>으로 같은
+                  구간을 단순화해 보여 줍니다.
+                </>
+              ) : (
+                <>
+                  카드·SVG·Canvas 모드에서는 <strong>스캔 면·거리 링·도식</strong>으로만 표현합니다(타일 지도 없음).
+                </>
+              )}
             </span>
           </div>
         )}
-        {enemyRadarDiscovered && (
+        {droneDispatchActive && (
+          <div className="scenario-drone-banner" role="status">
+            <span className="scenario-drone-banner__badge">드론</span>
+            <span>
+              <strong>정찰 드론 출동</strong> — 표적이 지휘통제실 기준{' '}
+              <strong>{SCENARIO_RANGES_KM.DRONE_DISPATCH_MAX_KM}km 이내</strong>로 접근해{' '}
+              <strong>현장 EO/IR 영상 촬영·전송</strong>이 가동 중입니다. (데모: 적 표적 핀을 클릭하면 재생)
+            </span>
+          </div>
+        )}
+        {enemyRadarDiscovered && scenarioStep === 5 && tacticalSubStep >= 5 && (
           <div className="scenario-discover-alert" role="alert">
-            <span className="scenario-discover-alert__badge">적 발견</span>
+            <span className="scenario-discover-alert__badge">FMCW</span>
             <span>
-              <strong>레이더 접촉</strong> — 남하 중인 표적이 FMCW 센서 부채꼴 안으로 들어왔습니다. 지도에 선택
-              표시가 켜집니다.
+              <strong>FMCW 접촉</strong> — 15km 이내에서 대상 분류·방위·주시 정보가 활성화되었습니다. 적 핀을{' '}
+              <strong>클릭</strong>하면 드론 정찰 영상을 재생할 수 있습니다.
             </span>
           </div>
         )}
@@ -2001,27 +2778,87 @@ function HomePage({ user }: HomePageProps) {
             </span>
           </div>
         )}
-        {radarEngaged && (
+        {scenarioStep === 5 && fmcwInRange && (
           <div className="scenario-red-alert" role="alert">
-            <span className="scenario-red-alert__badge">2차</span>
+            <span className="scenario-red-alert__badge">FMCW</span>
             <span>
-              <strong>전투경계 · 레이더 접촉</strong> — 적 대대 남하 중, FMCW 탐지·부채꼴 표시(데모).
+              <strong>FMCW 정밀 탐지</strong> — 이동 방향·레이더 주시축·예측 궤적이{' '}
+              {tacticalPhaseUi === 'map' ? (
+                <>지도에 표시됩니다. 드론 영상은 적 표적 <strong>클릭</strong>으로 확인하세요.</>
+              ) : tacticalPhaseUi === 'compare' ? (
+                <>
+                  지도·오른쪽 패널에 표시됩니다. 드론은 지도 <strong>클릭</strong> 또는 카드 모드의 <strong>버튼</strong>
+                  (오른쪽이 카드일 때)로 재생하세요.
+                </>
+              ) : tacticalPhaseUi === 'dashboard' ? (
+                <>아래 차트와 수치로 표시됩니다. 드론 영상은 <strong>버튼</strong>으로 재생하세요.</>
+              ) : (
+                <>
+                  아래 공통 FMCW 패널·차트를 참고하세요. 드론은 카드 모드로 전환 후 <strong>버튼</strong>으로 재생할 수
+                  있습니다.
+                </>
+              )}
             </span>
           </div>
         )}
 
         <div
-          className={`map-battalion-grid${sarContact ? ' map-battalion-grid--tactical-focus' : ''}`}
+          className={`tactical-phase-body tactical-phase-body--${tacticalPhaseUi}`}
+        >
+        {(tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare') && (
+        <div className="tactical-phase-pane tactical-phase-pane--map">
+        <div
+          className={`map-battalion-grid${showTacticalPip ? ' map-battalion-grid--pip-active' : ' map-battalion-grid--overview-solo'}`}
         >
           <div className="map-battalion-col map-battalion-col--overview">
             <h3 className="map-subtitle">SAR 광역 현황 (전차 신호 소실 구역)</h3>
             <p className="muted map-subtitle-hint">
-              붉은 원은 <strong>SAR 변화분석</strong>으로 전차급 표적이 사라진 의심 구역입니다. 지도는 가림 없이 동일하게
-              표시합니다.
+              붉은 원은 <strong>SAR 변화분석</strong> 의심 구역입니다. 아군은 <strong>대대 지휘통제실(C2)</strong> 위치만
+              노란 점으로 표시합니다.{' '}
+              {showTacticalPip ? (
+                <span className="map-pip-hint">
+                  적이 40km 권역에 진입했습니다 — 우측 하단 <strong>전술 확대</strong> 창에서 C2·표적 축을 크게
+                  봅니다.
+                </span>
+              ) : (
+                <span>
+                  적이 지휘통제실 기준 <strong>40km 이내</strong>로 들어오면 전술 대치 지도가 이 화면 안에{' '}
+                  <strong>작은 확대 창</strong>으로 나타납니다.
+                </span>
+              )}
             </p>
             <div className="map-with-radar-hover">
-              <div className="map-overview-stack">
+              <div
+                className={`map-overview-stack${showTacticalPip ? ' map-overview-stack--has-pip' : ''}`}
+              >
                 <div ref={mapContainerRef} className="maplibre-container map-main-overview" />
+                <div
+                  className={`map-tactical-pip${showTacticalPip ? ' map-tactical-pip--visible' : ' map-tactical-pip--hidden'}`}
+                  aria-hidden={!showTacticalPip}
+                >
+                  <div className="map-tactical-pip__chrome">
+                    <span className="map-tactical-pip__title">전술 대치 · 확대</span>
+                    <span className="map-tactical-pip__chrome-right">
+                      {enemyDistanceKm != null && (
+                        <span className="map-tactical-pip__dist">{enemyDistanceKm.toFixed(1)} km</span>
+                      )}
+                      {droneDispatchActive && (
+                        <span className="map-tactical-pip__drone-rec">드론 EO/IR 촬영·전송</span>
+                      )}
+                    </span>
+                  </div>
+                  <div
+                    className={`map-tactical-pip__body map-inset-stack${showTacticalPip ? ' map-inset-stack--focus' : ''}`}
+                  >
+                    <div
+                      ref={insetMapContainerRef}
+                      className="maplibre-container map-inset-tactical map-inset-tactical--pip"
+                    />
+                    {pulseInRange && showTacticalPip && (
+                      <div className="radar-sweep-overlay" aria-hidden />
+                    )}
+                  </div>
+                </div>
               </div>
         {radarEnemyHover && radarSnapshot && radarHoverMetrics && (
           <div
@@ -2094,39 +2931,204 @@ function HomePage({ user }: HomePageProps) {
         )}
             </div>
           </div>
-          <div className="map-battalion-col map-battalion-col--inset">
-            <h3 className="map-subtitle">
-              {sarContact ? '전술 대치 · 접촉 표적' : '전술 대치 (레이더·위성 탐지)'}
-            </h3>
-            {sarContact ? (
-              <p className="muted map-subtitle-hint map-subtitle-hint--tactical-minimal">
-                지휘통제실–우선 표적 거리만 표시합니다.
-              </p>
-            ) : (
-              <p className="muted map-subtitle-hint">
-                NATO 스타일 전술 부호로 아군을 표시합니다. SAR 확정 후 <strong>노란 한 줄</strong>로 지휘통제실–우선
-                적 표적 거리(km)를 봅니다.
-              </p>
-            )}
-            <div
-              className={`map-inset-stack${sarContact ? ' map-inset-stack--focus' : ''}`}
-            >
-              <div ref={insetMapContainerRef} className="maplibre-container map-inset-tactical" />
-              {radarEngaged && <div className="radar-sweep-overlay" aria-hidden />}
-            </div>
-          </div>
         </div>
-        {radarEngaged && radarSnapshot && (
+        </div>
+        )}
+
+        {tacticalPhaseUi === 'dashboard' && (
+          <div className="tactical-phase-pane tactical-phase-pane--dashboard">
+            <h3 className="map-subtitle">카드형 대시보드 (타일 지도 없음)</h3>
+            <p className="muted map-subtitle-hint">
+              거리 게이지·스캔 원·FMCW 차트만 모은 UI입니다. 카카오맵의 핀·SAR·다중 레이어 없이 같은 시뮬 값만
+              봅니다.
+            </p>
+            <TacticalPhaseDashboard
+              enemyDistanceKm={enemyDistanceKm}
+              simProgress={simProgress}
+              tacticalSubStep={tacticalSubStep}
+              pulseInRange={pulseInRange}
+              pulseUncertainBand={pulseUncertainBand}
+              fmcwInRange={fmcwInRange}
+              c2Name={c2UnitForSim?.name ?? '지휘통제실'}
+              enemy={primaryEnemyForSim ?? null}
+              radarCharts={tacticalDashboardRadarCharts}
+              radarCentroid={radarDetectionsCentroid}
+              onOpenDroneVideo={() => {
+                if (!primaryEnemyForSim) return
+                setMapVideoModal({
+                  title: primaryEnemyForSim.codename,
+                  subtitle: `적군 · ${primaryEnemyForSim.threatLevel} · ${primaryEnemyForSim.enemyBranch}`,
+                  videoUrl: primaryEnemyForSim.droneVideoUrl || null,
+                })
+              }}
+            />
+          </div>
+        )}
+
+        {tacticalPhaseUi === 'schematic' && schematicBounds && tacticalSimPoints && (
+          <div className="tactical-phase-pane tactical-phase-pane--schematic">
+            <h3 className="map-subtitle">간소 전술 도식 (SVG)</h3>
+            <p className="muted map-subtitle-hint">
+              위·경도만 직교 투영한 선화면입니다. 38선·C2·적·거리선·펄스/FMCW 부채꼴만 남기고 위성 타일·부대 핀·SAR
+              원은 제거했습니다.
+            </p>
+            <TacticalSchematicMap
+              bounds={schematicBounds}
+              c2={tacticalSimPoints.c2}
+              enemy={tacticalSimPoints.enemy}
+              enemyDistanceKm={enemyDistanceKm}
+              pulseInRange={pulseInRange}
+              pulseUncertainBand={pulseUncertainBand}
+              fmcwInRange={fmcwInRange}
+              c2Name={c2UnitForSim?.name ?? '지휘통제실'}
+              enemyName={primaryEnemyForSim?.codename ?? '우선 표적'}
+            />
+            {tacticalSubStep >= 5 && primaryEnemyForSim && (
+              <div className="tactical-alt-drone-row">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    setMapVideoModal({
+                      title: primaryEnemyForSim.codename,
+                      subtitle: `적군 · ${primaryEnemyForSim.threatLevel} · ${primaryEnemyForSim.enemyBranch}`,
+                      videoUrl: primaryEnemyForSim.droneVideoUrl || null,
+                    })
+                  }}
+                >
+                  드론 정찰 영상
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tacticalPhaseUi === 'canvasScope' && tacticalSimPoints && (
+          <div className="tactical-phase-pane tactical-phase-pane--canvas">
+            <h3 className="map-subtitle">평면 위치 표시 (HTML Canvas 2D)</h3>
+            <p className="muted map-subtitle-hint">
+              PPI 스타일로 방위 그리드·거리 링·주시축·표적 블립만 그립니다. 지도 SDK와 별도로 Canvas API만
+              사용합니다.
+            </p>
+            <TacticalRadarCanvas
+              bearingToEnemyDeg={tacticalSimPoints.bearing}
+              rangeKm={enemyDistanceKm}
+              maxRangeKm={radarCanvasConfig.maxRangeKm}
+              pulseInRange={pulseInRange}
+              fmcwInRange={fmcwInRange}
+              radarHeadingDeg={radarCanvasConfig.headingDeg}
+              radarFovDeg={radarCanvasConfig.fovDeg}
+            />
+            {tacticalSubStep >= 5 && primaryEnemyForSim && (
+              <div className="tactical-alt-drone-row">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    setMapVideoModal({
+                      title: primaryEnemyForSim.codename,
+                      subtitle: `적군 · ${primaryEnemyForSim.threatLevel} · ${primaryEnemyForSim.enemyBranch}`,
+                      videoUrl: primaryEnemyForSim.droneVideoUrl || null,
+                    })
+                  }}
+                >
+                  드론 정찰 영상
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tacticalPhaseUi === 'compare' && (
+          <div
+            className={`tactical-phase-pane tactical-phase-pane--compare-right tactical-phase-pane--alt-${compareRightPane}`}
+          >
+            <h3 className="map-subtitle">
+              오른쪽 ·{' '}
+              {compareRightPane === 'dashboard'
+                ? '카드 대시보드'
+                : compareRightPane === 'schematic'
+                  ? '간소 SVG'
+                  : 'Canvas PPI'}
+            </h3>
+            <p className="muted map-subtitle-hint">
+              왼쪽은 기존 카카오맵(전 기능), 오른쪽은 저밀도 표현만 둔 비교용 패널입니다.
+            </p>
+            {compareRightPane === 'dashboard' && (
+              <TacticalPhaseDashboard
+                enemyDistanceKm={enemyDistanceKm}
+                simProgress={simProgress}
+                tacticalSubStep={tacticalSubStep}
+                pulseInRange={pulseInRange}
+                pulseUncertainBand={pulseUncertainBand}
+                fmcwInRange={fmcwInRange}
+                c2Name={c2UnitForSim?.name ?? '지휘통제실'}
+                enemy={primaryEnemyForSim ?? null}
+                radarCharts={tacticalDashboardRadarCharts}
+                radarCentroid={radarDetectionsCentroid}
+                onOpenDroneVideo={() => {
+                  if (!primaryEnemyForSim) return
+                  setMapVideoModal({
+                    title: primaryEnemyForSim.codename,
+                    subtitle: `적군 · ${primaryEnemyForSim.threatLevel} · ${primaryEnemyForSim.enemyBranch}`,
+                    videoUrl: primaryEnemyForSim.droneVideoUrl || null,
+                  })
+                }}
+              />
+            )}
+            {compareRightPane === 'schematic' && schematicBounds && tacticalSimPoints && (
+              <TacticalSchematicMap
+                bounds={schematicBounds}
+                c2={tacticalSimPoints.c2}
+                enemy={tacticalSimPoints.enemy}
+                enemyDistanceKm={enemyDistanceKm}
+                pulseInRange={pulseInRange}
+                pulseUncertainBand={pulseUncertainBand}
+                fmcwInRange={fmcwInRange}
+                c2Name={c2UnitForSim?.name ?? '지휘통제실'}
+                enemyName={primaryEnemyForSim?.codename ?? '우선 표적'}
+              />
+            )}
+            {compareRightPane === 'canvasScope' && tacticalSimPoints && (
+              <TacticalRadarCanvas
+                bearingToEnemyDeg={tacticalSimPoints.bearing}
+                rangeKm={enemyDistanceKm}
+                maxRangeKm={radarCanvasConfig.maxRangeKm}
+                pulseInRange={pulseInRange}
+                fmcwInRange={fmcwInRange}
+                radarHeadingDeg={radarCanvasConfig.headingDeg}
+                radarFovDeg={radarCanvasConfig.fovDeg}
+              />
+            )}
+          </div>
+        )}
+        </div>
+
+        {fmcwInRange && radarSnapshot && (
           <div className="radar-fmcw-panel" aria-label="펄스·FMCW 레이더 설명">
             <p className="radar-fmcw-panel__pulse-strip muted">
-              <strong>펄스(광역)</strong> 사거리 약{' '}
+              시나리오: <strong>위성 SAR → UAV SAR(40km 밖)</strong> →{' '}
+              <strong>펄스(광역)</strong> 약{' '}
               <strong>{radarSnapshot.pulse.radar.rangeMaxM.toLocaleString('ko-KR')} m</strong> — 지도{' '}
-              <strong>보라 부채꼴</strong>·<strong>점</strong>만 표시.{' '}
-              <strong>FMCW(근거리)</strong> 약 10~15km — 위상·방위·예측 경로(주황 점선)·도플러 색 점.
+              <strong>보라 부채꼴</strong>·<strong>점</strong>.{' '}
+              <strong>FMCW(근거리)</strong> 10~15km — 위상·방위·예측 경로·도플러 색 점.
             </p>
             <p className="radar-fmcw-panel__title">
               <strong>{radarSnapshot.fmcw.radar.label}</strong>
               <span className="radar-fmcw-panel__chip">센서: {radarSnapshot.fmcw.meta.sensor}</span>
+              {radarSnapshot.fmcw.meta.liveRun?.ok ? (
+                <span className="radar-fmcw-panel__chip radar-fmcw-panel__chip--live">
+                  실제 파이프라인 · 프레임 {radarSnapshot.fmcw.meta.liveRun.frameId ?? '—'} ·{' '}
+                  {radarSnapshot.fmcw.meta.liveRun.inferMs ?? '—'} ms
+                </span>
+              ) : radarSnapshot.fmcw.meta.liveRun && !radarSnapshot.fmcw.meta.liveRun.ok ? (
+                <span
+                  className="radar-fmcw-panel__chip radar-fmcw-panel__chip--warn"
+                  title={radarSnapshot.fmcw.meta.liveRun.error}
+                >
+                  live 실패 · 합성 탐지 표시
+                </span>
+              ) : null}
             </p>
             <p className="muted radar-fmcw-panel__text">{radarSnapshot.fmcw.meta.representationNote}</p>
             <p className="muted radar-fmcw-panel__text">{radarSnapshot.fmcw.meta.vodReferenceNote}</p>
@@ -2176,7 +3178,136 @@ function HomePage({ user }: HomePageProps) {
                 <strong>FMCW 부채꼴 안</strong>이면 마우스 오버 시 3D 요약.
               </li>
             </ul>
-            {radarSnapshot.fmcw.detections.length > 0 && (
+            {radarSnapshot.fmcw.detections.length > 0 && radarSnapshot.fmcw.insights && (
+              <>
+                <div className="radar-fmcw-insights" aria-label="파이프라인 입력·요약">
+                  <h3 className="radar-fmcw-insights__title">입력 · 추론 요약 (동기 VoD 프레임)</h3>
+                  <dl className="radar-fmcw-insights__dl">
+                    <div>
+                      <dt>프레임 ID</dt>
+                      <dd>{radarSnapshot.fmcw.insights.frameId ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>카메라 입력</dt>
+                      <dd>
+                        {radarSnapshot.fmcw.insights.annotatedImageBase64
+                          ? 'image_2 동기 .jpg → YOLO 검출·오버레이'
+                          : '이번 실행에 카메라/오버레이 없음 (레이더·LiDAR만 가능)'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>객체(주요)</dt>
+                      <dd>
+                        {radarSnapshot.fmcw.insights.primaryObject ? (
+                          <>
+                            <strong>{radarSnapshot.fmcw.insights.primaryObject.label}</strong> · 신뢰도{' '}
+                            {(radarSnapshot.fmcw.insights.primaryObject.confidence * 100).toFixed(1)}%
+                          </>
+                        ) : (
+                          'YOLO 검출 없음 또는 비어 있음'
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>레이더 처리</dt>
+                      <dd>
+                        {radarSnapshot.fmcw.meta.liveRun?.radarPipeline ?? '—'} · 원시 점{' '}
+                        {radarSnapshot.fmcw.meta.liveRun?.radarPointCount ?? '—'}개
+                      </dd>
+                    </div>
+                  </dl>
+                  {radarSnapshot.fmcw.insights.conclusionBullets &&
+                    radarSnapshot.fmcw.insights.conclusionBullets.length > 0 && (
+                      <div className="radar-fmcw-conclusion">
+                        <h4 className="radar-fmcw-conclusion__title">획득 정보</h4>
+                        <ul className="radar-fmcw-conclusion__list">
+                          {radarSnapshot.fmcw.insights.conclusionBullets.map((line, i) => (
+                            <li key={`cb-${i}`}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                </div>
+
+                <div className="radar-fmcw-synced" aria-label="동기 시점 카메라와 3D 레이더">
+                  <div className="radar-fmcw-synced__pane">
+                    <p className="radar-fmcw-synced__cap">2D · 카메라 입력 (YOLO 오버레이)</p>
+                    <p className="muted radar-fmcw-synced__hint">
+                      레이더·LiDAR와 동일 stem 프레임의 영상입니다.
+                    </p>
+                    {radarSnapshot.fmcw.insights.annotatedImageBase64 ? (
+                      <img
+                        src={`data:image/jpeg;base64,${radarSnapshot.fmcw.insights.annotatedImageBase64}`}
+                        alt="YOLO 오버레이"
+                        className="radar-fmcw-synced__img"
+                      />
+                    ) : (
+                      <div className="radar-fmcw-synced__placeholder muted">
+                        YOLO 오버레이 이미지 없음
+                      </div>
+                    )}
+                  </div>
+                  <div className="radar-fmcw-synced__pane">
+                    <p className="radar-fmcw-synced__cap">3D · 레이더 클러스터 (ego 동기 시점)</p>
+                    <p className="muted radar-fmcw-synced__hint">
+                      차량 뒤쪽·소고도에서 전방 주시 방향을 바라봅니다.
+                    </p>
+                    {radarDetectionsCentroid ? (
+                      <FmcwRadarScatter3D
+                        key={`radar-sync-${radarSnapshot.fmcw.insights.frameId ?? ''}-${radarSnapshot.fmcw.detections.length}`}
+                        rangeM={radarDetectionsCentroid.rangeM}
+                        azimuthDeg={radarDetectionsCentroid.azimuthDeg}
+                        elevationDeg={radarDetectionsCentroid.elevationDeg}
+                        egoSyncView
+                        className="radar-inline-viz__canvas3d"
+                      />
+                    ) : null}
+                  </div>
+                </div>
+                {radarSnapshot.fmcw.insights.syncedViewNote ? (
+                  <p className="radar-fmcw-synced-note">{radarSnapshot.fmcw.insights.syncedViewNote}</p>
+                ) : null}
+
+                <div className="radar-inline-viz radar-inline-viz--below-sync" aria-label="FMCW 2D 차트">
+                  <div className="radar-inline-viz__block radar-inline-viz__block--2d radar-inline-viz__block--wide">
+                    <p className="radar-inline-viz__heading">2D Range–Azimuth · 수평면 x–y</p>
+                    <p className="muted radar-inline-viz__hint">
+                      동일 프레임 탐지 목록. 색=도플러.
+                    </p>
+                    <RadarCharts2D detections={radarSnapshot.fmcw.detections} />
+                  </div>
+                </div>
+
+                <section className="radar-fmcw-lidar-review" aria-label="LiDAR 검토">
+                  <h3 className="radar-fmcw-lidar-review__title">LiDAR로의 검토</h3>
+                  <p className="radar-fmcw-lidar-review__body">
+                    {radarSnapshot.fmcw.insights.lidarReviewParagraph}
+                  </p>
+                  {radarSnapshot.fmcw.insights.lidarValidation &&
+                    (radarSnapshot.fmcw.insights.lidarValidation.pointsInRoi ?? 0) > 0 && (
+                      <ul className="radar-fmcw-lidar-review__stats muted">
+                        <li>
+                          ROI 점 수:{' '}
+                          <strong>{radarSnapshot.fmcw.insights.lidarValidation.pointsInRoi}</strong>
+                        </li>
+                        <li>
+                          Δ거리:{' '}
+                          <strong>{radarSnapshot.fmcw.insights.lidarValidation.deltaRangeM ?? '—'} m</strong>
+                        </li>
+                        <li>
+                          Δ방위:{' '}
+                          <strong>{radarSnapshot.fmcw.insights.lidarValidation.deltaBearingDeg ?? '—'}°</strong>
+                        </li>
+                        <li>
+                          판정:{' '}
+                          <strong>{radarSnapshot.fmcw.insights.lidarValidation.verdict ?? '—'}</strong>
+                        </li>
+                      </ul>
+                    )}
+                </section>
+              </>
+            )}
+            {radarSnapshot.fmcw.detections.length > 0 && !radarSnapshot.fmcw.insights && (
               <div className="radar-inline-viz" aria-label="FMCW 2D 및 3D 시각화">
                 <div className="radar-inline-viz__block radar-inline-viz__block--2d">
                   <p className="radar-inline-viz__heading">2D 산점도 (탐지 전체)</p>
@@ -2229,6 +3360,8 @@ function HomePage({ user }: HomePageProps) {
           <strong> 마우스를 올리면</strong> 핀 옆에 요약 정보가 뜨고, <strong>클릭하면</strong> 연결된 상황·정찰 영상을 큰 창에서 재생합니다. 시뮬레이션 재생 시 궤적이 함께 움직입니다.
         </p>
       </div>
+      </>
+      )}
 
       {mapVideoModal && (
         <div
@@ -2886,7 +4019,7 @@ function GuidePage() {
 }
 
 /** 센서 파이프라인 페이지 데모 영상 — `public/media/demo-drone-map.mp4` (지도 시드 `적군-ALPHA`와 동일) */
-const DEMO_DRONE_VIDEO_URL = '/media/demo-drone-map.mp4'
+const DEMO_DRONE_VIDEO_URL = '/media/yolo_tank_temp.mp4'
 
 type SensorStepDef = {
   id: 'sat_sar' | 'uav_sar' | 'radar' | 'drone'
@@ -2978,6 +4111,181 @@ const SENSOR_PIPELINE_STEPS: SensorStepDef[] = [
     ],
   },
 ]
+
+/** 센서 파이프라인 «레이다» 단계 — `/map/radar/snapshot?source=live` + 홈과 동일 차트 */
+function SensorPipelineRadarLivePanel() {
+  const [snap, setSnap] = useState<RadarSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setErr(null)
+    void requestJson<RadarSnapshot>(`${API_BASE_URL}/map/radar/snapshot?source=live`)
+      .then((s) => {
+        if (!cancelled) setSnap(s)
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setErr(e instanceof Error ? e.message : '스냅샷 로드 실패')
+          setSnap(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [refreshKey])
+
+  const centroid = useMemo(() => {
+    if (!snap?.fmcw.detections.length) return null
+    const dets = snap.fmcw.detections
+    const n = dets.length
+    let rangeM = 0
+    let azimuthDeg = 0
+    let elevationDeg = 0
+    for (const d of dets) {
+      rangeM += d.rangeM
+      azimuthDeg += d.azimuthDeg
+      elevationDeg += d.elevationDeg
+    }
+    return {
+      rangeM: rangeM / n,
+      azimuthDeg: azimuthDeg / n,
+      elevationDeg: elevationDeg / n,
+    }
+  }, [snap])
+
+  const live = snap?.fmcw.meta.liveRun
+
+  if (loading) {
+    return (
+      <p className="muted sensor-radar-live">
+        레이더 파이프라인(<code>?source=live</code>) 연결 중…
+      </p>
+    )
+  }
+  if (err || !snap) {
+    return (
+      <div className="sensor-radar-live">
+        <p className="error">레이더 스냅샷을 불러오지 못했습니다. {err}</p>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => setRefreshKey((k) => k + 1)}
+        >
+          다시 시도
+        </button>
+      </div>
+    )
+  }
+
+  const dets = snap.fmcw.detections
+  const primaryId = dets[0]?.id
+
+  return (
+    <div className="sensor-radar-live">
+      <div className="sensor-radar-live__toolbar">
+        {live?.ok ? (
+          <span className="sensor-radar-live__badge">
+            실제 파이프라인 · {live.radarPipeline ?? 'AI'} · 프레임 {live.frameId ?? '—'} ·{' '}
+            {live.inferMs ?? '—'} ms · 레이더 점 {live.radarPointCount ?? '—'}
+          </span>
+        ) : live && !live.ok ? (
+          <span
+            className="sensor-radar-live__badge sensor-radar-live__badge--warn"
+            title={live.error}
+          >
+            live 실패 — 합성 탐지 표시
+          </span>
+        ) : (
+          <span className="sensor-radar-live__badge sensor-radar-live__badge--warn">live 메타 없음</span>
+        )}
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => setRefreshKey((k) => k + 1)}
+        >
+          다른 프레임(재추론)
+        </button>
+      </div>
+      <div className="sensor-radar-live__hero">
+        <div className="sensor-radar-live__mini" aria-hidden>
+          <div className="sensor-radar-wrap">
+            <div className="sensor-radar-rings" />
+            <div className="sensor-radar-sweep" />
+            <div className="sensor-radar-blips">
+              <span className="blip" style={{ top: '32%', left: '58%' }} />
+              <span className="blip blip--dim" style={{ top: '48%', left: '44%' }} />
+              <span className="blip" style={{ top: '62%', left: '52%' }} />
+            </div>
+          </div>
+        </div>
+        <div>
+          {dets.length === 0 ? (
+            <p className="muted">표시할 FMCW 탐지가 없습니다.</p>
+          ) : (
+            <div className="sensor-radar-live__charts">
+              <div>
+                <p className="sensor-radar-live__cap">Range–Azimuth · x–y</p>
+                <p className="muted sensor-radar-live__hint">
+                  색=도플러. Nest <code>/map/radar/snapshot?source=live</code> → Python DBSCAN.
+                </p>
+                <RadarCharts2D detections={dets} />
+              </div>
+              {centroid ? (
+                <div>
+                  <p className="sensor-radar-live__cap">3D (1위 클러스터 방향)</p>
+                  <p className="muted sensor-radar-live__hint">고정 스케일 뷰.</p>
+                  <FmcwRadarScatter3D
+                    key={`sensor-radar-${String(live?.frameId ?? refreshKey)}-${dets.length}`}
+                    rangeM={centroid.rangeM}
+                    azimuthDeg={centroid.azimuthDeg}
+                    elevationDeg={centroid.elevationDeg}
+                    className="radar-inline-viz__canvas3d"
+                  />
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
+      {dets.length > 0 && (
+        <div className="sensor-radar-live__table-wrap">
+          <table className="sensor-radar-live__table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>거리(m)</th>
+                <th>방위°</th>
+                <th>도플러</th>
+                <th>신뢰도</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dets.slice(0, 12).map((d) => (
+                <tr
+                  key={d.id}
+                  className={d.id === primaryId ? 'sensor-radar-live__tr--primary' : undefined}
+                >
+                  <td>{d.id}</td>
+                  <td>{d.rangeM}</td>
+                  <td>{d.azimuthDeg.toFixed(1)}</td>
+                  <td>{d.dopplerMps.toFixed(2)}</td>
+                  <td>{d.confidence.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function SensorPipelinePage() {
   const [stepIndex, setStepIndex] = useState(0)
@@ -3071,7 +4379,9 @@ function SensorPipelinePage() {
           <div className="sensor-viewport-card">
             <div className="sensor-viewport-label">
               <span>{step.title}</span>
-              <span className="sensor-viewport-badge">프로토타입 뷰</span>
+              <span className="sensor-viewport-badge">
+                {step.id === 'radar' ? '실제 파이프라인 · /map/radar/snapshot?source=live' : '프로토타입 뷰'}
+              </span>
             </div>
 
             {step.id === 'sat_sar' && (
@@ -3093,17 +4403,7 @@ function SensorPipelinePage() {
                 </div>
               </div>
             )}
-            {step.id === 'radar' && (
-              <div className="sensor-radar-wrap" aria-hidden>
-                <div className="sensor-radar-rings" />
-                <div className="sensor-radar-sweep" />
-                <div className="sensor-radar-blips">
-                  <span className="blip" style={{ top: '32%', left: '58%' }} />
-                  <span className="blip blip--dim" style={{ top: '48%', left: '44%' }} />
-                  <span className="blip" style={{ top: '62%', left: '52%' }} />
-                </div>
-              </div>
-            )}
+            {step.id === 'radar' && <SensorPipelineRadarLivePanel />}
             {step.id === 'drone' && (
               <div className="sensor-drone-wrap">
                 <video
@@ -3312,6 +4612,7 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
           <NavLink to="/distance-analysis">거리 분석</NavLink>
           <NavLink to="/distance-tracking">3D 모델링 (MASt3R)</NavLink>
           <NavLink to="/sensor-pipeline">다중 센서 파이프라인</NavLink>
+          <NavLink to="/fusion-validation">FMCW·LiDAR 검증 (데모)</NavLink>
           <NavLink to="/guide">사용 가이드</NavLink>
         </nav>
       </aside>
@@ -3553,6 +4854,7 @@ function App() {
         <Route path="/distance-analysis" element={<DistanceAnalysisPage />} />
         <Route path="/distance-tracking" element={<DistanceTrackingPage />} />
         <Route path="/sensor-pipeline" element={<SensorPipelinePage />} />
+        <Route path="/fusion-validation" element={<FusionValidationPrototype />} />
         <Route path="/guide" element={<GuidePage />} />
       </Route>
       <Route element={<AuthLayout user={user} />}>

@@ -19,10 +19,23 @@ export class MapController {
     return this.mapService.getInfiltrationPoints();
   }
 
-  /** FMCW 근거리 레이더 탐지 스냅샷 (R/Az/El/Doppler + 지도 투영) */
+  /**
+   * FMCW 근거리 레이더 탐지 스냅샷 (R/Az/El/Doppler + 지도 투영)
+   * @query source `live` — VoD 동기 프레임으로 AI 파이프라인(DBSCAN 등) 실행 후 FMCW 탐지 병합
+   * @query seed 정수 — 동기 프레임 풀에서 결정적 선택
+   */
   @Get('radar/snapshot')
-  getRadarSnapshot() {
-    return this.mapService.getRadarSnapshot();
+  getRadarSnapshot(
+    @Query('source') source?: string,
+    @Query('seed') seed?: string,
+  ) {
+    const live =
+      source === 'live' || source === '1' || source === 'true';
+    const seedNum = seed !== undefined ? Number.parseInt(seed, 10) : undefined;
+    return this.mapService.getRadarSnapshot({
+      live,
+      seed: Number.isFinite(seedNum) ? seedNum : undefined,
+    });
   }
 
   /**

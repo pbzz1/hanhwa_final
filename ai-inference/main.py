@@ -1,6 +1,7 @@
 import base64
 import os
 import tempfile
+import time
 import uuid
 from typing import Any
 
@@ -10,6 +11,7 @@ import torch
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sklearn.cluster import DBSCAN
 from ultralytics import YOLO
 
 app = FastAPI(title="YOLO Inference Server")
@@ -249,6 +251,203 @@ def _write_ply_ascii(points_xyz: np.ndarray, colors_rgb: np.ndarray | None, out_
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _parse_vod_radar_bin(data: bytes) -> np.ndarray:
+    """VoD 레이더 .bin → (N,7) float32 [x,y,z, RCS, v_r, v_r_comp, time]."""
+    raw = np.frombuffer(data, dtype=np.float32)
+    if raw.size % 7 != 0:
+        raise HTTPException(status_code=400, detail="레이더 .bin 길이가 7의 배수가 아닙니다.")
+    return raw.reshape(-1, 7)
+
+
+def _parse_vod_lidar_bin(data: bytes) -> np.ndarray:
+    """KITTI/VoD LiDAR .bin → (N,4) [x,y,z,intensity]."""
+    raw = np.frombuffer(data, dtype=np.float32)
+    if raw.size % 4 != 0:
+        raise HTTPException(status_code=400, detail="LiDAR .bin 길이가 4의 배수가 아닙니다.")
+    return raw.reshape(-1, 4)
+
+
+def _radar_clusters_dbscan(xyz: np.ndarray, v_comp: np.ndarray, rcs: np.ndarray) -> list[dict[str, Any]]:
+    """기하 기반 클러스터 → 탐지 후보 (학습 가중치 없이 실제 연산)."""
+    if xyz.shape[0] == 0:
+        return []
+
+    eps = float(os.getenv("VOD_RADAR_DBSCAN_EPS", "4.0"))
+    ms = int(os.getenv("VOD_RADAR_DBSCAN_MIN_SAMPLES", "3"))
+    clustering = DBSCAN(eps=eps, min_samples=ms).fit(xyz)
+    labels = clustering.labels_
+
+    out: list[dict[str, Any]] = []
+    for lab in sorted(set(labels.tolist())):
+        if lab < 0:
+            continue
+        m = labels == lab
+        c = xyz[m].mean(axis=0)
+        rng = float(np.linalg.norm(c))
+        # 차량 전방·좌우 기준 근사 방위(도) — 시각화용
+        azimuth_deg = float(np.degrees(np.arctan2(c[1], c[0])))
+        elevation_deg = float(
+            np.degrees(np.arctan2(c[2], np.sqrt(c[0] ** 2 + c[1] ** 2) + 1e-6))
+        )
+        vd = v_comp[m]
+        doppler_mps = float(np.mean(vd)) if vd.size else 0.0
+        rc = rcs[m]
+        rcs_mean = float(np.mean(rc)) if rc.size else 0.0
+        npts = int(m.sum())
+        # 간단 신뢰도: 점 수 + 상대속도 + RCS
+        conf = min(
+            0.99,
+            0.25 + 0.02 * min(npts, 20) + 0.15 * min(abs(doppler_mps) / 8.0, 1.0) + 0.1 * min(rcs_mean / 30.0, 1.0),
+        )
+        out.append(
+            {
+                "id": f"cluster-{lab}",
+                "rangeM": round(rng, 2),
+                "azimuthDeg": round(azimuth_deg, 2),
+                "elevationDeg": round(elevation_deg, 2),
+                "dopplerMps": round(doppler_mps, 3),
+                "confidence": round(conf, 3),
+                "clusterSize": npts,
+                "centroidM": [round(float(c[0]), 3), round(float(c[1]), 3), round(float(c[2]), 3)],
+            }
+        )
+    out.sort(key=lambda d: d["confidence"], reverse=True)
+    return out[:12]
+
+
+def _bearing_deg_xy(x: float, y: float) -> float:
+    return float(np.degrees(np.arctan2(y, x)))
+
+
+def _angle_diff_abs_deg(a: float, b: float) -> float:
+    d = (a - b + 180.0) % 360.0 - 180.0
+    return abs(d)
+
+
+def _lidar_validate_cluster(
+    lidar_xyz: np.ndarray,
+    centroid: list[float],
+    radius_m: float = 2.5,
+    *,
+    radar_range_m: float | None = None,
+    radar_azimuth_deg: float | None = None,
+) -> dict[str, Any]:
+    c = np.array(centroid, dtype=np.float64)
+    d = np.linalg.norm(lidar_xyz - c, axis=1)
+    inside = d < radius_m
+    n = int(inside.sum())
+    if n == 0:
+        return {
+            "matched": False,
+            "pointsInRoi": 0,
+            "meanDistanceM": None,
+            "lidarClusterRangeM": None,
+            "radarRangeM": radar_range_m,
+            "deltaRangeM": None,
+            "deltaBearingDeg": None,
+            "lidarClusterAzimuthDeg": None,
+            "iouBevProxy": 0.0,
+            "verdict": "불일치",
+        }
+
+    lid_roi = lidar_xyz[inside]
+    lid_cent = lid_roi.mean(axis=0)
+    lid_range = float(np.linalg.norm(lid_cent))
+    lid_az = _bearing_deg_xy(float(lid_cent[0]), float(lid_cent[1]))
+    rr = float(radar_range_m) if radar_range_m is not None else float(np.linalg.norm(c))
+    ra = (
+        float(radar_azimuth_deg)
+        if radar_azimuth_deg is not None
+        else _bearing_deg_xy(float(c[0]), float(c[1]))
+    )
+    delta_r = round(abs(rr - lid_range), 3)
+    delta_bear = round(_angle_diff_abs_deg(ra, lid_az), 3)
+    iou_proxy = min(0.99, 0.35 + min(n, 200) / 200.0 * 0.55) if n >= 5 else min(0.5, 0.15 + n * 0.02)
+    matched = n >= 5
+    verdict = "일치" if matched and delta_r < 15.0 and delta_bear < 5.0 else ("부분" if matched else "불일치")
+
+    return {
+        "matched": matched,
+        "pointsInRoi": n,
+        "meanDistanceM": round(float(d[inside].mean()), 3),
+        "lidarClusterRangeM": round(lid_range, 3),
+        "radarRangeM": round(rr, 3),
+        "deltaRangeM": delta_r,
+        "deltaBearingDeg": delta_bear,
+        "lidarClusterAzimuthDeg": round(lid_az, 3),
+        "iouBevProxy": round(float(iou_proxy), 3),
+        "verdict": verdict,
+    }
+
+
+@app.post("/infer/vod/radar-fusion")
+async def infer_vod_radar_fusion(
+    radar: UploadFile = File(...),
+    image: UploadFile | None = File(None),
+    lidar: UploadFile | None = File(None),
+) -> dict[str, Any]:
+    """
+    실제 연산:
+    - 레이더: DBSCAN 클러스터 → 탐지 후보 (VoD Nx7)
+    - 카메라: YOLOv8 (기존 가중치) 객체 검출
+    - LiDAR: 동일 좌표계 가정 하 ROI 내 점 수로 레이더 1위 후보 검증
+    """
+    t0 = time.perf_counter()
+    radar_bytes = await radar.read()
+    pts = _parse_vod_radar_bin(radar_bytes)
+    xyz = pts[:, :3]
+    rcs = pts[:, 3]
+    v_comp = pts[:, 5]
+
+    radar_detections = _radar_clusters_dbscan(xyz, v_comp, rcs)
+
+    yolo_detections: list[dict[str, Any]] = []
+    annotated_b64: str | None = None
+    if image is not None and image.filename:
+        img_bytes = await image.read()
+        np_buf = np.frombuffer(img_bytes, dtype=np.uint8)
+        bgr = cv2.imdecode(np_buf, cv2.IMREAD_COLOR)
+        if bgr is not None:
+            results = model.predict(source=bgr, verbose=False)
+            result = results[0]
+            yolo_detections = _extract_detections(result)
+            annotated_b64 = _encode_image_to_base64(result.plot())
+
+    lidar_validation: dict[str, Any] | None = None
+    if lidar is not None and lidar.filename and radar_detections:
+        lidar_bytes = await lidar.read()
+        lid = _parse_vod_lidar_bin(lidar_bytes)
+        lid_xyz = lid[:, :3]
+        primary = radar_detections[0]
+        lv = _lidar_validate_cluster(
+            lid_xyz,
+            primary["centroidM"],
+            radar_range_m=float(primary["rangeM"]),
+            radar_azimuth_deg=float(primary["azimuthDeg"]),
+        )
+        lidar_validation = {
+            "primaryClusterId": primary["id"],
+            "radiusM": 2.5,
+            "lidarPointCount": int(lid_xyz.shape[0]),
+            **lv,
+        }
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    return {
+        "ok": True,
+        "radarPipeline": "DBSCAN geometric clustering (no NN weights)",
+        "yoloModel": MODEL_PATH,
+        "inferMs": elapsed_ms,
+        "radarFileName": radar.filename,
+        "radarPointCount": int(pts.shape[0]),
+        "radarDetections": radar_detections,
+        "yoloDetections": yolo_detections,
+        "annotatedImageBase64": annotated_b64,
+        "lidarValidation": lidar_validation,
+    }
 
 
 @app.post("/infer/image")
