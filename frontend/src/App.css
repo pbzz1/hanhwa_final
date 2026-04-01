@@ -317,15 +317,15 @@
 
 @media (max-width: 1100px) {
   .maplibre-container.map-main-overview {
-    height: 400px;
+    height: 500px;
   }
 
   .map-tactical-pip__body {
-    height: 200px;
+    height: 240px;
   }
 
   .maplibre-container.map-inset-tactical--pip {
-    height: 200px !important;
+    height: 240px !important;
   }
 }
 
@@ -411,11 +411,11 @@
 
 .map-tactical-pip__body {
   position: relative;
-  height: 232px;
+  height: 268px;
 }
 
 .maplibre-container.map-inset-tactical--pip {
-  height: 232px !important;
+  height: 268px !important;
   width: 100%;
   border-radius: 0;
   border: none;
@@ -752,6 +752,48 @@
   border: 1px solid rgba(248, 113, 113, 0.45);
 }
 
+/* 광역 지도: SAR 감시·예상 경로 네모 권역 라벨 */
+.map-overview-region-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: min(220px, 42vw);
+  padding: 8px 12px;
+  border-radius: 10px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.28);
+  border-width: 2px;
+  border-style: solid;
+}
+
+.map-overview-region-label__title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+.map-overview-region-label__sub {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.35;
+  opacity: 0.92;
+}
+
+.map-overview-region-label--sar {
+  background: rgba(254, 243, 199, 0.94);
+  color: #78350f;
+  border-color: rgba(217, 119, 6, 0.75);
+}
+
+.map-overview-region-label--route {
+  background: rgba(219, 234, 254, 0.94);
+  color: #1e3a8a;
+  border-color: rgba(37, 99, 235, 0.7);
+}
+
 /* SAR 광역: 대대 지휘통제실 단일 표시 */
 .sar-overview-c2-anchor {
   position: relative;
@@ -805,9 +847,453 @@
   width: 100%;
 }
 
+/* AIS형: 지도 + 커서 좌표 + 우측 재원 패널 */
+.map-ais-workbench {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.map-ais-workbench__mapcol {
+  flex: 1 1 420px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.map-cursor-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
+  font-size: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.map-cursor-readout__label {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: #38bdf8;
+}
+
+.map-cursor-readout__coords {
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+}
+
+.map-ais-asset-panel {
+  flex: 0 1 300px;
+  width: 100%;
+  max-width: 360px;
+  max-height: min(72vh, 640px);
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.35);
+}
+
+.map-ais-asset-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.map-ais-asset-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #7dd3fc;
+  letter-spacing: 0.02em;
+}
+
+.map-ais-asset-panel__clear {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.map-ais-asset-panel__empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.map-ais-asset-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map-ais-asset-panel__side {
+  margin: 0;
+  display: inline-block;
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.map-ais-asset-panel__side--friendly {
+  background: rgba(34, 197, 94, 0.22);
+  color: #86efac;
+  border: 1px solid rgba(74, 222, 128, 0.45);
+}
+
+.map-ais-asset-panel__side--enemy {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.map-ais-asset-panel__name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.map-ais-asset-panel__kinematics,
+.map-ais-asset-panel__specs {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.map-ais-asset-panel__kinematics > div,
+.map-ais-asset-panel__specs > div {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.map-ais-asset-panel__kinematics dt,
+.map-ais-asset-panel__specs dt {
+  margin: 0;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.map-ais-asset-panel__kinematics dd,
+.map-ais-asset-panel__specs dd {
+  margin: 0;
+  color: #f1f5f9;
+  font-variant-numeric: tabular-nums;
+}
+
+.map-ais-asset-panel__kinematics {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.map-ais-asset-panel__video {
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
+.map-ais-workbench__mapcol--focus {
+  position: fixed;
+  inset: 14px;
+  z-index: 120;
+  background: rgba(2, 6, 23, 0.95);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 20px 56px rgba(2, 6, 23, 0.64);
+}
+
+.scenario-v2-panel {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.92));
+  color: #e2e8f0;
+}
+
+.scenario-v2-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 12px;
+  align-items: baseline;
+}
+
+.scenario-v2-panel__head h3 {
+  margin: 0;
+  color: #7dd3fc;
+  font-size: 15px;
+}
+
+.scenario-v2-panel__clock {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.scenario-v2-panel__desc {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.scenario-v2-panel__status {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.scenario-v2-panel__metrics {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+  color: #bae6fd;
+}
+
+.scenario-v2-panel__action {
+  margin-top: 10px;
+}
+
+.scenario-corner-video {
+  position: absolute;
+  width: min(320px, 36vw);
+  min-width: 220px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.5);
+  z-index: 12;
+  color: #f8fafc;
+}
+
+.scenario-corner-video--left {
+  top: 10px;
+  left: 10px;
+  cursor: pointer;
+}
+
+.scenario-corner-video--right {
+  top: 10px;
+  right: 10px;
+}
+
+.scenario-corner-video--expanded {
+  position: fixed;
+  inset: 12px;
+  width: auto;
+  z-index: 140;
+  border-width: 2px;
+}
+
+.scenario-corner-video__head {
+  display: block;
+  padding: 6px 10px;
+  background: rgba(2, 132, 199, 0.35);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.scenario-corner-video video {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  background: #020617;
+}
+
+.scenario-corner-video--expanded video {
+  height: calc(100% - 54px);
+}
+
+.scenario-corner-video__hint {
+  display: block;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.scenario-asset-chip {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 13;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+}
+
+.scenario-asset-chip strong {
+  margin-right: 6px;
+  color: #7dd3fc;
+}
+
+.scenario-asset-chip--drone {
+  left: auto;
+  right: 10px;
+  bottom: 10px;
+}
+
+.scenario-asset-chip--drone strong {
+  color: #fca5a5;
+}
+
+.tactic-decision-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  background: #f8fafc;
+}
+
+.tactic-decision-panel__title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.tactic-decision-panel__desc {
+  margin: 6px 0 10px;
+}
+
+.tactic-decision-panel__list {
+  display: grid;
+  gap: 8px;
+}
+
+.tactic-decision-panel__item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.tactic-decision-panel__item-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.tactic-decision-panel__item-main em {
+  font-style: normal;
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.tactic-decision-panel__item-sub {
+  grid-column: 2;
+  font-size: 12px;
+  color: #475569;
+}
+
+.tactic-decision-panel__note {
+  margin-top: 10px;
+  width: 100%;
+  min-height: 72px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  resize: vertical;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.tactic-decision-panel__actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.ais-map-tooltip {
+  min-width: 200px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  color: #f1f5f9 !important;
+}
+
+.ais-map-tooltip__badge {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+}
+
+.map-hover-side-card--enemy .ais-map-tooltip__badge {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+}
+
+.ais-map-tooltip__title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #38bdf8 !important;
+}
+
+.map-hover-side-card--enemy .ais-map-tooltip__title {
+  color: #fca5a5 !important;
+}
+
+.ais-map-tooltip__row {
+  margin: 4px 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #e2e8f0 !important;
+}
+
+.ais-map-tooltip__row strong {
+  color: #94a3b8;
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.ais-map-tooltip__note {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .maplibre-container {
   width: 100%;
-  height: 420px;
+  height: 480px;
   border-radius: 14px;
   border: 1px solid #e2e8f0;
   overflow: visible;
@@ -819,7 +1305,7 @@
 /* SAR 광역·전술 대치 — 동일 높이 */
 .maplibre-container.map-main-overview,
 .maplibre-container.map-inset-tactical {
-  height: 440px;
+  height: 600px;
 }
 
 .map-inset-stack {
@@ -1037,6 +1523,38 @@
   pointer-events: none;
 }
 
+/* 재구성 시나리오: 펄스 40km 단계는 적을 점(블립)으로만 표기 */
+.kakao-tactical-pin-anchor.enemy-pin--dot-only {
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+}
+
+.kakao-tactical-pin-anchor.enemy-pin--dot-only .enemy-pin-wrap .tactical-marker {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+}
+
+.kakao-tactical-pin-anchor.enemy-pin--dot-only .enemy-pin-wrap::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: #f97316;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.9),
+    0 0 18px rgba(249, 115, 22, 0.7);
+  pointer-events: none;
+}
+
 /* ≤15km 드론 촬영(데모): 주 적 핀에 하늘색 글로우 */
 .kakao-tactical-pin-anchor.enemy-pin--drone-filming .enemy-pin-wrap {
   box-shadow:
@@ -1065,6 +1583,85 @@
       0 0 22px 6px rgba(2, 132, 199, 0.62),
       0 0 36px 8px rgba(125, 211, 252, 0.38);
   }
+}
+
+/* 적 표적 호버 시 표적 재원 — 지도 좌하단 플로팅 */
+.map-enemy-asset-float {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: min(320px, calc(100% - 24px));
+  max-height: min(420px, calc(100% - 24px));
+  overflow: auto;
+  z-index: 24;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(165deg, #fff7ed 0%, #ffedd5 55%, #fff 100%);
+  border: 1px solid rgba(234, 88, 12, 0.45);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
+  font-size: 13px;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
+.map-enemy-asset-float__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.map-enemy-asset-float__badge {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #c2410c;
+}
+
+.map-enemy-asset-float__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #7f1d1d;
+}
+
+.map-enemy-asset-float__sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.map-enemy-asset-float__close {
+  border: none;
+  background: #fff;
+  color: #64748b;
+  font-size: 22px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.map-enemy-asset-float__close:hover {
+  background: #fff7ed;
+  color: #0f172a;
+}
+
+.map-enemy-asset-float__kin {
+  margin: 0 0 10px;
+}
+
+.map-enemy-asset-float__specs {
+  margin: 0 0 10px;
+}
+
+.map-enemy-asset-float__video {
+  width: 100%;
+  margin-top: 4px;
 }
 
 .radar-enemy-hover-panel {
@@ -1390,6 +1987,33 @@
   color: #334155;
 }
 
+.radar-fmcw-vod-story {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #bae6fd;
+}
+
+.radar-fmcw-vod-story__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1e293b;
+}
+
+.radar-fmcw-vod-prov__mono {
+  font-size: 11px;
+  word-break: break-all;
+  font-family: ui-monospace, monospace;
+}
+
+.radar-fmcw-vod-prov__list {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+}
+
 .radar-fmcw-synced {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1574,6 +2198,33 @@
 }
 
 .radar-fmcw-track-label__row {
+  display: block;
+  color: #e2e8f0;
+}
+
+.radar-fmcw-future-track-label {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #ecfeff;
+  font-size: 11px;
+  line-height: 1.4;
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  max-width: 260px;
+  box-shadow: 0 4px 12px rgba(8, 47, 73, 0.35);
+}
+
+.radar-fmcw-future-track-label__title {
+  display: block;
+  font-weight: 800;
+  color: #22d3ee;
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.radar-fmcw-future-track-label__row {
   display: block;
   color: #e2e8f0;
 }

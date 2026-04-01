@@ -54,10 +54,38 @@ export type RadarMethodologyDto = {
 export type FmcwLiveRunDto = {
   ok: boolean;
   frameId?: string;
+  /** 연속 프레임 속도 추정에 사용한 직전 stem (있을 때) */
+  prevFrameId?: string;
   inferMs?: number;
   radarPipeline?: string;
   radarPointCount?: number;
   error?: string;
+};
+
+export type VodProvenanceDto = {
+  /** 로컬 절대 경로(민감하면 UI에서 잘라 표시 가능) */
+  datasetRootHint?: string;
+  syncedFrameCount?: number;
+  dataSources: string[];
+  pipelineLine: string;
+};
+
+export type VodMatchedTargetDto = {
+  className?: string;
+  matchDistanceM?: number;
+  centerM?: [number, number, number];
+  /** ego/LiDAR: +x 전방 기준 수평면 헤딩 근사(°) */
+  headingDegEgoXY?: number;
+  headingNote?: string;
+  lengthM?: number;
+  widthM?: number;
+};
+
+export type VodRiskZoneDto = {
+  id: string;
+  label: string;
+  rationale: string;
+  polygon: Array<{ lat: number; lng: number }>;
 };
 
 /** live 파이프라인에서 카메라·YOLO·LiDAR 검증까지 묶어 UI에 전달 */
@@ -90,6 +118,42 @@ export type RadarInsightsDto = {
   lidarReviewParagraph?: string;
   /** 카메라·3D 동기 시점 안내 */
   syncedViewNote?: string;
+  /** VoD 루트·입력 파일·파이프라인 한 줄 */
+  vodProvenance?: VodProvenanceDto;
+  /** 레이더 1위 클러스터와 BEV 정합된 3D 라벨(있을 때) */
+  vodMatchedTarget?: VodMatchedTargetDto | null;
+  /** 지도 폴리곤(위험 부채꼴 등) */
+  vodRiskZones?: VodRiskZoneDto[];
+  /** 발표용 통합 내러티브 */
+  vodStoryParagraph?: string;
+  /** 상위 레이더 후보별 동일 프레임 LiDAR ROI 교차검증 */
+  lidarCrossChecks?: Array<{
+    rank: number;
+    clusterId: string;
+    matched?: boolean;
+    pointsInRoi?: number;
+    verdict?: string;
+    deltaRangeM?: number | null;
+    deltaBearingDeg?: number | null;
+  }>;
+  /** 연속 프레임(선택) 매칭·Δt 요약 */
+  motionAnalysis?: {
+    frameDeltaS?: number;
+    trackGateM?: number;
+    associations?: number;
+    prevClusterCount?: number;
+    note?: string;
+  };
+  /** 1위 후보 규칙 기반 위험도 */
+  ruleBasedRiskPrimary?: {
+    score?: number;
+    level?: string;
+    factors?: Record<string, number>;
+  };
+  /** 규칙 vs 향후 AI(weak label·의사 GT) 확장 메타 */
+  riskModel?: { mode?: string; note?: string };
+  /** ego m 단위 외삽 궤적을 지도 좌표로 투영한 폴리라인 */
+  futureTrajectoryLatLng?: Array<{ lat: number; lng: number }>;
 };
 
 export type RadarSnapshotDto = {

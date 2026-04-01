@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { MapService } from './map.service';
 import { MapRoutingService } from './map-routing.service';
 
@@ -55,5 +55,45 @@ export class MapController {
     const d = Number(toLng);
     const coordinates = await this.mapRoutingService.getDrivingRoute(a, b, c, d);
     return { coordinates };
+  }
+
+  @Get('tactics/recommendations')
+  getTacticRecommendations(@Query('scenarioKey') scenarioKey?: string) {
+    return this.mapService.getTacticRecommendations(
+      scenarioKey && scenarioKey.trim().length > 0
+        ? scenarioKey.trim()
+        : 'battalion-reconstructed-v1',
+    );
+  }
+
+  @Post('tactics/decision')
+  saveTacticDecision(
+    @Body()
+    body: {
+      scenarioKey?: string;
+      selectedUnitName?: string;
+      suitabilityPct?: number;
+      note?: string;
+      source?: string;
+      rawPayload?: unknown;
+    },
+  ) {
+    return this.mapService.saveTacticDecision({
+      scenarioKey:
+        body.scenarioKey && body.scenarioKey.trim().length > 0
+          ? body.scenarioKey.trim()
+          : 'battalion-reconstructed-v1',
+      selectedUnitName:
+        body.selectedUnitName && body.selectedUnitName.trim().length > 0
+          ? body.selectedUnitName.trim()
+          : '미지정',
+      suitabilityPct:
+        typeof body.suitabilityPct === 'number' && Number.isFinite(body.suitabilityPct)
+          ? body.suitabilityPct
+          : 0,
+      note: typeof body.note === 'string' ? body.note : '',
+      source: typeof body.source === 'string' ? body.source : 'web-ui',
+      rawPayload: body.rawPayload ?? null,
+    });
   }
 }

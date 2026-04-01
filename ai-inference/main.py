@@ -382,17 +382,114 @@ def _lidar_validate_cluster(
     }
 
 
+def _greedy_match_prev_curr(
+    prev_centroids: np.ndarray,
+    curr_detections: list[dict[str, Any]],
+    gate_m: float,
+) -> list[int | None]:
+    """curr 순서(이미 신뢰도 정렬)대로 이전 프레임 클러스터와 1:1 대응."""
+    if prev_centroids.size == 0:
+        return [None] * len(curr_detections)
+    used: set[int] = set()
+    out: list[int | None] = []
+    for cd in curr_detections:
+        cc = np.array(cd["centroidM"], dtype=np.float64)
+        best_j: int | None = None
+        best_d = gate_m
+        for j in range(prev_centroids.shape[0]):
+            if j in used:
+                continue
+            d = float(np.linalg.norm(prev_centroids[j] - cc))
+            if d < best_d:
+                best_d = d
+                best_j = j
+        if best_j is not None:
+            used.add(best_j)
+        out.append(best_j)
+    return out
+
+
+def _rule_based_risk(
+    range_m: float,
+    doppler_mps: float,
+    centroid: np.ndarray,
+    velocity_mps: np.ndarray | None,
+) -> dict[str, Any]:
+    """거리·도플러(접근)·속도·기지(원점) 쪽 진행 성분을 조합한 규칙 기반 위험도 (0~1)."""
+    r_ref = float(os.getenv("VOD_RISK_RANGE_REF_M", "120"))
+    d_norm = max(0.0, min(1.0, 1.0 - float(range_m) / max(r_ref, 1.0)))
+    if doppler_mps <= 0:
+        approach = 1.0
+    else:
+        approach = max(0.0, 1.0 - min(float(doppler_mps), 15.0) / 15.0 * 0.85)
+    spd_xy = 0.0
+    toward_ego = 0.0
+    spd_score: float
+    if velocity_mps is not None and velocity_mps.shape[0] >= 2:
+        spd_xy = float(np.hypot(float(velocity_mps[0]), float(velocity_mps[1])))
+        spd_score = min(1.0, spd_xy / 20.0)
+        cxy = centroid[:2].astype(np.float64)
+        rad = float(np.linalg.norm(cxy))
+        if rad > 0.5 and spd_xy > 0.08:
+            to_origin = -cxy / rad
+            vxy = velocity_mps[:2].astype(np.float64)
+            vxy = vxy / (np.linalg.norm(vxy) + 1e-9)
+            toward_ego = max(0.0, float(np.dot(vxy, to_origin)))
+    else:
+        spd_score = min(1.0, abs(float(doppler_mps)) / 12.0) * 0.6
+    score = 0.32 * d_norm + 0.28 * approach + 0.22 * spd_score + 0.18 * toward_ego
+    score = max(0.0, min(1.0, float(score)))
+    if score < 0.35:
+        level = "낮음"
+    elif score < 0.65:
+        level = "중간"
+    else:
+        level = "높음"
+    return {
+        "score": round(score, 3),
+        "level": level,
+        "factors": {
+            "distanceNorm": round(d_norm, 3),
+            "approachTerm": round(approach, 3),
+            "speedTerm": round(spd_score, 3),
+            "towardEgoTerm": round(toward_ego, 3),
+        },
+    }
+
+
+def _future_ego_samples(
+    centroid: list[float],
+    velocity_mps: np.ndarray | None,
+    horizon_s: float,
+    n: int,
+) -> list[list[float]]:
+    """동일 좌표계(레이더/ego)에서 속도 벡터로 단순 외삽 궤적."""
+    n = max(2, int(n))
+    if velocity_mps is None:
+        return [centroid]
+    c = np.array(centroid, dtype=np.float64)
+    out: list[list[float]] = []
+    for i in range(n):
+        t = horizon_s * i / (n - 1)
+        p = c + velocity_mps[:3] * t
+        out.append([round(float(p[0]), 3), round(float(p[1]), 3), round(float(p[2]), 3)])
+    return out
+
+
 @app.post("/infer/vod/radar-fusion")
 async def infer_vod_radar_fusion(
     radar: UploadFile = File(...),
     image: UploadFile | None = File(None),
     lidar: UploadFile | None = File(None),
+    radar_prev: UploadFile | None = File(None),
 ) -> dict[str, Any]:
     """
     실제 연산:
     - 레이더: DBSCAN 클러스터 → 탐지 후보 (VoD Nx7)
-    - 카메라: YOLOv8 (기존 가중치) 객체 검출
-    - LiDAR: 동일 좌표계 가정 하 ROI 내 점 수로 레이더 1위 후보 검증
+    - (선택) 직전 프레임 레이더와 동일 DBSCAN 후 탐지 연관 → 속도·헤딩
+    - 카메라: YOLOv8 객체 검출 (동기 프레임 교차검증)
+    - LiDAR: 상위 후보들에 대해 ROI 기하 검증
+    - 규칙 기반 위험도 + 향후 AI 확장용 메타
     """
     t0 = time.perf_counter()
     radar_bytes = await radar.read()
@@ -402,6 +499,47 @@ async def infer_vod_radar_fusion(
     v_comp = pts[:, 5]
 
     radar_detections = _radar_clusters_dbscan(xyz, v_comp, rcs)
+
+    dt_s = float(os.getenv("VOD_FRAME_DT_S", "0.1"))
+    motion_gate_m = float(os.getenv("VOD_TRACK_GATE_M", "12.0"))
+    prev_stem = radar_prev.filename if radar_prev and radar_prev.filename else None
+    motion_note = "직전 프레임 레이더 미제공 — 도플러·거리만으로 위험도 일부 추정"
+    matches: list[int | None] = [None] * len(radar_detections)
+    prev_centroids = np.zeros((0, 3), dtype=np.float64)
+
+    if radar_prev is not None and radar_prev.filename:
+        try:
+            prev_bytes = await radar_prev.read()
+            ppts = _parse_vod_radar_bin(prev_bytes)
+            prev_dets = _radar_clusters_dbscan(ppts[:, :3], ppts[:, 5], ppts[:, 3])
+            prev_centroids = np.array(
+                [d["centroidM"] for d in prev_dets],
+                dtype=np.float64,
+            )
+            matches = _greedy_match_prev_curr(prev_centroids, radar_detections, motion_gate_m)
+            motion_note = (
+                f"직전 프레임 DBSCAN 클러스터 {prev_centroids.shape[0]}개와 연속 매칭 "
+                f"(게이트 {motion_gate_m}m, Δt={dt_s}s 가정)"
+            )
+        except Exception:
+            matches = [None] * len(radar_detections)
+            motion_note = "직전 프레임 파싱/클러스터 실패 — 속도 추정 생략"
+
+    for i, det in enumerate(radar_detections):
+        pj = matches[i] if i < len(matches) else None
+        if pj is None or prev_centroids.shape[0] == 0:
+            det["motionMatched"] = False
+            det["velocityEgoMps"] = None
+            det["speedMps"] = None
+            det["headingDegMotion"] = None
+            continue
+        c_prev = prev_centroids[pj]
+        c_curr = np.array(det["centroidM"], dtype=np.float64)
+        v = (c_curr - c_prev) / max(dt_s, 1e-6)
+        det["motionMatched"] = True
+        det["velocityEgoMps"] = [round(float(v[0]), 3), round(float(v[1]), 3), round(float(v[2]), 3)]
+        det["speedMps"] = round(float(np.hypot(v[0], v[1])), 3)
+        det["headingDegMotion"] = round(float(np.degrees(np.arctan2(v[1], v[0]))), 2)
 
     yolo_detections: list[dict[str, Any]] = []
     annotated_b64: str | None = None
@@ -416,37 +554,91 @@ async def infer_vod_radar_fusion(
             annotated_b64 = _encode_image_to_base64(result.plot())
 
     lidar_validation: dict[str, Any] | None = None
+    lidar_cross_checks: list[dict[str, Any]] = []
     if lidar is not None and lidar.filename and radar_detections:
         lidar_bytes = await lidar.read()
         lid = _parse_vod_lidar_bin(lidar_bytes)
         lid_xyz = lid[:, :3]
-        primary = radar_detections[0]
-        lv = _lidar_validate_cluster(
-            lid_xyz,
-            primary["centroidM"],
-            radar_range_m=float(primary["rangeM"]),
-            radar_azimuth_deg=float(primary["azimuthDeg"]),
-        )
-        lidar_validation = {
-            "primaryClusterId": primary["id"],
-            "radiusM": 2.5,
-            "lidarPointCount": int(lid_xyz.shape[0]),
-            **lv,
-        }
+        top_k = min(3, len(radar_detections))
+        for rank in range(top_k):
+            cand = radar_detections[rank]
+            lv = _lidar_validate_cluster(
+                lid_xyz,
+                cand["centroidM"],
+                radar_range_m=float(cand["rangeM"]),
+                radar_azimuth_deg=float(cand["azimuthDeg"]),
+            )
+            row = {
+                "rank": rank + 1,
+                "clusterId": cand["id"],
+                "radiusM": 2.5,
+                "lidarPointCount": int(lid_xyz.shape[0]),
+                **lv,
+            }
+            lidar_cross_checks.append(row)
+            if rank == 0:
+                lidar_validation = {
+                    "primaryClusterId": cand["id"],
+                    "radiusM": 2.5,
+                    "lidarPointCount": int(lid_xyz.shape[0]),
+                    **lv,
+                }
 
+    rule_risk_primary: dict[str, Any] | None = None
+    future_ego_path: list[list[float]] = []
+    if radar_detections:
+        p0 = radar_detections[0]
+        c0 = np.array(p0["centroidM"], dtype=np.float64)
+        v0: np.ndarray | None = None
+        if p0.get("velocityEgoMps") is not None:
+            v0 = np.array(p0["velocityEgoMps"], dtype=np.float64)
+        rule_risk_primary = _rule_based_risk(
+            float(p0["rangeM"]),
+            float(p0["dopplerMps"]),
+            c0,
+            v0,
+        )
+        hz = float(os.getenv("VOD_FUTURE_HORIZON_S", "3.0"))
+        n_samp = max(2, int(os.getenv("VOD_FUTURE_SAMPLES", "10")))
+        future_ego_path = _future_ego_samples(p0["centroidM"], v0, hz, n_samp)
+
+    use_ai_risk = os.getenv("VOD_RISK_USE_AI", "").strip() in ("1", "true", "yes")
+    risk_model = {
+        "mode": "ai_weak_label_stub" if use_ai_risk else "rules_v1",
+        "note": (
+            "학습된 위험지역 예측 헤드가 로드되지 않았습니다. 규칙 기반 점수만 반환합니다."
+            if use_ai_risk
+            else "거리·도플러(접근)·수평 속도·기지 방향 진행 성분의 가중합입니다. "
+            "추후 weak label / 시뮬레이션 의사 GT로 동일 스키마에 신경망 점수를 병합할 수 있습니다."
+        ),
+    }
+
+    assoc_n = sum(1 for m in matches if m is not None)
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
     return {
         "ok": True,
-        "radarPipeline": "DBSCAN geometric clustering (no NN weights)",
+        "radarPipeline": "DBSCAN + optional two-frame centroid tracking + rule risk",
         "yoloModel": MODEL_PATH,
         "inferMs": elapsed_ms,
         "radarFileName": radar.filename,
+        "radarPrevFileName": prev_stem,
         "radarPointCount": int(pts.shape[0]),
         "radarDetections": radar_detections,
         "yoloDetections": yolo_detections,
         "annotatedImageBase64": annotated_b64,
         "lidarValidation": lidar_validation,
+        "lidarCrossChecks": lidar_cross_checks if lidar_cross_checks else None,
+        "motionAnalysis": {
+            "frameDeltaS": round(dt_s, 4),
+            "trackGateM": motion_gate_m,
+            "associations": assoc_n,
+            "prevClusterCount": int(prev_centroids.shape[0]),
+            "note": motion_note,
+        },
+        "ruleBasedRiskPrimary": rule_risk_primary,
+        "futureTrajectoryEgoM": future_ego_path if future_ego_path else None,
+        "riskModel": risk_model,
     }
 
 

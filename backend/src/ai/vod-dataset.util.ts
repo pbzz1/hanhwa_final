@@ -57,16 +57,20 @@ export async function listSyncedVodFrameStems(root: string): Promise<string[]> {
   return common;
 }
 
-export function pickSyncedFrame(frames: string[], seed?: number): string {
+export function pickSyncedFrameIndex(frames: string[], seed?: number): number {
   if (!frames.length) {
     throw new Error('동기화된 프레임 목록이 비어 있습니다.');
   }
   if (seed === undefined || seed === null || Number.isNaN(Number(seed))) {
-    const idx = Math.floor(Math.random() * frames.length);
-    return frames[idx]!;
+    return Math.floor(Math.random() * frames.length);
   }
   const s = Math.abs(Math.floor(Number(seed)));
-  return frames[s % frames.length]!;
+  return s % frames.length;
+}
+
+export function pickSyncedFrame(frames: string[], seed?: number): string {
+  const idx = pickSyncedFrameIndex(frames, seed);
+  return frames[idx]!;
 }
 
 export type VodFrameFiles = {

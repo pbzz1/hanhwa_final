@@ -26,13 +26,30 @@ export const BATTALION_SCENARIO = {
     ne: { lat: 38.32, lng: 127.12 },
   },
 
-  /** 광역 SAR — DMZ 인접 권역만 잘라 확대(너무 축소된 느낌 완화) */
-  overviewBounds: {
-    sw: { lat: 37.68, lng: 126.48 },
-    ne: { lat: 38.42, lng: 127.42 },
+  /**
+   * 광역 지도 위성 SAR 감시 네모 — 적 집결/출발 지점(시드 ~38.2, 126.92) 인근 소구역만 표시.
+   * (전·후 비교용 sarCompareBounds와 별도)
+   */
+  overviewSarWatchBounds: {
+    sw: { lat: 38.168, lng: 126.888 },
+    ne: { lat: 38.232, lng: 126.952 },
   },
-  /** 카카오맵: 레벨이 클수록 도면이 더 상세(1=광역 ~ 14=최대 확대) */
-  overviewMapLevel: 10,
+
+  /**
+   * 주 적 남하 침투 예상 축 — 광역 지도 네모. 이전 대비 약 2.5배 면적(중심 유지·반경 확대).
+   */
+  expectedEnemyRouteBounds: {
+    sw: { lat: 37.255, lng: 126.435 },
+    ne: { lat: 38.805, lng: 127.385 },
+  },
+
+  /** 광역 뷰 — 확대된 expectedEnemyRouteBounds·소 SAR·C2 포함 */
+  overviewBounds: {
+    sw: { lat: 37.18, lng: 126.22 },
+    ne: { lat: 38.88, lng: 127.62 },
+  },
+  /** 카카오맵: 레벨이 클수록 도면이 더 상세(1=광역 ~ 14=최대 확대) — 낮출수록 더 광역 */
+  overviewMapLevel: 8,
 
   /** 적 침공 시뮬 종료 지점(남한 측, DMZ 인근 가상) — OSRM 실패 시 직선 보간 */
   invasionTarget: { lat: 37.792, lng: 126.982 },
@@ -53,9 +70,9 @@ export const BATTALION_SCENARIO = {
   sarTankLossZones: [
     {
       id: 'sar-1',
-      lat: 38.145,
-      lng: 126.94,
-      radiusM: 2000,
+      lat: 38.2,
+      lng: 126.92,
+      radiusM: 1100,
       label: '북측 전차 신호 소실 A',
     },
   ],

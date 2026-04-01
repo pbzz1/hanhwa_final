@@ -44,8 +44,18 @@ vod-devkit/vod-received/view_of_delft_detection_PUBLIC/**
 !vod-devkit/vod-received/view_of_delft_detection_PUBLIC/.gitkeep
 vod-devkit/vod-received/view_of_delft_prediction_PUBLIC/**
 !vod-devkit/vod-received/view_of_delft_prediction_PUBLIC/.gitkeep
+vod-devkit/vod-received/view_of_delft_PUBLIC/**
+!vod-devkit/vod-received/view_of_delft_PUBLIC/.gitkeep
+vod-devkit/vod-received/label_2/**
+!vod-devkit/vod-received/label_2/.gitkeep
 vod-devkit/vod-received/label_2_with_track_ids/**
 !vod-devkit/vod-received/label_2_with_track_ids/.gitkeep
+
+# VoD devkit: 노트북·스크립트 실행 산출물(재생성 가능, 웹 파이프라인과 무관)
+vod-devkit/_radar_camera_run_output/
+
+# CRUW 로컬 데이터( VoD/FMCW 웹 파이프라인과 별도 트랙 — ai/README.md 참고)
+ai/radar-cruw/data/
 *.pth
 *.ckpt
 *.safetensors

@@ -5,11 +5,13 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   listSyncedVodFrameStems,
-  pickSyncedFrame,
+  pathsForVodFrame,
+  pickSyncedFrameIndex,
   readVodFrameBuffers,
   resolveVodDatasetRoot,
 } from './vod-dataset.util';
@@ -57,6 +59,7 @@ export class AiService {
     radar: UploadFile,
     image: UploadFile | undefined,
     lidar: UploadFile | undefined,
+    radarPrev?: UploadFile,
   ) {
     const formData = new FormData();
     formData.append(
@@ -82,6 +85,15 @@ export class AiService {
           type: lidar.mimetype || 'application/octet-stream',
         }),
         lidar.originalname || 'lidar.bin',
+      );
+    }
+    if (radarPrev?.buffer?.length) {
+      formData.append(
+        'radar_prev',
+        new Blob([new Uint8Array(radarPrev.buffer)], {
+          type: radarPrev.mimetype || 'application/octet-stream',
+        }),
+        radarPrev.originalname || 'radar_prev.bin',
       );
     }
 
@@ -134,8 +146,25 @@ export class AiService {
         `동기화된 프레임이 없습니다 (lidar/training/image_2 의 .jpg 와 radar/training/velodyne 의 .bin 이름 stem 일치). root=${root}`,
       );
     }
-    const frameId = pickSyncedFrame(frames, seed);
+    const idx = pickSyncedFrameIndex(frames, seed);
+    const frameId = frames[idx]!;
     const { radar, image, lidar } = await readVodFrameBuffers(root, frameId);
+
+    let radarPrevFile: UploadFile | undefined;
+    if (idx > 0) {
+      const prevId = frames[idx - 1]!;
+      try {
+        const prevPath = pathsForVodFrame(root, prevId).radarPath;
+        const prevBuf = await readFile(prevPath);
+        radarPrevFile = {
+          buffer: prevBuf,
+          originalname: `${prevId}.bin`,
+          mimetype: 'application/octet-stream',
+        };
+      } catch {
+        radarPrevFile = undefined;
+      }
+    }
 
     const radarFile: UploadFile = {
       buffer: radar,
@@ -156,10 +185,16 @@ export class AiService {
           }
         : undefined;
 
-    const data = await this.inferVodRadarFusion(radarFile, imageFile, lidarFile);
+    const data = await this.inferVodRadarFusion(
+      radarFile,
+      imageFile,
+      lidarFile,
+      radarPrevFile,
+    );
     return {
       ...(data as Record<string, unknown>),
       autoFrameId: frameId,
+      autoPrevFrameId: idx > 0 ? frames[idx - 1] : undefined,
       autoDatasetRoot: root,
       autoSyncedFrameCount: frames.length,
     };

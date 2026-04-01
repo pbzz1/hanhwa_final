@@ -1,0 +1,5 @@
+# CRUW / 레이더 프로토타입 노트북용 (PyTorch는 CUDA 버전에 맞게 별도 설치 권장)
+numpy>=1.21
+matplotlib>=3.5
+tqdm>=4.62
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124

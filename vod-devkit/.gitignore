@@ -134,3 +134,7 @@ dmypy.json
 
 .DS_Store
 /docs/.DS_Store
+
+# 로컬 실행 산출물·목 HTML (프론트 통합 후 불필요, 재생성 가능)
+_radar_camera_run_output/
+_nb_*_mock*.html

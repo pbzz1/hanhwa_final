@@ -12,15 +12,16 @@ import type {
   PointerEvent,
 } from 'react'
 import {
+  Link,
   NavLink,
   Navigate,
   Outlet,
   Route,
   Routes,
+  useLocation,
   useNavigate,
+  useSearchParams,
 } from 'react-router-dom'
-import * as THREE from 'three'
-import { FusionValidationPrototype } from './FusionValidationPrototype'
 import { AlertZonePage } from './AlertZonePage'
 import { FmcwRadarScatter3D } from './FmcwRadarScatter3D'
 import { RadarCharts2D } from './RadarCharts2D'
@@ -79,6 +80,22 @@ type MapVideoModalState = {
   subtitle?: string
   videoUrl: string | null
 }
+
+type TacticRecommendation = {
+  unitName: string
+  suitabilityPct: number
+  rationale: string
+  payload: Record<string, unknown> | null
+}
+
+type ScenarioV2Phase =
+  | 'sat-watch'
+  | 'sat-wide-pause'
+  | 'uav-transit'
+  | 'uav-track-only'
+  | 'pulse-dot'
+  | 'fmcw-drone-transit'
+  | 'tactics'
 
 type AppLayoutProps = {
   user: User | null
@@ -177,6 +194,7 @@ type RadarSnapshot = {
       liveRun?: {
         ok: boolean
         frameId?: string
+        prevFrameId?: string
         inferMs?: number
         radarPipeline?: string
         radarPointCount?: number
@@ -219,6 +237,51 @@ type RadarSnapshot = {
       conclusionBullets?: string[]
       lidarReviewParagraph?: string
       syncedViewNote?: string
+      vodProvenance?: {
+        datasetRootHint?: string
+        syncedFrameCount?: number
+        dataSources: string[]
+        pipelineLine: string
+      }
+      vodMatchedTarget?: {
+        className?: string
+        matchDistanceM?: number
+        centerM?: [number, number, number]
+        headingDegEgoXY?: number
+        headingNote?: string
+        lengthM?: number
+        widthM?: number
+      } | null
+      vodRiskZones?: Array<{
+        id: string
+        label: string
+        rationale: string
+        polygon: Array<{ lat: number; lng: number }>
+      }>
+      vodStoryParagraph?: string
+      lidarCrossChecks?: Array<{
+        rank: number
+        clusterId: string
+        matched?: boolean
+        pointsInRoi?: number
+        verdict?: string
+        deltaRangeM?: number | null
+        deltaBearingDeg?: number | null
+      }>
+      motionAnalysis?: {
+        frameDeltaS?: number
+        trackGateM?: number
+        associations?: number
+        prevClusterCount?: number
+        note?: string
+      }
+      ruleBasedRiskPrimary?: {
+        score?: number
+        level?: string
+        factors?: Record<string, number>
+      }
+      riskModel?: { mode?: string; note?: string }
+      futureTrajectoryLatLng?: Array<{ lat: number; lng: number }>
     } | null
   }
 }
@@ -257,26 +320,6 @@ type YoloVideoInferenceResponse = {
   countsByLabel: Record<string, number>
   frameResults: VideoFrameResult[]
   previewFramesBase64: string[]
-  message?: string
-}
-
-type Reconstruct3dMultiResponse = {
-  sourceCount: number
-  pairCount: number
-  pointCount: number
-  points3d: [number, number, number][]
-  colorsRgb?: [number, number, number][]
-  bounds: {
-    x: [number, number]
-    y: [number, number]
-    z: [number, number]
-  }
-  ply?: {
-    fileName?: string
-    relativePath?: string | null
-    downloadUrl?: string | null
-    absolutePath?: string | null
-  }
   message?: string
 }
 
@@ -392,6 +435,10 @@ const THREAT_COLOR: Record<EnemyInfiltration['threatLevel'], string> = {
 const SIM_PATH_STEPS = 200
 /** 1배속일 때 재생에 걸리는 시간(초) */
 const SIM_DURATION_SEC = 45
+const SAR_UPDATE_INTERVAL_HOURS = 2
+const SAR_WIDE_SCAN_PAUSE_PROGRESS = 0.12
+const UAV_TRANSIT_PROGRESS_SPAN = 0.11
+const DRONE_TRANSIT_PROGRESS_SPAN = 0.11
 
 function formatSimClock(progress: number, durationSec: number): string {
   const clamped = Math.max(0, Math.min(1, progress))
@@ -517,6 +564,155 @@ function haversineKm(a: SimPoint, b: SimPoint): number {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
+/** 시뮬 시계 기준 궤적 접선 속도(km/h) — 아군 고정 궤적이면 0에 가깝게 */
+function speedAlongPathKmH(path: SimPoint[], progress: number): number | null {
+  if (path.length < 2) return null
+  const eps = 0.01
+  const p = Math.min(1, Math.max(0, progress))
+  const p0 = Math.max(0, p - eps)
+  const p1 = Math.min(1, p + eps)
+  if (p1 <= p0 + 1e-9) return null
+  const A = samplePath(path, p0)
+  const B = samplePath(path, p1)
+  const distKm = haversineKm(A, B)
+  const deltaSimSec = (p1 - p0) * SIM_DURATION_SEC
+  if (deltaSimSec < 1e-9) return null
+  return (distKm / deltaSimSec) * 3600
+}
+
+/** DEM 미연동 시 지도용 모의 표고(m) */
+function syntheticElevationM(lat: number, lng: number, salt: number): number {
+  const wobble =
+    Math.sin(lat * 71.3 + salt * 0.09) * Math.cos(lng * 63.7 - salt * 0.05)
+  return Math.round(95 + wobble * 220 + (Math.abs(salt) % 41) * 2)
+}
+
+function formatLatLngReadout(lat: number, lng: number): string {
+  return `위도 ${lat.toFixed(5)}° · 경도 ${lng.toFixed(5)}°`
+}
+
+function createLiveKinematicsInfowindow(
+  kakaoMaps: KakaoMapsApi,
+  map: KakaoMap,
+  position: unknown,
+  pinEl: HTMLElement,
+  options: {
+    kind: 'friendly' | 'enemy'
+    title: string
+    simPathsRef: MutableRefObject<SimPathBundle | null>
+    simProgressRef: MutableRefObject<number>
+    pathKey: 'friendly' | 'enemy'
+    entityId: number
+    onSelect: () => void
+    onPinMouseEnterExtra?: () => void
+    onPinMouseLeaveExtra?: () => void
+  },
+): KakaoCustomOverlayInstance {
+  const elevSalt = options.entityId * 997 + (options.kind === 'enemy' ? 13 : 0)
+  const infoContent = document.createElement('div')
+  const sideClass =
+    options.kind === 'friendly'
+      ? 'map-hover-side-card--friendly'
+      : 'map-hover-side-card--enemy'
+  infoContent.className = `ais-map-tooltip unit-map-overlay map-hover-side-card ${sideClass}`
+  const badge = options.kind === 'friendly' ? '아군' : '적'
+  infoContent.innerHTML = `
+    <span class="ais-map-tooltip__badge">${badge}</span>
+    <h4 class="ais-map-tooltip__title"></h4>
+    <p class="ais-map-tooltip__row"><strong>이동속도</strong> <span data-k="spd">—</span></p>
+    <p class="ais-map-tooltip__row"><strong>좌표</strong> <span data-k="pos">—</span></p>
+    <p class="ais-map-tooltip__row"><strong>표고</strong> <span data-k="elev">—</span></p>
+    <p class="ais-map-tooltip__note muted">시뮬 궤적 기준 · 표고는 모의 지형</p>
+  `
+  const titleEl = infoContent.querySelector('.ais-map-tooltip__title')
+  if (titleEl) titleEl.textContent = options.title
+
+  const spdEl = infoContent.querySelector('[data-k="spd"]')
+  const posEl = infoContent.querySelector('[data-k="pos"]')
+  const elevEl = infoContent.querySelector('[data-k="elev"]')
+
+  const refresh = () => {
+    const bundle = options.simPathsRef.current
+    const path =
+      options.pathKey === 'friendly'
+        ? bundle?.friendly.get(options.entityId)
+        : bundle?.enemy.get(options.entityId)
+    const pr = options.simProgressRef.current
+    if (!path || path.length === 0) {
+      if (spdEl) spdEl.textContent = '—'
+      if (posEl) posEl.textContent = '—'
+      if (elevEl) elevEl.textContent = '—'
+      return
+    }
+    const { lat, lng } = samplePath(path, pr)
+    const spd = speedAlongPathKmH(path, pr)
+    const elev = syntheticElevationM(lat, lng, elevSalt)
+    if (spdEl) spdEl.textContent = spd != null ? `${spd.toFixed(1)} km/h` : '—'
+    if (posEl) posEl.textContent = formatLatLngReadout(lat, lng)
+    if (elevEl) elevEl.textContent = `${elev} m`
+  }
+
+  const infoOverlay = new kakaoMaps.CustomOverlay({
+    position,
+    yAnchor: 0.5,
+    xAnchor: 0,
+    content: infoContent,
+    zIndex: 4,
+  })
+  infoOverlay.setMap(null)
+
+  let infoHideTimer: number | null = null
+  let tickTimer: number | null = null
+
+  const clearInfoHide = () => {
+    if (infoHideTimer != null) {
+      window.clearTimeout(infoHideTimer)
+      infoHideTimer = null
+    }
+  }
+
+  const clearTick = () => {
+    if (tickTimer != null) {
+      window.clearInterval(tickTimer)
+      tickTimer = null
+    }
+  }
+
+  const scheduleInfoHide = () => {
+    clearInfoHide()
+    infoHideTimer = window.setTimeout(() => {
+      infoOverlay.setMap(null)
+      clearTick()
+      infoHideTimer = null
+    }, 180)
+  }
+
+  pinEl.addEventListener('mouseenter', () => {
+    options.onPinMouseEnterExtra?.()
+    clearInfoHide()
+    refresh()
+    clearTick()
+    tickTimer = window.setInterval(refresh, 120)
+    infoOverlay.setMap(map)
+  })
+  pinEl.addEventListener('mouseleave', () => {
+    scheduleInfoHide()
+    options.onPinMouseLeaveExtra?.()
+  })
+  infoContent.addEventListener('mouseenter', clearInfoHide)
+  infoContent.addEventListener('mouseleave', scheduleInfoHide)
+
+  pinEl.addEventListener('click', (ev) => {
+    ev.stopPropagation()
+    clearInfoHide()
+    clearTick()
+    infoOverlay.setMap(null)
+    options.onSelect()
+  })
+
+  return infoOverlay
+}
+
 /** 시뮬 진행 시점에서 지휘통제실–우선 적 거리(km) */
 function enemyDistanceFromC2Km(
   paths: SimPathBundle | null,
@@ -577,6 +773,21 @@ function offsetLatLng(lat: number, lng: number, bearingDeg: number, distKm: numb
       Math.cos(distKm / R) - Math.sin(lat1) * Math.sin(lat2),
     )
   return { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI }
+}
+
+/** 카카오맵에 겹칠 두 궤적이 동일하면 한 레이어만 그리기 위한 비교 */
+function latLngPolylineAlmostEqual(
+  a: Array<{ lat: number; lng: number }>,
+  b: Array<{ lat: number; lng: number }>,
+  eps = 1e-7,
+): boolean {
+  if (a.length !== b.length || a.length < 2) return false
+  for (let i = 0; i < a.length; i += 1) {
+    const p = a[i]!
+    const q = b[i]!
+    if (Math.abs(p.lat - q.lat) > eps || Math.abs(p.lng - q.lng) > eps) return false
+  }
+  return true
 }
 
 /** 도로 폴리라인을 시뮬레이션 스텝 수로 균등 리샘플 (이동 속도 체감 일정) */
@@ -822,6 +1033,34 @@ function buildRadarSectorPath(
   return pts
 }
 
+type ScenarioRectBounds = {
+  sw: { lat: number; lng: number }
+  ne: { lat: number; lng: number }
+}
+
+/** 남서–북동 바운드 → 시계방향 직사각형 폴리곤(카카오 Polygon.path) */
+function buildRectanglePolygonPath(
+  kakaoMaps: KakaoMapsApi,
+  b: ScenarioRectBounds,
+): unknown[] {
+  const { sw, ne } = b
+  const se = { lat: sw.lat, lng: ne.lng }
+  const nw = { lat: ne.lat, lng: sw.lng }
+  return [
+    new kakaoMaps.LatLng(sw.lat, sw.lng),
+    new kakaoMaps.LatLng(se.lat, se.lng),
+    new kakaoMaps.LatLng(ne.lat, ne.lng),
+    new kakaoMaps.LatLng(nw.lat, nw.lng),
+  ]
+}
+
+function rectBoundsCenter(b: ScenarioRectBounds): { lat: number; lng: number } {
+  return {
+    lat: (b.sw.lat + b.ne.lat) / 2,
+    lng: (b.sw.lng + b.ne.lng) / 2,
+  }
+}
+
 function dopplerMarkerColor(dopplerMps: number): string {
   if (dopplerMps <= -4) return '#1d4ed8'
   if (dopplerMps >= 4) return '#dc2626'
@@ -832,6 +1071,10 @@ type ApplySimFrameOpts = {
   radarSite: RadarSite | null
   primaryEnemyId: number | null
   sarContact: boolean
+  /** 초기 SAR/UAV 단계에서는 적 핀 자체를 숨김 */
+  enemyVisible?: boolean
+  /** 펄스 단계에서는 적을 점(단순 블립)으로만 표현 */
+  enemyDotOnly?: boolean
   /** C2–적 거리(km); 펄스 불확실 구간에서 핀·원 표현 분기 */
   primaryEnemyDistanceKm?: number | null
   /** true일 때만 FMCW 섹터 내 락·탐지 콜백 처리 */
@@ -860,6 +1103,8 @@ function mergeSimFrameOpts(
     radarSite: b.radarSite ?? null,
     primaryEnemyId: b.primaryEnemyId ?? null,
     sarContact: b.sarContact,
+    enemyVisible: b.enemyVisible !== false,
+    enemyDotOnly: b.enemyDotOnly === true,
     scenarioIntegratedSimActive: b.scenarioIntegratedSimActive === true,
     onPrimaryEnemyRadarDetect: b.onPrimaryEnemyRadarDetect,
     onPrimaryEnemyNearDmz38: b.onPrimaryEnemyNearDmz38,
@@ -908,17 +1153,40 @@ function applySimulationFrame(
     const { lat, lng } = samplePath(path, progress)
     const ll = new kakaoMaps.LatLng(lat, lng)
     pin.setPosition(ll)
-    pin.setMap(map)
+    const enemyVisible = opts?.enemyVisible !== false
+    pin.setMap(enemyVisible ? map : null)
     const infoOpen = info.getMap?.() != null
     info.setPosition(ll)
-    if (infoOpen) {
+    if (infoOpen && enemyVisible) {
       info.setMap(map)
+    } else if (!enemyVisible) {
+      info.setMap(null)
     }
     if (typeof circle.setPosition === 'function') {
       circle.setPosition(ll)
     } else {
       circle.setOptions?.({ center: ll })
     }
+    if (!enemyVisible) {
+      circle.setMap(null)
+      pinEl.classList.remove(
+        'enemy-pin--radar-lock',
+        'enemy-pin--dmz-near',
+        'enemy-pin--pulse-uncertain-only',
+        'enemy-pin--drone-filming',
+        'enemy-pin--dot-only',
+      )
+      if (id === opts?.primaryEnemyId && opts?.onPrimaryEnemyRadarDetect) {
+        opts.onPrimaryEnemyRadarDetect(false)
+      }
+      if (id === opts?.primaryEnemyId) {
+        opts?.onPrimaryEnemyNearDmz38?.(false)
+      }
+      return
+    }
+
+    const dotOnly = opts?.enemyDotOnly === true
+    pinEl.classList.toggle('enemy-pin--dot-only', dotOnly)
 
     const fmcwActive = opts?.fmcwRadarActive === true
     if (opts?.radarSite && opts.sarContact && fmcwActive) {
@@ -945,7 +1213,10 @@ function applySimulationFrame(
 
     if (id === opts?.primaryEnemyId) {
       const d = opts?.primaryEnemyDistanceKm
-      if (d != null) {
+      if (dotOnly) {
+        pinEl.classList.remove('enemy-pin--pulse-uncertain-only')
+        circle.setMap(null)
+      } else if (d != null) {
         const uncertain =
           d > SCENARIO_RANGES_KM.PULSE_UNCERTAIN_MIN && d <= SCENARIO_RANGES_KM.PULSE_MAX
         pinEl.classList.toggle('enemy-pin--pulse-uncertain-only', uncertain)
@@ -961,6 +1232,7 @@ function applySimulationFrame(
       pinEl.classList.toggle('enemy-pin--drone-filming', opts?.droneFilmingActive === true)
     } else {
       pinEl.classList.remove('enemy-pin--drone-filming')
+      pinEl.classList.remove('enemy-pin--dot-only')
     }
   })
 
@@ -1029,7 +1301,7 @@ type KakaoMapsApi = {
     zIndex?: number
   }) => KakaoPolygonInstance
   event: {
-    addListener: (target: unknown, type: string, callback: () => void) => void
+    addListener: (target: unknown, type: string, callback: (...args: unknown[]) => void) => void
   }
   Polyline: new (options: {
     path: unknown[]
@@ -1057,6 +1329,17 @@ type AttachPinsCtx = {
   insetMinimal?: boolean
   /** SAR 광역 지도: 아군은 대대(지휘통제실)만 단일 점으로 표시 */
   overviewSarC2Dot?: boolean
+  /** 통합 시뮬 지도: AIS형 호버(속도·좌표·표고) + 클릭 시 우측 재원 패널 연동 */
+  enableTacticalAisUi?: boolean
+  simPathsRef?: MutableRefObject<SimPathBundle | null>
+  simProgressRef?: MutableRefObject<number>
+  onSelectMapAssetRef?: MutableRefObject<(kind: 'friendly' | 'enemy', id: number) => void>
+  /** 메인 지도: 적 핀 호버 시 표적 재원 플로팅 패널 */
+  enemyAssetHoverRef?: MutableRefObject<{
+    enter: (enemy: EnemyInfiltration) => void
+    leave: () => void
+    clear: () => void
+  } | null>
 }
 
 function attachKakaoTacticalPins(
@@ -1074,7 +1357,18 @@ function attachKakaoTacticalPins(
     enableRadarHoverPanel,
     insetMinimal = false,
     overviewSarC2Dot = false,
+    enableTacticalAisUi = false,
+    simPathsRef: simPathsRefCtx,
+    simProgressRef: simProgressRefCtx,
+    onSelectMapAssetRef,
+    enemyAssetHoverRef,
   } = ctx
+
+  const tacticalAisUiEnabled =
+    enableTacticalAisUi &&
+    simPathsRefCtx != null &&
+    simProgressRefCtx != null &&
+    onSelectMapAssetRef != null
 
   const primaryForInset = insetMinimal
     ? pickPrimaryEnemyForDistance(enemyInfiltrations)
@@ -1121,21 +1415,35 @@ function attachKakaoTacticalPins(
       zIndex: 3,
     })
 
-    const infoContent = document.createElement('div')
-    infoContent.className =
-      overviewSarC2Dot || insetMinimal
-        ? 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly map-hover-side-card--minimal'
-        : 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly'
-    infoContent.innerHTML =
-      overviewSarC2Dot || insetMinimal
-        ? `
+    let infoOverlay: KakaoCustomOverlayInstance
+
+    if (tacticalAisUiEnabled) {
+      const title = overviewSarC2Dot ? `${unit.name} · C2` : `${unit.level} · ${unit.name}`
+      infoOverlay = createLiveKinematicsInfowindow(kakaoMaps, map, position, pinEl, {
+        kind: 'friendly',
+        title,
+        simPathsRef: simPathsRefCtx!,
+        simProgressRef: simProgressRefCtx!,
+        pathKey: 'friendly',
+        entityId: unit.id,
+        onSelect: () => onSelectMapAssetRef!.current?.('friendly', unit.id),
+      })
+    } else {
+      const infoContent = document.createElement('div')
+      infoContent.className =
+        overviewSarC2Dot || insetMinimal
+          ? 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly map-hover-side-card--minimal'
+          : 'unit-infowindow unit-infowindow-friendly unit-map-overlay map-hover-side-card map-hover-side-card--friendly'
+      infoContent.innerHTML =
+        overviewSarC2Dot || insetMinimal
+          ? `
                 <span class="unit-badge unit-badge-friendly">C2</span>
                 <h4 style="border-left-color:${markerColor};">
                   ${unit.name}
                 </h4>
                 <p class="map-hover-minimal-line">지휘통제실 · 클릭 시 영상</p>
               `
-        : `
+          : `
                 <span class="unit-badge unit-badge-friendly">아군</span>
                 <h4 style="border-left-color:${markerColor};">
                   ${unit.level} · ${unit.name}
@@ -1150,44 +1458,45 @@ function attachKakaoTacticalPins(
                 <p class="map-hover-video-hint">클릭하면 상황·정찰 영상</p>
               `
 
-    const infoOverlay = new kakaoMaps.CustomOverlay({
-      position,
-      yAnchor: 0.5,
-      xAnchor: overviewSarC2Dot ? 0.5 : 0,
-      content: infoContent,
-      zIndex: 4,
-    })
-    infoOverlay.setMap(null)
-
-    let infoHideTimer: number | null = null
-    const clearInfoHide = () => {
-      if (infoHideTimer !== null) {
-        window.clearTimeout(infoHideTimer)
-        infoHideTimer = null
-      }
-    }
-    const scheduleInfoHide = () => {
-      clearInfoHide()
-      infoHideTimer = window.setTimeout(() => infoOverlay.setMap(null), 180)
-    }
-
-    pinEl.addEventListener('mouseenter', () => {
-      clearInfoHide()
-      infoOverlay.setMap(map)
-    })
-    pinEl.addEventListener('mouseleave', scheduleInfoHide)
-    infoContent.addEventListener('mouseenter', clearInfoHide)
-    infoContent.addEventListener('mouseleave', scheduleInfoHide)
-    pinEl.addEventListener('click', (ev) => {
-      ev.stopPropagation()
-      clearInfoHide()
-      infoOverlay.setMap(null)
-      openMapVideoModalRef.current({
-        title: unit.name,
-        subtitle: `아군 · ${unit.level} · ${unit.branch}`,
-        videoUrl: unit.situationVideoUrl,
+      infoOverlay = new kakaoMaps.CustomOverlay({
+        position,
+        yAnchor: 0.5,
+        xAnchor: overviewSarC2Dot ? 0.5 : 0,
+        content: infoContent,
+        zIndex: 4,
       })
-    })
+      infoOverlay.setMap(null)
+
+      let infoHideTimer: number | null = null
+      const clearInfoHide = () => {
+        if (infoHideTimer !== null) {
+          window.clearTimeout(infoHideTimer)
+          infoHideTimer = null
+        }
+      }
+      const scheduleInfoHide = () => {
+        clearInfoHide()
+        infoHideTimer = window.setTimeout(() => infoOverlay.setMap(null), 180)
+      }
+
+      pinEl.addEventListener('mouseenter', () => {
+        clearInfoHide()
+        infoOverlay.setMap(map)
+      })
+      pinEl.addEventListener('mouseleave', scheduleInfoHide)
+      infoContent.addEventListener('mouseenter', clearInfoHide)
+      infoContent.addEventListener('mouseleave', scheduleInfoHide)
+      pinEl.addEventListener('click', (ev) => {
+        ev.stopPropagation()
+        clearInfoHide()
+        infoOverlay.setMap(null)
+        openMapVideoModalRef.current({
+          title: unit.name,
+          subtitle: `아군 · ${unit.level} · ${unit.branch}`,
+          videoUrl: unit.situationVideoUrl,
+        })
+      })
+    }
 
     unitScene.push({ id: unit.id, pin: pinOverlay, info: infoOverlay })
   })
@@ -1221,19 +1530,60 @@ function attachKakaoTacticalPins(
       zIndex: 3,
     })
 
-    const infoContent = document.createElement('div')
-    infoContent.className = insetMinimal
-      ? 'unit-map-overlay enemy-infowindow map-hover-side-card map-hover-side-card--enemy map-hover-side-card--minimal'
-      : 'unit-map-overlay enemy-infowindow map-hover-side-card map-hover-side-card--enemy'
-    infoContent.innerHTML = insetMinimal
-      ? `
+    let infoOverlay: KakaoCustomOverlayInstance
+
+    if (tacticalAisUiEnabled) {
+      infoOverlay = createLiveKinematicsInfowindow(kakaoMaps, map, position, pinEl, {
+        kind: 'enemy',
+        title: enemy.codename,
+        simPathsRef: simPathsRefCtx!,
+        simProgressRef: simProgressRefCtx!,
+        pathKey: 'enemy',
+        entityId: enemy.id,
+        onSelect: () => {
+          setRadarEnemyHover(null)
+          enemyAssetHoverRef?.current?.clear()
+          onSelectMapAssetRef!.current?.('enemy', enemy.id)
+        },
+        onPinMouseEnterExtra: () => {
+          enemyAssetHoverRef?.current?.enter(enemy)
+          const snap = radarSnapshotRef.current
+          const locked =
+            enableRadarHoverPanel &&
+            snap != null &&
+            pinEl.classList.contains('enemy-pin--radar-lock')
+          if (locked) {
+            if (radarHoverLeaveTimerRef.current != null) {
+              window.clearTimeout(radarHoverLeaveTimerRef.current)
+              radarHoverLeaveTimerRef.current = null
+            }
+            setRadarEnemyHover(enemy)
+          }
+        },
+        onPinMouseLeaveExtra: () => {
+          enemyAssetHoverRef?.current?.leave()
+          if (enableRadarHoverPanel && pinEl.classList.contains('enemy-pin--radar-lock')) {
+            radarHoverLeaveTimerRef.current = window.setTimeout(() => {
+              setRadarEnemyHover(null)
+              radarHoverLeaveTimerRef.current = null
+            }, 320)
+          }
+        },
+      })
+    } else {
+      const infoContent = document.createElement('div')
+      infoContent.className = insetMinimal
+        ? 'unit-map-overlay enemy-infowindow map-hover-side-card map-hover-side-card--enemy map-hover-side-card--minimal'
+        : 'unit-map-overlay enemy-infowindow map-hover-side-card map-hover-side-card--enemy'
+      infoContent.innerHTML = insetMinimal
+        ? `
             <span class="enemy-badge">적</span>
             <h4 class="enemy-infowindow-title" style="border-left-color:${THREAT_COLOR[enemy.threatLevel]};">
               ${enemy.codename}
             </h4>
             <p class="map-hover-minimal-line">우선 표적 · 클릭 시 영상</p>
           `
-      : `
+        : `
             <span class="enemy-badge">적군</span>
             <h4 class="enemy-infowindow-title" style="border-left-color:${THREAT_COLOR[enemy.threatLevel]};">
               ${enemy.codename}
@@ -1246,65 +1596,66 @@ function attachKakaoTacticalPins(
             <p class="map-hover-video-hint">클릭하면 정찰 영상</p>
           `
 
-    const infoOverlay = new kakaoMaps.CustomOverlay({
-      position,
-      yAnchor: 0.5,
-      xAnchor: 0,
-      content: infoContent,
-      zIndex: 4,
-    })
-    infoOverlay.setMap(null)
-
-    let infoHideTimer: number | null = null
-    const clearEnemyInfoHide = () => {
-      if (infoHideTimer !== null) {
-        window.clearTimeout(infoHideTimer)
-        infoHideTimer = null
-      }
-    }
-    const scheduleEnemyInfoHide = () => {
-      clearEnemyInfoHide()
-      infoHideTimer = window.setTimeout(() => infoOverlay.setMap(null), 180)
-    }
-
-    pinEl.addEventListener('mouseenter', () => {
-      clearEnemyInfoHide()
-      infoOverlay.setMap(map)
-      const snap = radarSnapshotRef.current
-      const locked =
-        enableRadarHoverPanel &&
-        snap != null &&
-        pinEl.classList.contains('enemy-pin--radar-lock')
-      if (locked) {
-        if (radarHoverLeaveTimerRef.current != null) {
-          window.clearTimeout(radarHoverLeaveTimerRef.current)
-          radarHoverLeaveTimerRef.current = null
-        }
-        setRadarEnemyHover(enemy)
-      }
-    })
-    pinEl.addEventListener('mouseleave', () => {
-      scheduleEnemyInfoHide()
-      if (enableRadarHoverPanel && pinEl.classList.contains('enemy-pin--radar-lock')) {
-        radarHoverLeaveTimerRef.current = window.setTimeout(() => {
-          setRadarEnemyHover(null)
-          radarHoverLeaveTimerRef.current = null
-        }, 320)
-      }
-    })
-    infoContent.addEventListener('mouseenter', clearEnemyInfoHide)
-    infoContent.addEventListener('mouseleave', scheduleEnemyInfoHide)
-    pinEl.addEventListener('click', (ev) => {
-      ev.stopPropagation()
-      clearEnemyInfoHide()
-      infoOverlay.setMap(null)
-      setRadarEnemyHover(null)
-      openMapVideoModalRef.current({
-        title: enemy.codename,
-        subtitle: `적군 · ${enemy.threatLevel} · ${enemy.enemyBranch}`,
-        videoUrl: enemy.droneVideoUrl || null,
+      infoOverlay = new kakaoMaps.CustomOverlay({
+        position,
+        yAnchor: 0.5,
+        xAnchor: 0,
+        content: infoContent,
+        zIndex: 4,
       })
-    })
+      infoOverlay.setMap(null)
+
+      let infoHideTimer: number | null = null
+      const clearEnemyInfoHide = () => {
+        if (infoHideTimer !== null) {
+          window.clearTimeout(infoHideTimer)
+          infoHideTimer = null
+        }
+      }
+      const scheduleEnemyInfoHide = () => {
+        clearEnemyInfoHide()
+        infoHideTimer = window.setTimeout(() => infoOverlay.setMap(null), 180)
+      }
+
+      pinEl.addEventListener('mouseenter', () => {
+        clearEnemyInfoHide()
+        infoOverlay.setMap(map)
+        const snap = radarSnapshotRef.current
+        const locked =
+          enableRadarHoverPanel &&
+          snap != null &&
+          pinEl.classList.contains('enemy-pin--radar-lock')
+        if (locked) {
+          if (radarHoverLeaveTimerRef.current != null) {
+            window.clearTimeout(radarHoverLeaveTimerRef.current)
+            radarHoverLeaveTimerRef.current = null
+          }
+          setRadarEnemyHover(enemy)
+        }
+      })
+      pinEl.addEventListener('mouseleave', () => {
+        scheduleEnemyInfoHide()
+        if (enableRadarHoverPanel && pinEl.classList.contains('enemy-pin--radar-lock')) {
+          radarHoverLeaveTimerRef.current = window.setTimeout(() => {
+            setRadarEnemyHover(null)
+            radarHoverLeaveTimerRef.current = null
+          }, 320)
+        }
+      })
+      infoContent.addEventListener('mouseenter', clearEnemyInfoHide)
+      infoContent.addEventListener('mouseleave', scheduleEnemyInfoHide)
+      pinEl.addEventListener('click', (ev) => {
+        ev.stopPropagation()
+        clearEnemyInfoHide()
+        infoOverlay.setMap(null)
+        setRadarEnemyHover(null)
+        openMapVideoModalRef.current({
+          title: enemy.codename,
+          subtitle: `적군 · ${enemy.threatLevel} · ${enemy.enemyBranch}`,
+          videoUrl: enemy.droneVideoUrl || null,
+        })
+      })
+    }
 
     enemyScene.push({
       id: enemy.id,
@@ -1319,6 +1670,21 @@ function attachKakaoTacticalPins(
 }
 
 function HomePage({ user }: HomePageProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const scenarioStep = useMemo((): 0 | 1 | 2 | 3 | 4 | 5 => {
+    const q = searchParams.get('scenario')
+    const n = q != null && q !== '' ? parseInt(q, 10) : NaN
+    if (Number.isFinite(n) && n >= 1 && n <= 5) return n as 0 | 1 | 2 | 3 | 4 | 5
+    return 0
+  }, [searchParams])
+  const setScenarioStep = useCallback(
+    (step: 0 | 1 | 2 | 3 | 4 | 5) => {
+      if (step === 0) setSearchParams({}, { replace: true })
+      else setSearchParams({ scenario: String(step) }, { replace: true })
+    },
+    [setSearchParams],
+  )
+
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const insetMapContainerRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<MapScene | null>(null)
@@ -1344,8 +1710,6 @@ function HomePage({ user }: HomePageProps) {
   const [radarSnapshot, setRadarSnapshot] = useState<RadarSnapshot | null>(null)
   /** SAR로 적 표적 확정 후 true — UAV·전술 지도 공통 */
   const [sarContact, setSarContact] = useState(false)
-  /** 0=흐름 요약, 1=항공 SAR, 2=UAV SAR, 3=펄스 소개, 4=FMCW 소개, 5=통합 시뮬(지도) */
-  const [scenarioStep, setScenarioStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0)
   /** 통합 시뮬(5) 내부만: 3=펄스 대기, 4=펄스, 5=FMCW — 거리로 자동 전환 */
   const [tacticalSubStep, setTacticalSubStep] = useState<3 | 4 | 5>(3)
   /** 3~5단계 표현 — 카카오 지도·카드·SVG·Canvas·나란히 */
@@ -1358,6 +1722,46 @@ function HomePage({ user }: HomePageProps) {
   >('schematic')
   const [radarEnemyHover, setRadarEnemyHover] = useState<EnemyInfiltration | null>(null)
   const radarHoverLeaveTimerRef = useRef<number | null>(null)
+  const [mapEnemyAssetHover, setMapEnemyAssetHover] = useState<EnemyInfiltration | null>(null)
+  const enemyAssetFloatLeaveTimerRef = useRef<number | null>(null)
+  const clearEnemyAssetFloatTimer = useCallback(() => {
+    if (enemyAssetFloatLeaveTimerRef.current != null) {
+      window.clearTimeout(enemyAssetFloatLeaveTimerRef.current)
+      enemyAssetFloatLeaveTimerRef.current = null
+    }
+  }, [])
+  const scheduleEnemyAssetFloatHide = useCallback(() => {
+    clearEnemyAssetFloatTimer()
+    enemyAssetFloatLeaveTimerRef.current = window.setTimeout(() => {
+      setMapEnemyAssetHover(null)
+      enemyAssetFloatLeaveTimerRef.current = null
+    }, 520)
+  }, [clearEnemyAssetFloatTimer])
+  const enemyAssetHoverRef = useRef<{
+    enter: (enemy: EnemyInfiltration) => void
+    leave: () => void
+    clear: () => void
+  } | null>(null)
+  const [mapCursorLatLng, setMapCursorLatLng] = useState<{ lat: number; lng: number } | null>(
+    null,
+  )
+  const mapCursorSetterRef = useRef<(p: { lat: number; lng: number } | null) => void>(() => {})
+  mapCursorSetterRef.current = (p) => setMapCursorLatLng(p)
+  const [mapSelectedAsset, setMapSelectedAsset] = useState<{
+    kind: 'friendly' | 'enemy'
+    id: number
+  } | null>(null)
+  const onSelectMapAssetRef = useRef<(kind: 'friendly' | 'enemy', id: number) => void>(() => {})
+  onSelectMapAssetRef.current = (kind, id) => setMapSelectedAsset({ kind, id })
+  const [uavLaunchStartProgress, setUavLaunchStartProgress] = useState<number | null>(null)
+  const [droneLaunchStartProgress, setDroneLaunchStartProgress] = useState<number | null>(null)
+  const [uavEnemyVideoExpanded, setUavEnemyVideoExpanded] = useState(false)
+  const [tacticRecommendations, setTacticRecommendations] = useState<TacticRecommendation[]>([])
+  const [tacticLoading, setTacticLoading] = useState(false)
+  const [tacticSavePending, setTacticSavePending] = useState(false)
+  const [tacticSaveMessage, setTacticSaveMessage] = useState<string | null>(null)
+  const [selectedTacticUnit, setSelectedTacticUnit] = useState<string | null>(null)
+  const [tacticDecisionNote, setTacticDecisionNote] = useState('')
 
   const c2UnitForSim = useMemo(
     () => friendlyUnits.find(isBattalionC2Unit) ?? null,
@@ -1377,6 +1781,95 @@ function HomePage({ user }: HomePageProps) {
       primaryEnemyForSim?.id ?? null,
     )
   }, [scenarioStep, simPaths, simProgress, c2UnitForSim?.id, primaryEnemyForSim?.id])
+
+  const uavTransitRatio = useMemo(() => {
+    if (uavLaunchStartProgress == null) return 0
+    return Math.min(1, Math.max(0, (simProgress - uavLaunchStartProgress) / UAV_TRANSIT_PROGRESS_SPAN))
+  }, [uavLaunchStartProgress, simProgress])
+
+  const droneTransitRatio = useMemo(() => {
+    if (droneLaunchStartProgress == null) return 0
+    return Math.min(1, Math.max(0, (simProgress - droneLaunchStartProgress) / DRONE_TRANSIT_PROGRESS_SPAN))
+  }, [droneLaunchStartProgress, simProgress])
+
+  const narrativeEnemyDistanceKm = useMemo(() => {
+    const startKm = 320
+    const endKm = 8
+    return Math.max(endKm, startKm - (startKm - endKm) * simProgress)
+  }, [simProgress])
+
+  const scenarioV2Phase = useMemo<ScenarioV2Phase>(() => {
+    if (scenarioStep !== 5) return 'sat-watch'
+    if (uavLaunchStartProgress == null) {
+      return simProgress >= SAR_WIDE_SCAN_PAUSE_PROGRESS ? 'sat-wide-pause' : 'sat-watch'
+    }
+    if (uavTransitRatio < 1) return 'uav-transit'
+    if (enemyDistanceKm == null || enemyDistanceKm > SCENARIO_RANGES_KM.PULSE_MAX) {
+      return 'uav-track-only'
+    }
+    if (enemyDistanceKm > SCENARIO_RANGES_KM.FMCW_MAX) return 'pulse-dot'
+    if (droneTransitRatio < 1) return 'fmcw-drone-transit'
+    return 'tactics'
+  }, [scenarioStep, uavLaunchStartProgress, uavTransitRatio, enemyDistanceKm, droneTransitRatio, simProgress])
+
+  const enemyMapVisible =
+    scenarioStep !== 5
+      ? true
+      : scenarioV2Phase === 'pulse-dot' ||
+        scenarioV2Phase === 'fmcw-drone-transit' ||
+        scenarioV2Phase === 'tactics'
+
+  const enemyPulseDotOnly = scenarioStep === 5 && scenarioV2Phase === 'pulse-dot'
+
+  enemyAssetHoverRef.current = {
+    enter: (enemy) => {
+      if (!enemyMapVisible) return
+      clearEnemyAssetFloatTimer()
+      setMapEnemyAssetHover(enemy)
+    },
+    leave: () => {
+      scheduleEnemyAssetFloatHide()
+    },
+    clear: () => {
+      clearEnemyAssetFloatTimer()
+      setMapEnemyAssetHover(null)
+    },
+  }
+
+  const mapSelectedFriendly = useMemo(() => {
+    if (!mapSelectedAsset || mapSelectedAsset.kind !== 'friendly') return null
+    return friendlyUnits.find((u) => u.id === mapSelectedAsset.id) ?? null
+  }, [mapSelectedAsset, friendlyUnits])
+
+  const mapSelectedEnemy = useMemo(() => {
+    if (!mapSelectedAsset || mapSelectedAsset.kind !== 'enemy') return null
+    return enemyInfiltrations.find((e) => e.id === mapSelectedAsset.id) ?? null
+  }, [mapSelectedAsset, enemyInfiltrations])
+
+  const mapSelectedKinematics = useMemo(() => {
+    if (!mapSelectedAsset || !simPaths) return null
+    const path =
+      mapSelectedAsset.kind === 'friendly'
+        ? simPaths.friendly.get(mapSelectedAsset.id)
+        : simPaths.enemy.get(mapSelectedAsset.id)
+    if (!path?.length) return null
+    const { lat, lng } = samplePath(path, simProgress)
+    const spd = speedAlongPathKmH(path, simProgress)
+    const elev = syntheticElevationM(lat, lng, mapSelectedAsset.id * 997)
+    const brg = movementBearingAlongPath(path, simProgress)
+    return { lat, lng, spd, elev, brg }
+  }, [mapSelectedAsset, simPaths, simProgress])
+
+  const mapEnemyHoverKinematics = useMemo(() => {
+    if (!mapEnemyAssetHover || !simPaths) return null
+    const path = simPaths.enemy.get(mapEnemyAssetHover.id)
+    if (!path?.length) return null
+    const { lat, lng } = samplePath(path, simProgress)
+    const spd = speedAlongPathKmH(path, simProgress)
+    const elev = syntheticElevationM(lat, lng, mapEnemyAssetHover.id * 997 + 13)
+    const brg = movementBearingAlongPath(path, simProgress)
+    return { lat, lng, spd, elev, brg }
+  }, [mapEnemyAssetHover, simPaths, simProgress])
 
   /** 지휘통제실 기준 40km 이내일 때만 전술 지도 PiP + 인셋 확대(레이더 API와 무관) */
   const showTacticalPip =
@@ -1433,6 +1926,82 @@ function HomePage({ user }: HomePageProps) {
   const mapUiActive =
     scenarioStep === 5 && (tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare')
 
+  useEffect(() => {
+    if (!mapUiActive) {
+      mapCursorSetterRef.current(null)
+      setMapSelectedAsset(null)
+      clearEnemyAssetFloatTimer()
+      setMapEnemyAssetHover(null)
+    }
+  }, [mapUiActive, clearEnemyAssetFloatTimer])
+
+  useEffect(() => {
+    if (!enemyMapVisible) {
+      clearEnemyAssetFloatTimer()
+      setMapEnemyAssetHover(null)
+    }
+  }, [enemyMapVisible, clearEnemyAssetFloatTimer])
+
+  useEffect(() => {
+    if (scenarioStep !== 5) {
+      setUavEnemyVideoExpanded(false)
+      return
+    }
+    // 재구성 시나리오에서는 SAR 접촉을 기본 전제로 두고 센서 단계를 진행.
+    if (!sarContact) setSarContact(true)
+  }, [scenarioStep, sarContact])
+
+  useEffect(() => {
+    if (scenarioStep !== 5 || !simPaths) return
+    if (uavLaunchStartProgress != null) return
+    if (simProgress >= SAR_WIDE_SCAN_PAUSE_PROGRESS && simPlaying) {
+      setSimPlaying(false)
+      return
+    }
+    if (simProgress < SAR_WIDE_SCAN_PAUSE_PROGRESS && !simPlaying) {
+      setSimPlaying(true)
+    }
+  }, [scenarioStep, simPaths, uavLaunchStartProgress, simProgress, simPlaying])
+
+  useEffect(() => {
+    if (scenarioStep !== 5) return
+    if (uavLaunchStartProgress == null) return
+    if (enemyDistanceKm == null || enemyDistanceKm > SCENARIO_RANGES_KM.FMCW_MAX) return
+    if (droneLaunchStartProgress == null) {
+      setDroneLaunchStartProgress(simProgress)
+    }
+  }, [
+    scenarioStep,
+    uavLaunchStartProgress,
+    enemyDistanceKm,
+    droneLaunchStartProgress,
+    simProgress,
+  ])
+
+  useEffect(() => {
+    if (scenarioStep !== 5) {
+      setUavLaunchStartProgress(null)
+      setDroneLaunchStartProgress(null)
+      setUavEnemyVideoExpanded(false)
+      setTacticSaveMessage(null)
+      setSelectedTacticUnit(null)
+      setTacticDecisionNote('')
+      setTacticRecommendations([])
+      return
+    }
+    setTacticLoading(true)
+    void requestJson<{ scenarioKey: string; recommendations: TacticRecommendation[] }>(
+      `${API_BASE_URL}/map/tactics/recommendations?scenarioKey=battalion-reconstructed-v1`,
+    )
+      .then((res) => {
+        setTacticRecommendations(res.recommendations ?? [])
+      })
+      .catch(() => {
+        setTacticRecommendations([])
+      })
+      .finally(() => setTacticLoading(false))
+  }, [scenarioStep])
+
   const radarSnapshotRef = useRef<RadarSnapshot | null>(null)
   radarSnapshotRef.current = radarSnapshot
 
@@ -1446,6 +2015,8 @@ function HomePage({ user }: HomePageProps) {
     radarSite: (radarSnapshot?.fmcw.radar as RadarSite) ?? null,
     primaryEnemyId: primaryEnemyForSim?.id ?? null,
     sarContact,
+    enemyVisible: enemyMapVisible,
+    enemyDotOnly: enemyPulseDotOnly,
     scenarioIntegratedSimActive: scenarioStep === 5,
     onPrimaryEnemyRadarDetect: (detected) => {
       if (detected && !radarDiscoveryAnnouncedRef.current) {
@@ -1769,6 +2340,48 @@ function HomePage({ user }: HomePageProps) {
     if (inset) applySimulationFrame(inset, simPaths, simProgressRef.current, opts)
   }, [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
 
+  const handleLaunchUavFromBattalion = useCallback(() => {
+    if (scenarioStep !== 5) return
+    const now = Math.max(simProgressRef.current, SAR_WIDE_SCAN_PAUSE_PROGRESS)
+    simProgressRef.current = now
+    setSimProgress(now)
+    setUavLaunchStartProgress(now)
+    setSimPlaying(true)
+    setTacticSaveMessage(null)
+  }, [scenarioStep])
+
+  const handleSaveTacticDecision = useCallback(async () => {
+    if (!selectedTacticUnit) return
+    const picked = tacticRecommendations.find((r) => r.unitName === selectedTacticUnit)
+    if (!picked) return
+    setTacticSavePending(true)
+    setTacticSaveMessage(null)
+    try {
+      await requestJson<{ ok: boolean; id: number; savedAt: string }>(
+        `${API_BASE_URL}/map/tactics/decision`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scenarioKey: 'battalion-reconstructed-v1',
+            selectedUnitName: picked.unitName,
+            suitabilityPct: picked.suitabilityPct,
+            note: tacticDecisionNote.trim(),
+            source: 'web-ui',
+            rawPayload: picked.payload,
+          }),
+        },
+      )
+      setTacticSaveMessage(
+        `전술 선택 저장 완료: ${picked.unitName} (${picked.suitabilityPct.toFixed(0)}%)`,
+      )
+    } catch (err) {
+      setTacticSaveMessage(err instanceof Error ? err.message : '전술 저장 실패')
+    } finally {
+      setTacticSavePending(false)
+    }
+  }, [selectedTacticUnit, tacticRecommendations, tacticDecisionNote])
+
   const handleSimReset = useCallback(() => {
     simProgressRef.current = 0
     setSimProgress(0)
@@ -1780,6 +2393,14 @@ function HomePage({ user }: HomePageProps) {
     setScenarioStep(0)
     setTacticalSubStep(3)
     setSarContact(false)
+    setUavLaunchStartProgress(null)
+    setDroneLaunchStartProgress(null)
+    setUavEnemyVideoExpanded(false)
+    setSelectedTacticUnit(null)
+    setTacticDecisionNote('')
+    setTacticSaveMessage(null)
+    setMapSelectedAsset(null)
+    mapCursorSetterRef.current(null)
     const scene = sceneRef.current
     const inset = insetSceneRef.current
     const dist0 =
@@ -1798,9 +2419,15 @@ function HomePage({ user }: HomePageProps) {
     }
   }, [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
 
+  const scenarioHoldForUav =
+    scenarioStep === 5 &&
+    scenarioV2Phase === 'sat-wide-pause' &&
+    uavLaunchStartProgress == null
+
   const simTimelineDisabled =
     !simPaths ||
     scenarioStep !== 5 ||
+    scenarioHoldForUav ||
     ((tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare') && mapLoading)
 
   const getSeekRatioFromClientX = useCallback((clientX: number) => {
@@ -1946,6 +2573,19 @@ function HomePage({ user }: HomePageProps) {
         map.setBounds(new kakaoMaps.LatLngBounds(mainSw, mainNe), 28, 28, 28, 28)
         map.setZoomable(false)
 
+        kakaoMaps.event.addListener(map, 'mousemove', (mouseEvent: unknown) => {
+          if (!alive) return
+          const me = mouseEvent as { latLng: { getLat: () => number; getLng: () => number } }
+          const ll = me.latLng
+          mapCursorSetterRef.current({ lat: ll.getLat(), lng: ll.getLng() })
+        })
+        const mainMapHost = mapContainerRef.current
+        const onMainMapHostLeave = () => {
+          if (!alive) return
+          mapCursorSetterRef.current(null)
+        }
+        mainMapHost?.addEventListener('mouseleave', onMainMapHostLeave)
+
         const ib = BATTALION_SCENARIO.insetBounds
         const insetSw = new kakaoMaps.LatLng(ib.sw.lat, ib.sw.lng)
         const insetNe = new kakaoMaps.LatLng(ib.ne.lat, ib.ne.lng)
@@ -1969,6 +2609,10 @@ function HomePage({ user }: HomePageProps) {
           openMapVideoModalRef,
           radarHoverLeaveTimerRef,
           setRadarEnemyHover,
+          enableTacticalAisUi: true,
+          simPathsRef,
+          simProgressRef,
+          onSelectMapAssetRef,
         }
 
         const mainPins = attachKakaoTacticalPins({
@@ -1976,6 +2620,7 @@ function HomePage({ user }: HomePageProps) {
           map,
           enableRadarHoverPanel: true,
           overviewSarC2Dot: true,
+          enemyAssetHoverRef,
         })
 
         const radarDisposables: Array<
@@ -1984,6 +2629,65 @@ function HomePage({ user }: HomePageProps) {
           | KakaoCircleInstance
           | KakaoPolylineInstance
         > = []
+
+        const sarFrame = BATTALION_SCENARIO.overviewSarWatchBounds
+        const sarRectPath = buildRectanglePolygonPath(kakaoMaps, sarFrame)
+        const sarZonePoly = new kakaoMaps.Polygon({
+          path: sarRectPath,
+          strokeWeight: 4,
+          strokeColor: '#d97706',
+          strokeOpacity: 0.95,
+          fillColor: '#fbbf24',
+          fillOpacity: 0.14,
+          zIndex: 0,
+        })
+        sarZonePoly.setMap(map)
+        radarDisposables.push(sarZonePoly)
+        const sarZoneCenter = rectBoundsCenter(sarFrame)
+        const sarZoneLbl = document.createElement('div')
+        sarZoneLbl.className = 'map-overview-region-label map-overview-region-label--sar'
+        sarZoneLbl.innerHTML =
+          '<span class="map-overview-region-label__title">위성 SAR 초점 감시</span>' +
+          '<span class="map-overview-region-label__sub">적 집결·출발 지점 소구역</span>'
+        const sarZoneOv = new kakaoMaps.CustomOverlay({
+          map,
+          position: new kakaoMaps.LatLng(sarZoneCenter.lat, sarZoneCenter.lng),
+          yAnchor: 0.5,
+          xAnchor: 0.5,
+          content: sarZoneLbl,
+          zIndex: 11,
+        })
+        radarDisposables.push(sarZoneOv)
+
+        const routeFrame = BATTALION_SCENARIO.expectedEnemyRouteBounds
+        const routeRectPath = buildRectanglePolygonPath(kakaoMaps, routeFrame)
+        const routeZonePoly = new kakaoMaps.Polygon({
+          path: routeRectPath,
+          strokeWeight: 4,
+          strokeColor: '#1d4ed8',
+          strokeOpacity: 0.92,
+          fillColor: '#60a5fa',
+          fillOpacity: 0.1,
+          zIndex: 0,
+        })
+        routeZonePoly.setMap(map)
+        radarDisposables.push(routeZonePoly)
+        const routeZoneCenter = rectBoundsCenter(routeFrame)
+        const routeZoneLbl = document.createElement('div')
+        routeZoneLbl.className =
+          'map-overview-region-label map-overview-region-label--route'
+        routeZoneLbl.innerHTML =
+          '<span class="map-overview-region-label__title">남하 침투 예상 경로 권역</span>' +
+          '<span class="map-overview-region-label__sub">집결지 → 침투 목표 축 (도로 시뮬)</span>'
+        const routeZoneOv = new kakaoMaps.CustomOverlay({
+          map,
+          position: new kakaoMaps.LatLng(routeZoneCenter.lat, routeZoneCenter.lng),
+          yAnchor: 0.5,
+          xAnchor: 0.5,
+          content: routeZoneLbl,
+          zIndex: 11,
+        })
+        radarDisposables.push(routeZoneOv)
 
         for (const z of BATTALION_SCENARIO.sarTankLossZones) {
           const zCenter = new kakaoMaps.LatLng(z.lat, z.lng)
@@ -2092,8 +2796,48 @@ function HomePage({ user }: HomePageProps) {
           })
           radarDisposables.push(radarSiteOv)
 
+          const futureTraj = radarFmcwForMap.fmcw.insights?.futureTrajectoryLatLng
+          const futureTrajOk =
+            futureTraj && futureTraj.length >= 2 ? futureTraj : null
           const track = radarFmcwForMap.fmcw.track
-          if (track && track.predictedPath.length >= 2) {
+          const trackDupFuture =
+            futureTrajOk &&
+            track &&
+            latLngPolylineAlmostEqual(track.predictedPath, futureTrajOk)
+
+          if (futureTrajOk) {
+            const futPath = futureTrajOk.map((p) => new kakaoMaps.LatLng(p.lat, p.lng))
+            const futLine = new kakaoMaps.Polyline({
+              path: futPath,
+              strokeWeight: 4,
+              strokeColor: '#22d3ee',
+              strokeOpacity: 0.92,
+              strokeStyle: 'solid',
+              zIndex: 5,
+            })
+            futLine.setMap(map)
+            radarDisposables.push(futLine)
+
+            const midF = futureTrajOk[Math.floor(futureTrajOk.length / 2)]!
+            const midFutLl = new kakaoMaps.LatLng(midF.lat, midF.lng)
+            const futLbl = document.createElement('div')
+            futLbl.className = 'radar-fmcw-future-track-label'
+            futLbl.innerHTML = `
+              <span class="radar-fmcw-future-track-label__title">속도 외삽 궤적</span>
+              <span class="radar-fmcw-future-track-label__row">연속 레이더 프레임 → 1위 후보 미래 경로 (별도 레이어)</span>
+            `
+            const futOv = new kakaoMaps.CustomOverlay({
+              map,
+              position: midFutLl,
+              yAnchor: 1,
+              xAnchor: 0.5,
+              content: futLbl,
+              zIndex: 9,
+            })
+            radarDisposables.push(futOv)
+          }
+
+          if (track && track.predictedPath.length >= 2 && !trackDupFuture) {
             const trackPath = track.predictedPath.map(
               (p) => new kakaoMaps.LatLng(p.lat, p.lng),
             )
@@ -2113,8 +2857,8 @@ function HomePage({ user }: HomePageProps) {
             const trackLbl = document.createElement('div')
             trackLbl.className = 'radar-fmcw-track-label'
             trackLbl.innerHTML = `
-              <span class="radar-fmcw-track-label__title">FMCW 예측</span>
-              <span class="radar-fmcw-track-label__row">방위 <strong>${track.bearingDeg}°</strong> · 위상 기준 <strong>${track.phaseRefDeg}°</strong></span>
+              <span class="radar-fmcw-track-label__title">FMCW 예측 (VoD·도플러 외삽)</span>
+              <span class="radar-fmcw-track-label__row">진행 방위 <strong>${track.bearingDeg}°</strong> · 위상 보조 <strong>${track.phaseRefDeg}°</strong></span>
             `
             const trackOv = new kakaoMaps.CustomOverlay({
               map,
@@ -2125,6 +2869,27 @@ function HomePage({ user }: HomePageProps) {
               zIndex: 8,
             })
             radarDisposables.push(trackOv)
+          }
+
+          const riskZones = radarFmcwForMap.fmcw.insights?.vodRiskZones
+          if (riskZones && riskZones.length > 0) {
+            for (const zone of riskZones) {
+              if (!zone.polygon || zone.polygon.length < 3) continue
+              const riskPath = zone.polygon.map(
+                (p) => new kakaoMaps.LatLng(p.lat, p.lng),
+              )
+              const riskPoly = new kakaoMaps.Polygon({
+                path: riskPath,
+                strokeWeight: 2,
+                strokeColor: '#b91c1c',
+                strokeOpacity: 0.85,
+                fillColor: '#ef4444',
+                fillOpacity: 0.14,
+                zIndex: 3,
+              })
+              riskPoly.setMap(map)
+              radarDisposables.push(riskPoly)
+            }
           }
 
           radarFmcwForMap.fmcw.detections.forEach((det) => {
@@ -2274,6 +3039,7 @@ function HomePage({ user }: HomePageProps) {
       onLoadKakaoMap()
       return () => {
         alive = false
+        mapCursorSetterRef.current(null)
         sceneRef.current = null
         insetSceneRef.current = null
         if (mapContainerRef.current) {
@@ -2294,6 +3060,7 @@ function HomePage({ user }: HomePageProps) {
 
     return () => {
       alive = false
+      mapCursorSetterRef.current(null)
       sceneRef.current = null
       insetSceneRef.current = null
       if (mapContainerRef.current) {
@@ -2569,6 +3336,51 @@ function HomePage({ user }: HomePageProps) {
           <strong>1~4단계</strong>에서 각 센서를 소개한 뒤 이 화면에서 연동을 확인합니다. 표현은 아래{' '}
           <strong>지도 · 카드 · SVG · Canvas · 나란히</strong>에서 바꿀 수 있습니다.
         </p>
+        <section className="scenario-v2-panel" aria-label="재구성 시나리오 진행">
+          <div className="scenario-v2-panel__head">
+            <h3>재구성 시나리오</h3>
+            <span className="scenario-v2-panel__clock">
+              시나리오 경과 {Math.round(simProgress * 50)}분 · 위성 SAR 갱신 {SAR_UPDATE_INTERVAL_HOURS}시간/회
+            </span>
+          </div>
+          <p className="muted scenario-v2-panel__desc">
+            초기에는 적 위치를 숨기고 SAR 이상징후(전차 15대 이상 소실) 이후 UAV 출정을 승인합니다. UAV 단계에서는
+            분류(전차/일반차량)와 객체 연속성만 유지하며, 40km에서 펄스 점표시, 15~10km 구간부터 FMCW·드론·YOLO를
+            결합합니다.
+          </p>
+          <div className="scenario-v2-panel__status">
+            <strong>현재 단계:</strong>{' '}
+            {scenarioV2Phase === 'sat-watch'
+              ? '위성 SAR 1차 감시'
+              : scenarioV2Phase === 'sat-wide-pause'
+                ? '위성 SAR 2차 광역 탐지 · UAV 출정 대기(일시정지)'
+                : scenarioV2Phase === 'uav-transit'
+                  ? 'UAV 군사분계선 이동(5분 할당)'
+                  : scenarioV2Phase === 'uav-track-only'
+                    ? 'UAV 추적(적 약 250km 권역 · 위치 비공개)'
+                    : scenarioV2Phase === 'pulse-dot'
+                      ? '펄스 레이더 40km 점탐지'
+                      : scenarioV2Phase === 'fmcw-drone-transit'
+                        ? 'FMCW 단계 · 드론 전장 이동(5분)'
+                        : '전술 선택 지원 단계'}
+          </div>
+          <div className="scenario-v2-panel__metrics">
+            <span>가정 적 거리: 약 {narrativeEnemyDistanceKm.toFixed(1)} km</span>
+            {uavLaunchStartProgress != null && (
+              <span>UAV 이동률 {Math.round(uavTransitRatio * 100)}%</span>
+            )}
+            {droneLaunchStartProgress != null && (
+              <span>드론 이동률 {Math.round(droneTransitRatio * 100)}%</span>
+            )}
+          </div>
+          {scenarioHoldForUav && (
+            <div className="scenario-v2-panel__action">
+              <button type="button" className="btn-primary" onClick={handleLaunchUavFromBattalion}>
+                UAV 출정 (대대 → 군사분계선)
+              </button>
+            </div>
+          )}
+        </section>
         <div className="sim-toolbar">
           <button
             type="button"
@@ -2827,6 +3639,12 @@ function HomePage({ user }: HomePageProps) {
                 </span>
               )}
             </p>
+            <div className="map-ais-workbench">
+              <div
+                className={`map-ais-workbench__mapcol${
+                  uavEnemyVideoExpanded ? ' map-ais-workbench__mapcol--focus' : ''
+                }`}
+              >
             <div className="map-with-radar-hover">
               <div
                 className={`map-overview-stack${showTacticalPip ? ' map-overview-stack--has-pip' : ''}`}
@@ -2859,6 +3677,56 @@ function HomePage({ user }: HomePageProps) {
                     )}
                   </div>
                 </div>
+                {(scenarioV2Phase === 'uav-track-only' ||
+                  scenarioV2Phase === 'pulse-dot' ||
+                  scenarioV2Phase === 'fmcw-drone-transit' ||
+                  scenarioV2Phase === 'tactics') &&
+                  primaryEnemyForSim?.droneVideoUrl && (
+                    <button
+                      type="button"
+                      className={`scenario-corner-video scenario-corner-video--left${
+                        uavEnemyVideoExpanded ? ' scenario-corner-video--expanded' : ''
+                      }`}
+                      onClick={() => setUavEnemyVideoExpanded((v) => !v)}
+                      title="클릭: 초협소 구역 확대/원복"
+                    >
+                      <span className="scenario-corner-video__head">
+                        UAV 식별 영상 · {uavEnemyVideoExpanded ? '원복' : '확대'}
+                      </span>
+                      <video src={primaryEnemyForSim.droneVideoUrl} autoPlay muted loop playsInline />
+                      <span className="scenario-corner-video__hint">
+                        탱크/일반차량 분류 + 동일 객체 연속성 확인
+                      </span>
+                    </button>
+                  )}
+                {((scenarioV2Phase === 'fmcw-drone-transit' && droneTransitRatio >= 0.35) ||
+                  scenarioV2Phase === 'tactics') &&
+                  primaryEnemyForSim?.droneVideoUrl && (
+                    <div className="scenario-corner-video scenario-corner-video--right">
+                      <span className="scenario-corner-video__head">YOLO 기반 전차 판별</span>
+                      <video
+                        src={primaryEnemyForSim.droneVideoUrl}
+                        controls
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                      />
+                      <span className="scenario-corner-video__hint">
+                        드론 전장 도달 후 우상단 판별 영상(맵 고정 영역)
+                      </span>
+                    </div>
+                  )}
+                {uavLaunchStartProgress != null && (
+                  <div className="scenario-asset-chip scenario-asset-chip--uav">
+                    <strong>UAV-01</strong> 대대→군사분계선 이동 {Math.round(uavTransitRatio * 100)}%
+                  </div>
+                )}
+                {droneLaunchStartProgress != null && (
+                  <div className="scenario-asset-chip scenario-asset-chip--drone">
+                    <strong>DRONE-EOIR</strong> 전장 접근 {Math.round(droneTransitRatio * 100)}%
+                  </div>
+                )}
               </div>
         {radarEnemyHover && radarSnapshot && radarHoverMetrics && (
           <div
@@ -2929,6 +3797,294 @@ function HomePage({ user }: HomePageProps) {
             </dl>
           </div>
         )}
+        {enemyMapVisible && mapEnemyAssetHover && (
+          <div
+            className="map-enemy-asset-float"
+            role="dialog"
+            aria-label="표적 재원(호버)"
+            onMouseEnter={clearEnemyAssetFloatTimer}
+            onMouseLeave={scheduleEnemyAssetFloatHide}
+          >
+            <div className="map-enemy-asset-float__head">
+              <div>
+                <p className="map-enemy-asset-float__badge">표적 재원</p>
+                <h4 className="map-enemy-asset-float__title">{mapEnemyAssetHover.codename}</h4>
+                <p className="muted map-enemy-asset-float__sub">
+                  {mapEnemyAssetHover.enemyBranch} · 위협 {mapEnemyAssetHover.threatLevel}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="map-enemy-asset-float__close"
+                aria-label="닫기"
+                onClick={() => {
+                  clearEnemyAssetFloatTimer()
+                  setMapEnemyAssetHover(null)
+                }}
+              >
+                ×
+              </button>
+            </div>
+            {mapEnemyHoverKinematics && (
+              <dl className="map-ais-asset-panel__kinematics map-enemy-asset-float__kin">
+                <div>
+                  <dt>이동속도</dt>
+                  <dd>
+                    {mapEnemyHoverKinematics.spd != null
+                      ? `${mapEnemyHoverKinematics.spd.toFixed(1)} km/h`
+                      : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>좌표</dt>
+                  <dd>
+                    {formatLatLngReadout(mapEnemyHoverKinematics.lat, mapEnemyHoverKinematics.lng)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>표고</dt>
+                  <dd>{mapEnemyHoverKinematics.elev} m</dd>
+                </div>
+                {mapEnemyHoverKinematics.brg != null && (
+                  <div>
+                    <dt>이동 방위</dt>
+                    <dd>
+                      {mapEnemyHoverKinematics.brg.toFixed(0)}° (
+                      {bearingToCardinalKo(mapEnemyHoverKinematics.brg)})
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
+            <dl className="map-ais-asset-panel__specs map-enemy-asset-float__specs">
+              <div>
+                <dt>병과</dt>
+                <dd>{mapEnemyAssetHover.enemyBranch}</dd>
+              </div>
+              <div>
+                <dt>위협</dt>
+                <dd>{mapEnemyAssetHover.threatLevel}</dd>
+              </div>
+              <div>
+                <dt>추정 인원</dt>
+                <dd>{mapEnemyAssetHover.estimatedCount}명</dd>
+              </div>
+              <div>
+                <dt>관측 시각</dt>
+                <dd>{mapEnemyAssetHover.observedAt}</dd>
+              </div>
+              <div>
+                <dt>위험 반경</dt>
+                <dd>{mapEnemyAssetHover.riskRadiusMeter.toLocaleString('ko-KR')} m</dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              className="btn-primary map-ais-asset-panel__video map-enemy-asset-float__video"
+              onClick={() => {
+                clearEnemyAssetFloatTimer()
+                setMapEnemyAssetHover(null)
+                setMapVideoModal({
+                  title: mapEnemyAssetHover.codename,
+                  subtitle: `적군 · ${mapEnemyAssetHover.threatLevel} · ${mapEnemyAssetHover.enemyBranch}`,
+                  videoUrl: mapEnemyAssetHover.droneVideoUrl || null,
+                })
+              }}
+            >
+              드론 정찰 영상
+            </button>
+          </div>
+        )}
+            </div>
+                <footer className="map-cursor-readout" role="status">
+                  <span className="map-cursor-readout__label">커서 위치</span>
+                  <span className="map-cursor-readout__coords">
+                    {mapCursorLatLng
+                      ? formatLatLngReadout(mapCursorLatLng.lat, mapCursorLatLng.lng)
+                      : '지도 위에 마우스를 올리면 위·경도가 표시됩니다.'}
+                  </span>
+                </footer>
+              </div>
+
+              {!uavEnemyVideoExpanded && (
+              <aside className="map-ais-asset-panel" aria-labelledby="map-ais-panel-title">
+                <div className="map-ais-asset-panel__head">
+                  <h4 id="map-ais-panel-title" className="map-ais-asset-panel__title">
+                    표적 재원
+                  </h4>
+                  <button
+                    type="button"
+                    className="btn-secondary map-ais-asset-panel__clear"
+                    onClick={() => setMapSelectedAsset(null)}
+                  >
+                    선택 해제
+                  </button>
+                </div>
+
+                {!mapSelectedAsset && (
+                  <p className="muted map-ais-asset-panel__empty">
+                    아군·적 <strong>핀을 클릭</strong>하면 식별·전력 정보가 여기 고정 표시됩니다.{' '}
+                    <strong>적 표적이 지도에 보이는 구간</strong>에서는 적 핀에 마우스를 올리면 같은 재원 정보가 지도
+                    위 <strong>플로팅 패널</strong>로 뜹니다.
+                  </p>
+                )}
+
+                {mapSelectedFriendly && (
+                  <div className="map-ais-asset-panel__body">
+                    <p className="map-ais-asset-panel__side map-ais-asset-panel__side--friendly">아군</p>
+                    <h5 className="map-ais-asset-panel__name">
+                      {mapSelectedFriendly.level} · {mapSelectedFriendly.name}
+                    </h5>
+                    {mapSelectedKinematics && (
+                      <dl className="map-ais-asset-panel__kinematics">
+                        <div>
+                          <dt>이동속도</dt>
+                          <dd>
+                            {mapSelectedKinematics.spd != null
+                              ? `${mapSelectedKinematics.spd.toFixed(1)} km/h`
+                              : '—'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>좌표</dt>
+                          <dd>{formatLatLngReadout(mapSelectedKinematics.lat, mapSelectedKinematics.lng)}</dd>
+                        </div>
+                        <div>
+                          <dt>표고</dt>
+                          <dd>{mapSelectedKinematics.elev} m</dd>
+                        </div>
+                        {mapSelectedKinematics.brg != null && (
+                          <div>
+                            <dt>이동 방위</dt>
+                            <dd>
+                              {mapSelectedKinematics.brg.toFixed(0)}° ({bearingToCardinalKo(mapSelectedKinematics.brg)})
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                    <dl className="map-ais-asset-panel__specs">
+                      <div>
+                        <dt>전술 부호</dt>
+                        <dd>{TACTICAL_SYMBOL_LABEL[mapSelectedFriendly.symbolType]}</dd>
+                      </div>
+                      <div>
+                        <dt>위치 상태</dt>
+                        <dd>
+                          {LOCATION_STATUS_LABEL[mapSelectedFriendly.locationStatus]}
+                          {STRENGTH_LABEL[mapSelectedFriendly.strengthModifier]
+                            ? ` · ${STRENGTH_LABEL[mapSelectedFriendly.strengthModifier]}`
+                            : ''}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>병과</dt>
+                        <dd>{mapSelectedFriendly.branch}</dd>
+                      </div>
+                      <div>
+                        <dt>병력</dt>
+                        <dd>{mapSelectedFriendly.personnel}명</dd>
+                      </div>
+                      <div>
+                        <dt>장비</dt>
+                        <dd>{mapSelectedFriendly.equipment}</dd>
+                      </div>
+                      <div>
+                        <dt>준비태세</dt>
+                        <dd>{mapSelectedFriendly.readiness}</dd>
+                      </div>
+                      <div>
+                        <dt>임무</dt>
+                        <dd>{mapSelectedFriendly.mission}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      type="button"
+                      className="btn-primary map-ais-asset-panel__video"
+                      onClick={() =>
+                        setMapVideoModal({
+                          title: mapSelectedFriendly.name,
+                          subtitle: `아군 · ${mapSelectedFriendly.level} · ${mapSelectedFriendly.branch}`,
+                          videoUrl: mapSelectedFriendly.situationVideoUrl,
+                        })
+                      }
+                    >
+                      상황·정찰 영상
+                    </button>
+                  </div>
+                )}
+
+                {mapSelectedEnemy && (
+                  <div className="map-ais-asset-panel__body">
+                    <p className="map-ais-asset-panel__side map-ais-asset-panel__side--enemy">적</p>
+                    <h5 className="map-ais-asset-panel__name">{mapSelectedEnemy.codename}</h5>
+                    {mapSelectedKinematics && (
+                      <dl className="map-ais-asset-panel__kinematics">
+                        <div>
+                          <dt>이동속도</dt>
+                          <dd>
+                            {mapSelectedKinematics.spd != null
+                              ? `${mapSelectedKinematics.spd.toFixed(1)} km/h`
+                              : '—'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>좌표</dt>
+                          <dd>{formatLatLngReadout(mapSelectedKinematics.lat, mapSelectedKinematics.lng)}</dd>
+                        </div>
+                        <div>
+                          <dt>표고</dt>
+                          <dd>{mapSelectedKinematics.elev} m</dd>
+                        </div>
+                        {mapSelectedKinematics.brg != null && (
+                          <div>
+                            <dt>이동 방위</dt>
+                            <dd>
+                              {mapSelectedKinematics.brg.toFixed(0)}° ({bearingToCardinalKo(mapSelectedKinematics.brg)})
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                    <dl className="map-ais-asset-panel__specs">
+                      <div>
+                        <dt>병과</dt>
+                        <dd>{mapSelectedEnemy.enemyBranch}</dd>
+                      </div>
+                      <div>
+                        <dt>위협</dt>
+                        <dd>{mapSelectedEnemy.threatLevel}</dd>
+                      </div>
+                      <div>
+                        <dt>추정 인원</dt>
+                        <dd>{mapSelectedEnemy.estimatedCount}명</dd>
+                      </div>
+                      <div>
+                        <dt>관측 시각</dt>
+                        <dd>{mapSelectedEnemy.observedAt}</dd>
+                      </div>
+                      <div>
+                        <dt>위험 반경</dt>
+                        <dd>{mapSelectedEnemy.riskRadiusMeter.toLocaleString('ko-KR')} m</dd>
+                      </div>
+                    </dl>
+                    <button
+                      type="button"
+                      className="btn-primary map-ais-asset-panel__video"
+                      onClick={() =>
+                        setMapVideoModal({
+                          title: mapSelectedEnemy.codename,
+                          subtitle: `적군 · ${mapSelectedEnemy.threatLevel} · ${mapSelectedEnemy.enemyBranch}`,
+                          videoUrl: mapSelectedEnemy.droneVideoUrl || null,
+                        })
+                      }
+                    >
+                      드론 정찰 영상
+                    </button>
+                  </div>
+                )}
+              </aside>
+              )}
             </div>
           </div>
         </div>
@@ -3104,6 +4260,57 @@ function HomePage({ user }: HomePageProps) {
         )}
         </div>
 
+        {scenarioV2Phase === 'tactics' && (
+          <section className="tactic-decision-panel" aria-label="전술 선택 지원">
+            <h3 className="tactic-decision-panel__title">전술 선택 지원 (적합도 추천)</h3>
+            <p className="muted tactic-decision-panel__desc">
+              부대별 적합도를 참고해 선택하면 DB에 저장됩니다. (예: 부대1 60% 적합)
+            </p>
+            {tacticLoading ? (
+              <p className="muted">전술 추천 데이터를 불러오는 중...</p>
+            ) : tacticRecommendations.length === 0 ? (
+              <p className="muted">추천 데이터가 없습니다.</p>
+            ) : (
+              <div className="tactic-decision-panel__list">
+                {tacticRecommendations.map((rec) => (
+                  <label key={rec.unitName} className="tactic-decision-panel__item">
+                    <input
+                      type="radio"
+                      name="tactic-unit"
+                      checked={selectedTacticUnit === rec.unitName}
+                      onChange={() => setSelectedTacticUnit(rec.unitName)}
+                    />
+                    <span className="tactic-decision-panel__item-main">
+                      <strong>{rec.unitName}</strong>
+                      <em>{rec.suitabilityPct.toFixed(0)}% 적합</em>
+                    </span>
+                    <span className="tactic-decision-panel__item-sub">{rec.rationale}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <textarea
+              className="tactic-decision-panel__note"
+              value={tacticDecisionNote}
+              onChange={(e) => setTacticDecisionNote(e.target.value)}
+              placeholder="지휘관 메모 (선택)"
+            />
+            <div className="tactic-decision-panel__actions">
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={!selectedTacticUnit || tacticSavePending}
+                onClick={() => {
+                  void handleSaveTacticDecision()
+                }}
+              >
+                {tacticSavePending ? '저장 중...' : '선택 전술 DB 저장'}
+              </button>
+              {tacticSaveMessage && <span className="muted">{tacticSaveMessage}</span>}
+            </div>
+          </section>
+        )}
+
         {fmcwInRange && radarSnapshot && (
           <div className="radar-fmcw-panel" aria-label="펄스·FMCW 레이더 설명">
             <p className="radar-fmcw-panel__pulse-strip muted">
@@ -3118,8 +4325,11 @@ function HomePage({ user }: HomePageProps) {
               <span className="radar-fmcw-panel__chip">센서: {radarSnapshot.fmcw.meta.sensor}</span>
               {radarSnapshot.fmcw.meta.liveRun?.ok ? (
                 <span className="radar-fmcw-panel__chip radar-fmcw-panel__chip--live">
-                  실제 파이프라인 · 프레임 {radarSnapshot.fmcw.meta.liveRun.frameId ?? '—'} ·{' '}
-                  {radarSnapshot.fmcw.meta.liveRun.inferMs ?? '—'} ms
+                  실제 파이프라인 · 프레임 {radarSnapshot.fmcw.meta.liveRun.frameId ?? '—'}
+                  {radarSnapshot.fmcw.meta.liveRun.prevFrameId
+                    ? ` ←속도용 ${radarSnapshot.fmcw.meta.liveRun.prevFrameId}`
+                    : ''}{' '}
+                  · {radarSnapshot.fmcw.meta.liveRun.inferMs ?? '—'} ms
                 </span>
               ) : radarSnapshot.fmcw.meta.liveRun && !radarSnapshot.fmcw.meta.liveRun.ok ? (
                 <span
@@ -3174,8 +4384,10 @@ function HomePage({ user }: HomePageProps) {
                 이탈 빨강)
               </li>
               <li>
-                지도에 <strong>예측 이동 경로</strong>(주황 점선)·방위·위상 라벨 — 적 핀이{' '}
-                <strong>FMCW 부채꼴 안</strong>이면 마우스 오버 시 3D 요약.
+                지도에 <strong>예측 이동 경로</strong>(주황 점선: 도플러 외삽 등)·
+                live 시 <strong>청록 실선</strong>은 <strong>속도 외삽 궤적</strong>(연속 레이더 프레임) 별도 레이어.
+                <strong>위험 부채꼴·복도</strong>(붉은 반투명) — 적 핀이 <strong>FMCW 부채꼴 안</strong>이면 마우스 오버 시 3D
+                요약.
               </li>
             </ul>
             {radarSnapshot.fmcw.detections.length > 0 && radarSnapshot.fmcw.insights && (
@@ -3215,6 +4427,52 @@ function HomePage({ user }: HomePageProps) {
                         {radarSnapshot.fmcw.meta.liveRun?.radarPointCount ?? '—'}개
                       </dd>
                     </div>
+                    {radarSnapshot.fmcw.insights.motionAnalysis ? (
+                      <div>
+                        <dt>연속 프레임(레이더)</dt>
+                        <dd>
+                          Δt {radarSnapshot.fmcw.insights.motionAnalysis.frameDeltaS ?? '—'}s · 매칭{' '}
+                          {radarSnapshot.fmcw.insights.motionAnalysis.associations ?? '—'}/
+                          {radarSnapshot.fmcw.insights.motionAnalysis.prevClusterCount ?? '—'} ·{' '}
+                          <span className="muted">
+                            {radarSnapshot.fmcw.insights.motionAnalysis.note ?? ''}
+                          </span>
+                        </dd>
+                      </div>
+                    ) : null}
+                    {radarSnapshot.fmcw.insights.ruleBasedRiskPrimary ? (
+                      <div>
+                        <dt>규칙 기반 위험도(1위)</dt>
+                        <dd>
+                          <strong>{radarSnapshot.fmcw.insights.ruleBasedRiskPrimary.level ?? '—'}</strong> · 점수{' '}
+                          {radarSnapshot.fmcw.insights.ruleBasedRiskPrimary.score?.toFixed(3) ?? '—'}
+                        </dd>
+                      </div>
+                    ) : null}
+                    {radarSnapshot.fmcw.insights.riskModel?.note ? (
+                      <div>
+                        <dt>위험 모델 로드맵</dt>
+                        <dd className="muted">
+                          [{radarSnapshot.fmcw.insights.riskModel.mode ?? '—'}]{' '}
+                          {radarSnapshot.fmcw.insights.riskModel.note}
+                        </dd>
+                      </div>
+                    ) : null}
+                    {radarSnapshot.fmcw.insights.lidarCrossChecks &&
+                    radarSnapshot.fmcw.insights.lidarCrossChecks.length > 1 ? (
+                      <div>
+                        <dt>LiDAR 교차검증(상위 후보)</dt>
+                        <dd>
+                          <ul className="radar-fmcw-vod-prov__list">
+                            {radarSnapshot.fmcw.insights.lidarCrossChecks.map((c) => (
+                              <li key={`lcc-${c.rank}-${c.clusterId}`}>
+                                #{c.rank} {c.clusterId}: {c.verdict ?? '—'} · ROI {c.pointsInRoi ?? '—'}점
+                              </li>
+                            ))}
+                          </ul>
+                        </dd>
+                      </div>
+                    ) : null}
                   </dl>
                   {radarSnapshot.fmcw.insights.conclusionBullets &&
                     radarSnapshot.fmcw.insights.conclusionBullets.length > 0 && (
@@ -3223,6 +4481,104 @@ function HomePage({ user }: HomePageProps) {
                         <ul className="radar-fmcw-conclusion__list">
                           {radarSnapshot.fmcw.insights.conclusionBullets.map((line, i) => (
                             <li key={`cb-${i}`}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  {radarSnapshot.fmcw.insights.vodStoryParagraph ? (
+                    <div className="radar-fmcw-vod-story" aria-label="VoD 프레임 내러티브">
+                      <h4 className="radar-fmcw-conclusion__title">VoD 동기 프레임 — 출처·방향·위험 예측</h4>
+                      <p className="radar-fmcw-vod-story__body">
+                        {radarSnapshot.fmcw.insights.vodStoryParagraph}
+                      </p>
+                    </div>
+                  ) : null}
+                  {radarSnapshot.fmcw.insights.vodProvenance ? (
+                    <div className="radar-fmcw-vod-prov" aria-label="사용 데이터 출처">
+                      <h4 className="radar-fmcw-conclusion__title">쓰인 입력 파일·파이프라인</h4>
+                      <dl className="radar-fmcw-insights__dl">
+                        <div>
+                          <dt>동기 프레임 수(풀)</dt>
+                          <dd>
+                            {radarSnapshot.fmcw.insights.vodProvenance.syncedFrameCount ?? '—'}개 중 1개 선택
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>데이터 루트</dt>
+                          <dd className="radar-fmcw-vod-prov__mono">
+                            {radarSnapshot.fmcw.insights.vodProvenance.datasetRootHint
+                              ? radarSnapshot.fmcw.insights.vodProvenance.datasetRootHint.replace(
+                                  /^(.*)([\\/][^\\/]+[\\/][^\\/]+)$/,
+                                  '…$2',
+                                )
+                              : '—'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>입력 스트림</dt>
+                          <dd>
+                            <ul className="radar-fmcw-vod-prov__list">
+                              {radarSnapshot.fmcw.insights.vodProvenance.dataSources.map((s, i) => (
+                                <li key={`vds-${i}`}>{s}</li>
+                              ))}
+                            </ul>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>처리 요약</dt>
+                          <dd>{radarSnapshot.fmcw.insights.vodProvenance.pipelineLine}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : null}
+                  {radarSnapshot.fmcw.insights.vodMatchedTarget ? (
+                    <div className="radar-fmcw-vod-target" aria-label="3D 라벨 정합">
+                      <h4 className="radar-fmcw-conclusion__title">대상 기하(라벨 정합 시)</h4>
+                      <dl className="radar-fmcw-insights__dl">
+                        <div>
+                          <dt>클래스</dt>
+                          <dd>
+                            <strong>{radarSnapshot.fmcw.insights.vodMatchedTarget.className ?? '—'}</strong>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>BEV 정합 거리</dt>
+                          <dd>
+                            {radarSnapshot.fmcw.insights.vodMatchedTarget.matchDistanceM != null
+                              ? `${radarSnapshot.fmcw.insights.vodMatchedTarget.matchDistanceM} m`
+                              : '—'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>헤딩(ego XY)</dt>
+                          <dd>
+                            {radarSnapshot.fmcw.insights.vodMatchedTarget.headingDegEgoXY != null
+                              ? `${radarSnapshot.fmcw.insights.vodMatchedTarget.headingDegEgoXY}°`
+                              : '—'}
+                            {radarSnapshot.fmcw.insights.vodMatchedTarget.headingNote ? (
+                              <span className="muted"> — {radarSnapshot.fmcw.insights.vodMatchedTarget.headingNote}</span>
+                            ) : null}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>박스 크기 (L×W)</dt>
+                          <dd>
+                            {radarSnapshot.fmcw.insights.vodMatchedTarget.lengthM ?? '—'}m ×{' '}
+                            {radarSnapshot.fmcw.insights.vodMatchedTarget.widthM ?? '—'}m
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : null}
+                  {radarSnapshot.fmcw.insights.vodRiskZones &&
+                    radarSnapshot.fmcw.insights.vodRiskZones.length > 0 && (
+                      <div className="radar-fmcw-vod-risk" aria-label="위험 구역 설명">
+                        <h4 className="radar-fmcw-conclusion__title">지도 위험 영역 (부채꼴)</h4>
+                        <ul className="radar-fmcw-conclusion__list">
+                          {radarSnapshot.fmcw.insights.vodRiskZones.map((z) => (
+                            <li key={z.id}>
+                              <strong>{z.label}</strong> — {z.rationale}
+                            </li>
                           ))}
                         </ul>
                       </div>
@@ -3751,213 +5107,6 @@ function IdentificationTrackingPage() {
   )
 }
 
-function DistanceTrackingPage() {
-  const viewerRef = useRef<HTMLDivElement | null>(null)
-  const [files, setFiles] = useState<File[]>([])
-  const [error, setError] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [result, setResult] = useState<Reconstruct3dMultiResponse | null>(null)
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setError('')
-    setResult(null)
-
-    if (files.length < 3) {
-      setError('최소 3장의 이미지를 선택해 주세요.')
-      return
-    }
-
-    const token = localStorage.getItem('accessToken')
-    if (!token) {
-      setError('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
-      return
-    }
-
-    setIsSubmitting(true)
-    try {
-      const formData = new FormData()
-      for (const file of files) {
-        formData.append('files', file)
-      }
-
-      const response = await fetch(`${API_BASE_URL}/ai/reconstruct/points-multi`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-        signal: AbortSignal.timeout(600_000),
-      })
-      const data = (await response.json().catch(() => ({}))) as Reconstruct3dMultiResponse & {
-        message?: string
-      }
-      if (!response.ok) {
-        const msg =
-          typeof data === 'object' && data !== null && 'message' in data
-            ? String((data as { message?: string }).message)
-            : '멀티 이미지 3D 복원 요청에 실패했습니다.'
-        throw new Error(msg)
-      }
-      if (
-        !data ||
-        !Array.isArray(data.points3d) ||
-        data.points3d.length === 0 ||
-        !data.bounds
-      ) {
-        throw new Error('복원된 3D 점이 없습니다.')
-      }
-      setResult(data as Reconstruct3dMultiResponse)
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : '3D 점 복원 처리 중 오류가 발생했습니다.',
-      )
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!viewerRef.current || !result || result.points3d.length === 0) {
-      return
-    }
-
-    const container = viewerRef.current
-    container.innerHTML = ''
-
-    const width = container.clientWidth || 900
-    const height = 420
-
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#020617')
-
-    const camera = new THREE.PerspectiveCamera(55, width / height, 0.01, 1000)
-    camera.position.set(0, 0, 3.2)
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.setSize(width, height)
-    container.appendChild(renderer.domElement)
-
-    const points = result.points3d
-    const bounds = result.bounds
-    const centerX = (bounds.x[0] + bounds.x[1]) / 2
-    const centerY = (bounds.y[0] + bounds.y[1]) / 2
-    const centerZ = (bounds.z[0] + bounds.z[1]) / 2
-    const spanX = Math.max(bounds.x[1] - bounds.x[0], 1e-6)
-    const spanY = Math.max(bounds.y[1] - bounds.y[0], 1e-6)
-    const spanZ = Math.max(bounds.z[1] - bounds.z[0], 1e-6)
-    const scale = 2.2 / Math.max(spanX, spanY, spanZ)
-
-    const positions = new Float32Array(points.length * 3)
-    const colors = new Float32Array(points.length * 3)
-
-    for (let i = 0; i < points.length; i += 1) {
-      const [x, y, z] = points[i]
-      positions[i * 3] = (x - centerX) * scale
-      positions[i * 3 + 1] = (y - centerY) * scale
-      positions[i * 3 + 2] = (z - centerZ) * scale
-
-      const c = result.colorsRgb?.[i]
-      colors[i * 3] = c ? c[0] / 255 : 0.58
-      colors[i * 3 + 1] = c ? c[1] / 255 : 0.77
-      colors[i * 3 + 2] = c ? c[2] / 255 : 0.98
-    }
-
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-
-    const material = new THREE.PointsMaterial({
-      size: 0.025,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.95,
-    })
-    const cloud = new THREE.Points(geometry, material)
-    scene.add(cloud)
-
-    const axis = new THREE.AxesHelper(0.7)
-    scene.add(axis)
-
-    let frameId = 0
-    const animate = () => {
-      cloud.rotation.y += 0.0032
-      cloud.rotation.x += 0.0008
-      renderer.render(scene, camera)
-      frameId = requestAnimationFrame(animate)
-    }
-    animate()
-
-    return () => {
-      cancelAnimationFrame(frameId)
-      geometry.dispose()
-      material.dispose()
-      renderer.dispose()
-      container.innerHTML = ''
-    }
-  }, [result])
-
-  return (
-    <section className="page">
-      <h1>전차 3D 점 복원 (멀티 이미지)</h1>
-      <p className="muted">담당: 수빈</p>
-      <p>여러 시점 이미지를 함께 입력해 전차의 3D 점군을 더 안정적으로 복원합니다.</p>
-
-      <form className="form yolo-upload-form" onSubmit={handleSubmit}>
-        <label>
-          이미지 파일들 (최소 3장)
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
-          />
-        </label>
-        <button type="submit" className="btn-primary" disabled={isSubmitting}>
-          {isSubmitting ? '복원 중...' : '3D 점 복원 실행'}
-        </button>
-      </form>
-      <p className="muted">선택된 파일 수: {files.length}장</p>
-      {isSubmitting && (
-        <p className="muted">3D 복원에 2~3분 걸릴 수 있습니다. 완료될 때까지 기다려 주세요.</p>
-      )}
-
-      {error && <p className="error">{error}</p>}
-
-      {result && (
-        <div className="yolo-result">
-          <h3>멀티 뷰 복원 결과</h3>
-          <p className="muted">
-            입력 이미지 수: {result.sourceCount}장 / 페어 수: {result.pairCount}
-          </p>
-          <div className="video-summary-grid">
-            <p>
-              복원 포인트 수: <strong>{result.pointCount.toLocaleString('ko-KR')}</strong>
-            </p>
-            {result.ply?.downloadUrl && (
-              <p>
-                PLY 파일:{' '}
-                <a
-                  href={`http://127.0.0.1:8001${result.ply.downloadUrl}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  새 탭에서 열기 / 다운로드
-                </a>
-              </p>
-            )}
-          </div>
-
-          <div className="point-cloud-wrap" ref={viewerRef} />
-          <p className="muted">Three.js 기반 3D 점군 뷰어 (자동 회전)</p>
-        </div>
-      )}
-    </section>
-  )
-}
-
 function DistanceAnalysisPage() {
   return (
     <section className="page">
@@ -4003,7 +5152,6 @@ function GuidePage() {
           <strong>전차 식별/추적</strong> – 이미지·영상·실시간 카메라, YOLO 기반 전술 화력 표적 검출·피아 분류·추적
         </li>
         <li><strong>거리 분석</strong> – 객체별 거리 추정, 임계 거리 위험 경고, 시간축 거리 로그</li>
-        <li><strong>3D 모델링 (MASt3R)</strong> – 멀티뷰 3D 점군 복원, 포신 자세 추정 기반 위협 분석</li>
         <li>
           <strong>다중 센서 파이프라인</strong> – 위성(<strong>전술(기갑·포병) 표적</strong>·지형·기동 제한) → UAV(실시간
           추적·형상 분류) → 레이다 → 드론(식별·화력 연동) 및 지도 실시간 표시. 전략시설·격납고급은 범위에서 제외.{' '}
@@ -4600,20 +5748,35 @@ function CameraMonitorPage() {
   )
 }
 
+function HomeScenarioNavLink({
+  step,
+  label,
+}: {
+  step: '1' | '2' | '3' | '4' | '5'
+  label: string
+}) {
+  const location = useLocation()
+  const cur = new URLSearchParams(location.search).get('scenario')
+  const active = location.pathname === '/' && (cur ?? '') === step
+  return (
+    <Link to={`/?scenario=${step}`} className={active ? 'active' : undefined}>
+      {label}
+    </Link>
+  )
+}
+
 function AppLayout({ user, onLogout }: AppLayoutProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <h2 className="brand">Hanhwa Final</h2>
         <nav className="sidebar-nav">
-          <NavLink to="/" end>홈 (전술 지도 · 원본)</NavLink>
-          <NavLink to="/alert-zone">경보 구역 (강서구)</NavLink>
-          <NavLink to="/identification">전차 식별/추적</NavLink>
-          <NavLink to="/distance-analysis">거리 분석</NavLink>
-          <NavLink to="/distance-tracking">3D 모델링 (MASt3R)</NavLink>
           <NavLink to="/sensor-pipeline">다중 센서 파이프라인</NavLink>
-          <NavLink to="/fusion-validation">FMCW·LiDAR 검증 (데모)</NavLink>
-          <NavLink to="/guide">사용 가이드</NavLink>
+          <HomeScenarioNavLink step="1" label="1. 항공 SAR" />
+          <HomeScenarioNavLink step="2" label="2. UAV SAR" />
+          <HomeScenarioNavLink step="3" label="3. 펄스 레이더" />
+          <HomeScenarioNavLink step="4" label="4. FMCW·VoD" />
+          <HomeScenarioNavLink step="5" label="5. 통합 시뮬 (종합)" />
         </nav>
       </aside>
 
@@ -4852,9 +6015,7 @@ function App() {
         <Route path="/identification" element={<IdentificationTrackingPage />} />
         <Route path="/monitor" element={<CameraMonitorPage />} />
         <Route path="/distance-analysis" element={<DistanceAnalysisPage />} />
-        <Route path="/distance-tracking" element={<DistanceTrackingPage />} />
         <Route path="/sensor-pipeline" element={<SensorPipelinePage />} />
-        <Route path="/fusion-validation" element={<FusionValidationPrototype />} />
         <Route path="/guide" element={<GuidePage />} />
       </Route>
       <Route element={<AuthLayout user={user} />}>

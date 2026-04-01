@@ -3,14 +3,38 @@ import { AiService } from '../ai/ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   polarToLatLng,
+  type FmcwTrackDto,
   type RadarDetectionDto,
   type RadarInsightsDto,
   type RadarSnapshotDto,
 } from './radar-snapshot';
+import {
+  buildTrajectoryCorridorPolygon,
+  buildVodLiveEnrichment,
+} from './vod-label-enrichment';
 
 /** 펄스: 약 40km / FMCW: 약 10~15km (데모 고정값) */
 const PULSE_RANGE_MAX_M = 40_000;
 const FMCW_RANGE_MAX_M = 12_500;
+
+const TACTIC_PROFILE_TABLE = 'tactical_recommendation_profiles';
+const TACTIC_DECISION_TABLE = 'tactical_decisions';
+
+type TacticProfileRow = {
+  unit_name: string;
+  suitability_pct: number;
+  rationale: string | null;
+  payload_json: unknown;
+};
+
+type SaveTacticDecisionInput = {
+  scenarioKey: string;
+  selectedUnitName: string;
+  suitabilityPct: number;
+  note: string;
+  source: string;
+  rawPayload: unknown;
+};
 
 function bearingFromEnuMeters(eastM: number, northM: number): number {
   let deg = (Math.atan2(eastM, northM) * 180) / Math.PI;
@@ -71,7 +95,7 @@ function trackTowardPrimary(
   radarLat: number,
   radarLng: number,
   primary: RadarDetectionDto,
-): RadarSnapshotDto['fmcw']['track'] {
+): FmcwTrackDto {
   const steps = 6;
   const predictedPath: Array<{ lat: number; lng: number }> = [];
   for (let k = 0; k <= steps; k += 1) {
@@ -92,6 +116,100 @@ function trackTowardPrimary(
     bearingDeg: Math.round(bearingDeg * 10) / 10,
     phaseRefDeg: 0,
     predictedPath,
+  };
+}
+
+/** 레이더→탐지 시선에 도플러 부호로 단기 외삽(접근 시 기지 쪽으로 이동) */
+function trackWithDopplerExtrapolation(
+  radarLat: number,
+  radarLng: number,
+  primary: RadarDetectionDto,
+): FmcwTrackDto {
+  const base = trackTowardPrimary(radarLat, radarLng, primary);
+  const path = [...base.predictedPath];
+  const dop = primary.dopplerMps;
+  const speed = Math.max(1.2, Math.min(28, Math.abs(dop) + 2));
+  const dt = 0.45;
+  const nExtra = 12;
+  let curLat = primary.lat;
+  let curLng = primary.lng;
+  const towardRadar = dop <= 0;
+  for (let i = 0; i < nExtra; i += 1) {
+    const dN = (radarLat - curLat) * 111320;
+    const dE =
+      (radarLng - curLng) * 111320 * Math.cos((curLat * Math.PI) / 180);
+    const len = Math.hypot(dN, dE);
+    if (len < 8) break;
+    const un = dN / len;
+    const ue = dE / len;
+    const sign = towardRadar ? 1 : -1;
+    const stepM = speed * dt * sign;
+    curLat += (un * stepM) / 111320;
+    curLng +=
+      (ue * stepM) / (111320 * Math.cos((curLat * Math.PI) / 180));
+    path.push({ lat: curLat, lng: curLng });
+  }
+
+  const n = path.length;
+  const pEnd = path[n - 1]!;
+  const pPrev = path[Math.max(0, n - 2)]!;
+  const dN2 = (pEnd.lat - pPrev.lat) * 111320;
+  const dE2 =
+    (pEnd.lng - pPrev.lng) * 111320 * Math.cos((pPrev.lat * Math.PI) / 180);
+  let bearingDeg = (Math.atan2(dE2, dN2) * 180) / Math.PI;
+  if (bearingDeg < 0) bearingDeg += 360;
+
+  return {
+    bearingDeg: Math.round(bearingDeg * 10) / 10,
+    phaseRefDeg: Math.round((Math.abs(dop) * 7 + primary.confidence * 40) % 360),
+    predictedPath: path,
+  };
+}
+
+/** VoD ego (동일 투영 규칙) x,y,z m → 지도 좌표 — 수평 거리·방위만 사용 */
+function egoXyzToLatLng(
+  radarLat: number,
+  radarLng: number,
+  x: number,
+  y: number,
+  _z: number,
+): { lat: number; lng: number } {
+  const rangeM = Math.hypot(x, y);
+  const bearingDeg = bearingFromEnuMeters(x, y);
+  return polarToLatLng(radarLat, radarLng, rangeM, bearingDeg);
+}
+
+function futureEgoSamplesToLatLngPath(
+  radarLat: number,
+  radarLng: number,
+  raw: unknown,
+): Array<{ lat: number; lng: number }> {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const out: Array<{ lat: number; lng: number }> = [];
+  for (const row of raw) {
+    if (!Array.isArray(row) || row.length < 2) continue;
+    const x = Number(row[0]);
+    const y = Number(row[1]);
+    const z = row.length >= 3 ? Number(row[2]) : 0;
+    if (![x, y, z].every((n) => Number.isFinite(n))) continue;
+    out.push(egoXyzToLatLng(radarLat, radarLng, x, y, z));
+  }
+  return out;
+}
+
+function trackFromLatLngPath(path: Array<{ lat: number; lng: number }>): FmcwTrackDto | null {
+  if (path.length < 2) return null;
+  const pEnd = path[path.length - 1]!;
+  const pPrev = path[path.length - 2]!;
+  const dN = (pEnd.lat - pPrev.lat) * 111320;
+  const dE =
+    (pEnd.lng - pPrev.lng) * 111320 * Math.cos((pPrev.lat * Math.PI) / 180);
+  let bearingDeg = (Math.atan2(dE, dN) * 180) / Math.PI;
+  if (bearingDeg < 0) bearingDeg += 360;
+  return {
+    bearingDeg: Math.round(bearingDeg * 10) / 10,
+    phaseRefDeg: Math.round((path.length * 13) % 360),
+    predictedPath: path,
   };
 }
 
@@ -199,12 +317,124 @@ function buildInsightsFromAi(ai: Record<string, unknown>): RadarInsightsDto {
     `동기 프레임 ${frameId ?? '—'} · 레이더 원시 포인트 ${rpc ?? '—'}개 · 서버 처리 ${ims ?? '—'}ms`,
   );
 
+  let lidarCrossChecks: RadarInsightsDto['lidarCrossChecks'];
+  const rawCross = ai.lidarCrossChecks;
+  if (Array.isArray(rawCross) && rawCross.length > 0) {
+    lidarCrossChecks = [];
+    for (const row of rawCross) {
+      if (!row || typeof row !== 'object') continue;
+      const o = row as Record<string, unknown>;
+      const clusterId = typeof o.clusterId === 'string' ? o.clusterId : '?';
+      const rank = Number(o.rank);
+      lidarCrossChecks.push({
+        rank: Number.isFinite(rank) ? rank : lidarCrossChecks.length + 1,
+        clusterId,
+        matched: typeof o.matched === 'boolean' ? o.matched : undefined,
+        pointsInRoi: typeof o.pointsInRoi === 'number' ? o.pointsInRoi : undefined,
+        verdict: typeof o.verdict === 'string' ? o.verdict : undefined,
+        deltaRangeM:
+          o.deltaRangeM === null
+            ? null
+            : typeof o.deltaRangeM === 'number'
+              ? o.deltaRangeM
+              : undefined,
+        deltaBearingDeg:
+          o.deltaBearingDeg === null
+            ? null
+            : typeof o.deltaBearingDeg === 'number'
+              ? o.deltaBearingDeg
+              : undefined,
+      });
+    }
+  }
+
+  let motionAnalysis: RadarInsightsDto['motionAnalysis'];
+  const rawMot = ai.motionAnalysis;
+  if (rawMot && typeof rawMot === 'object') {
+    const m = rawMot as Record<string, unknown>;
+    motionAnalysis = {
+      frameDeltaS:
+        typeof m.frameDeltaS === 'number' ? m.frameDeltaS : undefined,
+      trackGateM: typeof m.trackGateM === 'number' ? m.trackGateM : undefined,
+      associations: typeof m.associations === 'number' ? m.associations : undefined,
+      prevClusterCount:
+        typeof m.prevClusterCount === 'number' ? m.prevClusterCount : undefined,
+      note: typeof m.note === 'string' ? m.note : undefined,
+    };
+    const assoc = motionAnalysis.associations;
+    const dt = motionAnalysis.frameDeltaS;
+    if (assoc !== undefined && dt !== undefined) {
+      const tail = motionAnalysis.note ? ` · ${motionAnalysis.note}` : '';
+      conclusionBullets.push(
+        `연속 프레임(레이더) 연관: ${assoc}개 후보 · Δt ${dt}s 가정${tail}`,
+      );
+    } else if (motionAnalysis.note) {
+      conclusionBullets.push(`연속 프레임(레이더): ${motionAnalysis.note}`);
+    }
+  }
+
+  let ruleBasedRiskPrimary: RadarInsightsDto['ruleBasedRiskPrimary'];
+  const rawRisk = ai.ruleBasedRiskPrimary;
+  if (rawRisk && typeof rawRisk === 'object') {
+    const r = rawRisk as Record<string, unknown>;
+    const factorsRaw = r.factors;
+    let factors: Record<string, number> | undefined;
+    if (factorsRaw && typeof factorsRaw === 'object') {
+      factors = {};
+      for (const [k, v] of Object.entries(factorsRaw as Record<string, unknown>)) {
+        if (typeof v === 'number' && Number.isFinite(v)) factors[k] = v;
+      }
+    }
+    ruleBasedRiskPrimary = {
+      score: typeof r.score === 'number' ? r.score : undefined,
+      level: typeof r.level === 'string' ? r.level : undefined,
+      factors,
+    };
+    if (
+      ruleBasedRiskPrimary.score !== undefined &&
+      ruleBasedRiskPrimary.level
+    ) {
+      conclusionBullets.push(
+        `규칙 기반 위험도(1위 후보): ${ruleBasedRiskPrimary.level} · 점수 ${ruleBasedRiskPrimary.score.toFixed(3)} (거리·도플러·속도·기지 접근 성분)`,
+      );
+    }
+  }
+
+  let riskModel: RadarInsightsDto['riskModel'];
+  const rawRm = ai.riskModel;
+  if (rawRm && typeof rawRm === 'object') {
+    const rm = rawRm as Record<string, unknown>;
+    riskModel = {
+      mode: typeof rm.mode === 'string' ? rm.mode : undefined,
+      note: typeof rm.note === 'string' ? rm.note : undefined,
+    };
+  }
+
+  if (primaryRadar && primaryRadar.motionMatched === true) {
+    const spd = Number(primaryRadar.speedMps);
+    const hdg = Number(primaryRadar.headingDegMotion);
+    conclusionBullets.push(
+      `1위 후보 연속 프레임 속도: 수평 약 ${Number.isFinite(spd) ? spd.toFixed(2) : '—'} m/s, 헤딩(수평) 약 ${Number.isFinite(hdg) ? hdg.toFixed(1) : '—'}°`,
+    );
+  }
+
   let lidarReviewParagraph: string;
   if (lidarValidation && (lidarValidation.pointsInRoi ?? 0) > 0) {
     lidarReviewParagraph = `동기 LiDAR에서 레이더 1위 클러스터 중심을 기준으로 ROI를 설정하고, 점 수·레이더 대비 거리 차(Δ${lidarValidation.deltaRangeM ?? '—'}m)·방위 차(Δ${lidarValidation.deltaBearingDeg ?? '—'}°)·BEV proxy(${lidarValidation.iouBevProxy ?? '—'})를 검토했습니다. 판정: ${lidarValidation.verdict ?? '—'}.`;
   } else {
     lidarReviewParagraph =
       '동기 LiDAR(.bin)이 없거나 ROI 내 유효 점이 부족해 이번 프레임에서는 기하 검증을 수행하지 않았습니다. VoD KITTI 레이아웃에서 image_2·radar·lidar velodyne의 stem을 맞추면 자동으로 LiDAR 검증이 붙습니다.';
+  }
+  if (lidarCrossChecks && lidarCrossChecks.length > 1) {
+    const parts = lidarCrossChecks
+      .filter((c) => c.rank > 1)
+      .map(
+        (c) =>
+          `#${c.rank} ${c.clusterId}: ${c.verdict ?? '—'} (ROI 점 ${c.pointsInRoi ?? '—'})`,
+      );
+    if (parts.length > 0) {
+      lidarReviewParagraph += ` 상위 ${lidarCrossChecks.length}개 레이더 후보에 대해 동일 LiDAR로 교차 검증: ${parts.join('; ')}.`;
+    }
   }
 
   const syncedViewNote = primaryRadar
@@ -218,6 +448,10 @@ function buildInsightsFromAi(ai: Record<string, unknown>): RadarInsightsDto {
     yoloDetections: yoloDetections.length > 0 ? yoloDetections : undefined,
     primaryObject,
     lidarValidation,
+    lidarCrossChecks,
+    motionAnalysis,
+    ruleBasedRiskPrimary,
+    riskModel,
     conclusionBullets,
     lidarReviewParagraph,
     syncedViewNote,
@@ -226,10 +460,153 @@ function buildInsightsFromAi(ai: Record<string, unknown>): RadarInsightsDto {
 
 @Injectable()
 export class MapService {
+  private tacticsTableReady = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
   ) {}
+
+  private async ensureTacticsTables() {
+    if (this.tacticsTableReady) return;
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS ${TACTIC_PROFILE_TABLE} (
+        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        scenario_key VARCHAR(96) NOT NULL,
+        unit_name VARCHAR(128) NOT NULL,
+        suitability_pct DECIMAL(5,2) NOT NULL,
+        rationale TEXT NULL,
+        payload_json JSON NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_scenario_key (scenario_key)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS ${TACTIC_DECISION_TABLE} (
+        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        scenario_key VARCHAR(96) NOT NULL,
+        selected_unit_name VARCHAR(128) NOT NULL,
+        suitability_pct DECIMAL(5,2) NOT NULL,
+        note TEXT NULL,
+        source VARCHAR(32) NOT NULL DEFAULT 'web-ui',
+        raw_payload_json JSON NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_scenario_key (scenario_key)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    this.tacticsTableReady = true;
+  }
+
+  private async seedTacticProfilesIfEmpty(scenarioKey: string) {
+    const countRows = await this.prisma.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
+      `SELECT COUNT(*) as cnt FROM ${TACTIC_PROFILE_TABLE} WHERE scenario_key = ?`,
+      scenarioKey,
+    );
+    const cntRaw = countRows[0]?.cnt ?? 0;
+    const cnt = typeof cntRaw === 'bigint' ? Number(cntRaw) : Number(cntRaw);
+    if (Number.isFinite(cnt) && cnt > 0) return;
+
+    const seed = [
+      {
+        unitName: '부대1 (기갑대대 신속대응중대)',
+        suitabilityPct: 60,
+        rationale:
+          'FMCW 접촉 구간(10~15km)에서 기동타격·차단선을 가장 빠르게 형성 가능. 야간 EO/IR 연동 숙련.',
+        payload: {
+          readiness: '최고',
+          etaMin: 7,
+          antiArmor: 0.84,
+          collateralRisk: 0.31,
+          uavLinkQuality: 'A',
+        },
+      },
+      {
+        unitName: '부대2 (기계화보병 예비대)',
+        suitabilityPct: 34,
+        rationale:
+          '점령·차단 유지에 강점이 있으나 초기 접촉 대응 속도는 부대1 대비 느림.',
+        payload: {
+          readiness: '경계',
+          etaMin: 12,
+          antiArmor: 0.58,
+          collateralRisk: 0.24,
+          uavLinkQuality: 'B+',
+        },
+      },
+      {
+        unitName: '부대3 (포병 화력지원대)',
+        suitabilityPct: 6,
+        rationale:
+          '직접 식별·근접 요격보다 후방 화력차단에 적합. 현 시점(근접 식별 단계) 우선순위 낮음.',
+        payload: {
+          readiness: '양호',
+          etaMin: 15,
+          antiArmor: 0.42,
+          collateralRisk: 0.47,
+          uavLinkQuality: 'B',
+        },
+      },
+    ] as const;
+
+    for (const row of seed) {
+      await this.prisma.$executeRawUnsafe(
+        `INSERT INTO ${TACTIC_PROFILE_TABLE}
+          (scenario_key, unit_name, suitability_pct, rationale, payload_json)
+         VALUES (?, ?, ?, ?, ?)`,
+        scenarioKey,
+        row.unitName,
+        row.suitabilityPct,
+        row.rationale,
+        JSON.stringify(row.payload),
+      );
+    }
+  }
+
+  async getTacticRecommendations(scenarioKey: string) {
+    await this.ensureTacticsTables();
+    await this.seedTacticProfilesIfEmpty(scenarioKey);
+    const rows = await this.prisma.$queryRawUnsafe<TacticProfileRow[]>(
+      `SELECT unit_name, suitability_pct, rationale, payload_json
+       FROM ${TACTIC_PROFILE_TABLE}
+       WHERE scenario_key = ?
+       ORDER BY suitability_pct DESC, unit_name ASC`,
+      scenarioKey,
+    );
+    return {
+      scenarioKey,
+      recommendations: rows.map((r) => ({
+        unitName: r.unit_name,
+        suitabilityPct: Number(r.suitability_pct),
+        rationale: r.rationale ?? '',
+        payload: r.payload_json ?? null,
+      })),
+    };
+  }
+
+  async saveTacticDecision(input: SaveTacticDecisionInput) {
+    await this.ensureTacticsTables();
+    await this.prisma.$executeRawUnsafe(
+      `INSERT INTO ${TACTIC_DECISION_TABLE}
+        (scenario_key, selected_unit_name, suitability_pct, note, source, raw_payload_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      input.scenarioKey,
+      input.selectedUnitName,
+      input.suitabilityPct,
+      input.note,
+      input.source,
+      JSON.stringify(input.rawPayload ?? null),
+    );
+    const idRows = await this.prisma.$queryRawUnsafe<Array<{ id: bigint | number }>>(
+      `SELECT id FROM ${TACTIC_DECISION_TABLE} ORDER BY id DESC LIMIT 1`,
+    );
+    const idRaw = idRows[0]?.id ?? 0;
+    const id = typeof idRaw === 'bigint' ? Number(idRaw) : Number(idRaw);
+    return {
+      ok: true,
+      id,
+      savedAt: new Date().toISOString(),
+    };
+  }
 
   /**
    * 펄스(광역·점) + FMCW(근거리·위상·예측 궤적) 합성 스냅샷
@@ -257,6 +634,8 @@ export class MapService {
 
       const liveRunBase = {
         frameId: typeof ai.autoFrameId === 'string' ? ai.autoFrameId : undefined,
+        prevFrameId:
+          typeof ai.autoPrevFrameId === 'string' ? ai.autoPrevFrameId : undefined,
         inferMs: typeof ai.inferMs === 'number' ? ai.inferMs : undefined,
         radarPipeline:
           typeof ai.radarPipeline === 'string' ? ai.radarPipeline : undefined,
@@ -296,13 +675,113 @@ export class MapService {
       }
 
       snapshot.fmcw.detections = mapped;
-      snapshot.fmcw.track = trackTowardPrimary(radarLat, radarLng, mapped[0]!);
+
+      const futureLatLng = futureEgoSamplesToLatLngPath(
+        radarLat,
+        radarLng,
+        ai.futureTrajectoryEgoM,
+      );
+      const motionTrack =
+        futureLatLng.length >= 2 ? trackFromLatLngPath(futureLatLng) : null;
+      snapshot.fmcw.track =
+        motionTrack ??
+        trackWithDopplerExtrapolation(radarLat, radarLng, mapped[0]!);
+
       snapshot.fmcw.meta.liveRun = { ok: true, ...liveRunBase };
-      snapshot.fmcw.insights = buildInsightsFromAi(ai);
+      const insightsBase = buildInsightsFromAi(ai);
+      const rootHint =
+        typeof ai.autoDatasetRoot === 'string' ? ai.autoDatasetRoot : '';
+      const fid = typeof ai.autoFrameId === 'string' ? ai.autoFrameId : '';
+
+      const motionCorridorZones =
+        futureLatLng.length > 0
+          ? (() => {
+              const poly = buildTrajectoryCorridorPolygon(
+                radarLat,
+                radarLng,
+                futureLatLng,
+                28,
+              );
+              if (poly.length < 3) return [];
+              const lvl = insightsBase.ruleBasedRiskPrimary?.level ?? '—';
+              return [
+                {
+                  id: 'risk-motion-corridor',
+                  label: '속도 외삽 진행 복도 (1위 레이더 후보)',
+                  rationale: `직전 프레임과의 DBSCAN 중심 연관으로 추정한 속도를 일정 시간 외삽한 도달 가능 구역(폭 약 56m). 규칙 기반 위험 등급: ${lvl}.`,
+                  polygon: poly,
+                },
+              ];
+            })()
+          : [];
+
+      let mergedInsights: RadarInsightsDto = {
+        ...insightsBase,
+        futureTrajectoryLatLng:
+          futureLatLng.length > 0 ? futureLatLng : undefined,
+      };
+
+      if (rootHint && fid) {
+        const raw0 = rawList[0] as Record<string, unknown>;
+        const cmRaw = raw0?.centroidM;
+        const cm = Array.isArray(cmRaw)
+          ? cmRaw.map((x) => Number(x))
+          : [];
+        const centroidOk = cm.length >= 2 && cm.every((n) => Number.isFinite(n));
+        try {
+          const enrich = await buildVodLiveEnrichment({
+            root: rootHint,
+            frameId: fid,
+            syncedFrameCount:
+              typeof ai.autoSyncedFrameCount === 'number'
+                ? ai.autoSyncedFrameCount
+                : undefined,
+            primaryCentroidM: centroidOk ? cm : undefined,
+            radarLat,
+            radarLng,
+            primaryDetLat: mapped[0]!.lat,
+            primaryDetLng: mapped[0]!.lng,
+            primaryRangeM: mapped[0]!.rangeM,
+            dopplerMps: mapped[0]!.dopplerMps,
+          });
+          const storyExtra =
+            motionCorridorZones.length > 0
+              ? ' 지도의 추가 복도형 영역은 연속 레이더 프레임 속도 외삽 경로입니다.'
+              : '';
+          mergedInsights = {
+            ...mergedInsights,
+            vodProvenance: {
+              ...enrich.vodProvenance,
+              pipelineLine:
+                'VoD 동기 프레임 → DBSCAN + (가능 시) 직전 프레임과 중심 매칭으로 속도·헤딩 + YOLO(카메라) + LiDAR 상위 후보 ROI 교차검증 + 규칙 기반 위험도.',
+            },
+            vodMatchedTarget: enrich.vodMatchedTarget,
+            vodRiskZones: [...enrich.vodRiskZones, ...motionCorridorZones],
+            vodStoryParagraph: enrich.vodStoryParagraph + storyExtra,
+          };
+          if (enrich.vodMatchedTarget?.className) {
+            mergedInsights.conclusionBullets = [
+              ...(mergedInsights.conclusionBullets ?? []),
+              `3D 라벨 정합: "${enrich.vodMatchedTarget.className}" · 박스 헤딩(ego XY) 약 ${enrich.vodMatchedTarget.headingDegEgoXY ?? '—'}°`,
+            ];
+          }
+        } catch {
+          mergedInsights = {
+            ...mergedInsights,
+            vodRiskZones: motionCorridorZones,
+          };
+        }
+      } else if (motionCorridorZones.length > 0) {
+        mergedInsights = {
+          ...mergedInsights,
+          vodRiskZones: motionCorridorZones,
+        };
+      }
+      snapshot.fmcw.insights = mergedInsights;
       snapshot.fmcw.meta.methodology = {
         ...snapshot.fmcw.meta.methodology,
         demoImplementationNote:
-          'FMCW 탐지 목록은 Nest → FastAPI `POST /infer/vod/radar-fusion/auto`(VoD 동기 프레임) DBSCAN 결과입니다. 위경도는 시드 DB의 레이더 위치를 원점으로 한 수평면 투영입니다.',
+          'FMCW 탐지는 Nest → FastAPI VoD 융합 파이프라인입니다: DBSCAN, 동일 프레임 YOLO·LiDAR 교차검증, (동기 목록에서) 직전 프레임 레이더와의 연관으로 속도·진행 복도·규칙 위험도를 산출합니다.',
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
