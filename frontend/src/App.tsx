@@ -20,11 +20,12 @@ import {
   Outlet,
   Route,
   Routes,
-  useLocation,
   useNavigate,
   useSearchParams,
 } from 'react-router-dom'
-import { AlertZonePage } from './AlertZonePage'
+import maplibregl from 'maplibre-gl'
+import type { GeoJSONSource, MapLayerMouseEvent, StyleSpecification } from 'maplibre-gl'
+import { DroneEoIrIdentificationPage, DroneEoIrIdentificationPanel } from './DroneEoIrIdentificationPage'
 import { RadarCharts2D } from './RadarCharts2D'
 import { AirborneSarPage } from './AirborneSarPage'
 import { FmcwRadarIntroPage } from './FmcwRadarIntroPage'
@@ -46,6 +47,61 @@ import {
   latLngToMgrsSafe,
 } from './mgrsUtil'
 import {
+  BattlefieldScenarioPhase,
+  isInsideKoreaOpsRegion,
+  KOREA_OPS_BOUNDS,
+  phaseAtLeast,
+  shiftBattlefieldPhase,
+  tryAdvancePhaseWithSensor,
+  type BattlefieldSensorId,
+} from './battlefield/battlefieldScenarioPhase'
+import {
+  BATTLEFIELD_PHASE_MAP_FLAGS,
+  BATTLEFIELD_PHASE_PANEL,
+  BATTLEFIELD_SCENARIO_NOTICES,
+  getEntityPhasePopupNote,
+  getFriendlyAssetPhaseNote,
+  getSelectedDetailPhaseLine,
+  GRD_DISPATCH_RANGE_KM,
+  GRD_FALLBACK_SAR_UAV_ORIGIN,
+  GRD_MOTION_DETECTIONS_GEOJSON,
+  GRD_MOTION_META,
+} from './battlefield/battlefieldScenarioMock'
+import {
+  parseMovementRouteTooltipProps,
+  SAR_ENEMY_MOVEMENT_ROUTE_GEOJSON,
+  SAR_OBSERVATION_ZONE_GEOJSON,
+  SAR_SPOTLIGHT_RESULT_IMAGE_URL,
+  SAR_ZONE_PASS_PROBABILITIES,
+  SAR_MVP_REVEAL_SEQUENCE,
+  SAR_SPOTLIGHT_MODAL_SUB,
+  type SarMvpRevealStepId,
+  type SarPassProbability,
+  type SarMovementRouteTooltipProps,
+} from './battlefield/sarMvp'
+import {
+  buildUavMvpSnapshot,
+  renderUavMvpPopupHtml,
+  uavOpsStatusLabelKo,
+  type UavMvpSnapshot,
+} from './battlefield/uavMvp'
+import { DRONE_ENEMY_IDENTIFICATION_RANGE_KM } from './battlefield/droneEngagementConfig'
+import {
+  buildDroneMvpSnapshot,
+  droneMissionStatusLabelKo,
+  nearestMbtEnemyDistanceKm,
+  renderDroneMvpPopupHtml,
+  type DroneMvpSnapshot,
+} from './battlefield/droneMvp'
+import {
+  buildFmcwMvpBundle,
+  FmcwServiceDock,
+  FMCW_SCENARIO_GEOJSON,
+  renderFmcwRiskPopupHtml,
+  type FmcwMvpBundle,
+} from './battlefield/fmcwMvp'
+import { buildScenarioSummaryReport } from './battlefield/scenarioSummaryMock'
+import {
   BATTALION_PYONGYANG_INVASION_ORIGIN,
   BATTALION_ROUTE_CORRIDOR_REVEAL_MS,
   BATTALION_SCENARIO,
@@ -56,6 +112,7 @@ import {
   SAR_WIDE_SCAN_PAUSE_PROGRESS,
   SCENARIO_RANGES_KM,
 } from './scenarioBattalion'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import './App.css'
 import './tactical-hud.css'
 import { getApiBaseUrl } from './apiBaseUrl'
@@ -119,6 +176,392 @@ type HomePageProps = {
   user: User | null
 }
 
+type ServiceAssetCategory =
+  | 'SAR'
+  | 'UAV'
+  | 'DRONE'
+  | 'DIVISION'
+  | 'UPPER_COMMAND'
+  | 'ARTILLERY'
+  | 'ARMOR'
+
+type ServiceSensorId = 'sar' | 'uav' | 'drone' | 'fmcw'
+
+type ServiceAssetPoint = {
+  id: number
+  name: string
+  lat: number
+  lng: number
+  category: ServiceAssetCategory
+  level: UnitLevel
+  formation: string
+  elevationM: number
+  mgrs: string
+  readiness: '양호' | '경계' | '최고'
+  mission: string
+}
+
+type ScenarioEntityRelation = 'ENEMY' | 'ALLY' | 'NEUTRAL'
+
+type ScenarioRiskLevel = '낮음' | '중간' | '높음' | '미평가'
+
+type ScenarioEntity = {
+  id: number
+  name: string
+  lat: number
+  lng: number
+  relation: ScenarioEntityRelation
+  kind: string
+  status: string
+  speedKph: number
+  headingDeg: number
+  riskLevel: ScenarioRiskLevel
+  /** GRD 기반 전차 추정(더미) — 호버 팝업에만 사용 */
+  grdTankEstimate?: number
+  /** GRD 위험도 점수(더미) */
+  grdRiskScore?: number
+}
+
+type SelectedObjectDetail = {
+  title: string
+  affiliation: '적' | '아군' | '우군' | '중립'
+  lat: number
+  lng: number
+  mgrs: string
+  summary: string
+  speedKph?: number
+  headingDeg?: number
+  riskLevel?: ScenarioRiskLevel
+  /** UAV 마커 클릭 시 EO/IR·식별 mock */
+  uavMvp?: UavMvpSnapshot
+  /** 드론 마커 클릭 시 근접 정찰 mock */
+  droneMvp?: DroneMvpSnapshot
+}
+
+type ScenarioTacticScore = {
+  name: string
+  score: number
+  rationale: string
+}
+
+type LayerToggleKey = 'friendly' | 'enemy' | 'ally' | 'neutral' | 'terrain'
+
+type GoogleBasePresetId = 'hybrid' | 'satellite' | 'roadmap' | 'terrain'
+
+type MapRasterTuning = {
+  brightness: number
+  contrast: number
+  saturation: number
+  hue: number
+  opacity: number
+}
+
+type ServiceSensorState = Record<ServiceSensorId, { running: boolean; index: number }>
+
+type RequireAuthProps = {
+  user: User | null
+  authReady: boolean
+}
+
+const SERVICE_CATEGORY_LABEL: Record<ServiceAssetCategory, string> = {
+  DIVISION: '사단 위치',
+  UPPER_COMMAND: '상급지휘소 위치',
+  ARTILLERY: '포병부대 위치',
+  ARMOR: '전차부대 위치',
+  SAR: 'SAR',
+  UAV: 'UAV(EO/IR)',
+  DRONE: '드론',
+}
+
+const SERVICE_CATEGORY_COLOR: Record<ServiceAssetCategory, string> = {
+  DIVISION: '#2dd4bf',
+  UPPER_COMMAND: '#ec4899',
+  ARTILLERY: '#f97316',
+  ARMOR: '#60a5fa',
+  SAR: '#22c55e',
+  UAV: '#38bdf8',
+  DRONE: '#c026d3',
+}
+
+const SENSOR_BUTTON_META: Record<
+  ServiceSensorId,
+  { label: string; category?: ServiceAssetCategory; color: string }
+> = {
+  sar: { label: 'SAR', category: 'SAR', color: '#22c55e' },
+  uav: { label: 'UAV (EO/IR)', category: 'UAV', color: '#38bdf8' },
+  drone: { label: '드론 근접', category: 'DRONE', color: '#c026d3' },
+  fmcw: { label: 'FMCW 레이더', color: '#f97316' },
+}
+
+const INITIAL_SENSOR_STATE: ServiceSensorState = {
+  sar: { running: false, index: 0 },
+  uav: { running: false, index: 0 },
+  drone: { running: false, index: 0 },
+  fmcw: { running: false, index: 0 },
+}
+
+const LAYER_TOGGLE_LABEL: Record<LayerToggleKey, string> = {
+  friendly: '아군(DB 자산)',
+  enemy: '적',
+  ally: '우군',
+  neutral: '중립',
+  terrain: '지형물',
+}
+
+const GOOGLE_BASE_PRESETS: Record<GoogleBasePresetId, { label: string; sourceId: string; layerId: string }> = {
+  hybrid: { label: '하이브리드(위성+라벨)', sourceId: 'google', layerId: 'google-satellite' },
+  satellite: { label: '위성(라벨 없음)', sourceId: 'google-satellite-clean', layerId: 'google-satellite-clean' },
+  roadmap: { label: '일반 도로', sourceId: 'google-roadmap', layerId: 'google-roadmap' },
+  terrain: { label: '지형', sourceId: 'google-terrain', layerId: 'google-terrain' },
+}
+
+const GOOGLE_BASE_LAYER_IDS = Object.values(GOOGLE_BASE_PRESETS).map((preset) => preset.layerId)
+
+const GOOGLE_BASE_SOURCE_TILES: Record<GoogleBasePresetId, string> = {
+  hybrid: 'https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',
+  satellite: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+  roadmap: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+  terrain: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+}
+
+const DEFAULT_MAP_RASTER_TUNING: MapRasterTuning = {
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  hue: 0,
+  opacity: 100,
+}
+
+const DUMMY_SCENARIO_ENTITIES: ReadonlyArray<ScenarioEntity> = [
+  {
+    id: 9001,
+    name: '적 전차군 A (평양시 집결)',
+    lat: 39.0392,
+    lng: 125.7625,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '집결 후 남하 준비',
+    speedKph: 22,
+    headingDeg: 188,
+    riskLevel: '높음',
+  },
+  {
+    id: 9002,
+    name: '적 전차군 B (함흥시 집결)',
+    lat: 39.8417,
+    lng: 127.7264,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '동부 축선 기동 준비',
+    speedKph: 19,
+    headingDeg: 214,
+    riskLevel: '중간',
+  },
+  {
+    id: 9003,
+    name: '적 전차군 C (함흥 남하 축선)',
+    lat: 39.723,
+    lng: 127.648,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '남하 진행',
+    speedKph: 26,
+    headingDeg: 203,
+    riskLevel: '중간',
+  },
+  {
+    id: 9050,
+    name: 'GRD 클러스터 · 남하 예상 지점',
+    lat: 39.42,
+    lng: 126.32,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: 'GRD 후보·집결 추정',
+    speedKph: 18,
+    headingDeg: 185,
+    riskLevel: '높음',
+    grdTankEstimate: 40,
+    grdRiskScore: 100,
+  },
+  {
+    id: 9101,
+    name: '우군 감시초소 1',
+    lat: 37.622,
+    lng: 126.903,
+    relation: 'ALLY',
+    kind: 'OBS',
+    status: '연동 감시',
+    speedKph: 0,
+    headingDeg: 0,
+    riskLevel: '낮음',
+  },
+  {
+    id: 9102,
+    name: '우군 감시초소 2',
+    lat: 37.598,
+    lng: 127.082,
+    relation: 'ALLY',
+    kind: 'OBS',
+    status: '연동 감시',
+    speedKph: 0,
+    headingDeg: 0,
+    riskLevel: '낮음',
+  },
+  {
+    id: 9201,
+    name: '중립 민간 차량군',
+    lat: 37.637,
+    lng: 126.968,
+    relation: 'NEUTRAL',
+    kind: 'CIV',
+    status: '일반 이동',
+    speedKph: 42,
+    headingDeg: 120,
+    riskLevel: '낮음',
+  },
+]
+
+function snapshotDroneMvpForBattlefieldService(input: {
+  lat: number
+  lng: number
+  mgrs: string
+  pathLength: number
+  pathIndex: number
+  running: boolean
+  phaseAtLeastDrone: boolean
+}): DroneMvpSnapshot {
+  const distKm = nearestMbtEnemyDistanceKm({ lat: input.lat, lng: input.lng }, DUMMY_SCENARIO_ENTITIES)
+  return buildDroneMvpSnapshot({
+    lat: input.lat,
+    lng: input.lng,
+    mgrs: input.mgrs,
+    pathLength: input.pathLength,
+    pathIndex: input.pathIndex,
+    running: input.running,
+    phaseAtLeastDrone: input.phaseAtLeastDrone,
+    distanceToNearestEnemyKm: distKm,
+    identificationRangeKm: DRONE_ENEMY_IDENTIFICATION_RANGE_KM,
+  })
+}
+
+const HAMHUNG_VIEW_CENTER: [number, number] = [127.7264, 39.8417]
+
+const DUMMY_TERRAIN_AREAS: Parameters<GeoJSONSource['setData']>[0] = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { name: '능선 장애지역' },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [126.78, 37.74],
+            [126.93, 37.74],
+            [126.93, 37.64],
+            [126.78, 37.64],
+            [126.78, 37.74],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: { name: '하천 통과 제한지역' },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.01, 37.7],
+            [127.13, 37.7],
+            [127.13, 37.62],
+            [127.01, 37.62],
+            [127.01, 37.7],
+          ],
+        ],
+      },
+    },
+  ],
+} as Parameters<GeoJSONSource['setData']>[0]
+
+const SERVICE_ASSETS_SOURCE_ID = 'service-assets-source'
+const SERVICE_ASSETS_CLUSTER_LAYER_ID = 'service-assets-cluster-layer'
+const SERVICE_ASSETS_CLUSTER_COUNT_LAYER_ID = 'service-assets-cluster-count-layer'
+const SERVICE_ASSETS_LAYER_ID = 'service-assets-layer'
+const SERVICE_ASSETS_LABEL_LAYER_ID = 'service-assets-label-layer'
+const SERVICE_MOVERS_SOURCE_ID = 'service-movers-source'
+const SERVICE_MOVERS_LAYER_ID = 'service-movers-layer'
+const SERVICE_MOVERS_LABEL_LAYER_ID = 'service-movers-label-layer'
+const SERVICE_SCENARIO_SOURCE_ID = 'service-scenario-source'
+const SERVICE_ENEMY_LAYER_ID = 'service-enemy-layer'
+const SERVICE_ALLY_LAYER_ID = 'service-ally-layer'
+const SERVICE_NEUTRAL_LAYER_ID = 'service-neutral-layer'
+const SERVICE_SCENARIO_LABEL_LAYER_ID = 'service-scenario-label-layer'
+const SERVICE_TERRAIN_SOURCE_ID = 'service-terrain-source'
+const SERVICE_TERRAIN_FILL_LAYER_ID = 'service-terrain-fill-layer'
+const SERVICE_TERRAIN_LINE_LAYER_ID = 'service-terrain-line-layer'
+const SERVICE_SAR2_ZONE_SOURCE_ID = 'service-sar2-zone-source'
+const SERVICE_SAR2_ZONE_FILL_LAYER_ID = 'service-sar2-zone-fill-layer'
+const SERVICE_SAR2_ZONE_LINE_LAYER_ID = 'service-sar2-zone-line-layer'
+const SERVICE_ENEMY_ROUTE_SOURCE_ID = 'service-enemy-route-source'
+const SERVICE_ENEMY_ROUTE_LAYER_ID = 'service-enemy-route-layer'
+const SERVICE_ENEMY_ROUTE_HIT_LAYER_ID = 'service-enemy-route-hit-layer'
+const SERVICE_FMCW_RISK_SOURCE_ID = 'service-fmcw-risk-source'
+const SERVICE_FMCW_RISK_FILL_LAYER_ID = 'service-fmcw-risk-fill-layer'
+const SERVICE_FMCW_RISK_LINE_LAYER_ID = 'service-fmcw-risk-line-layer'
+const SERVICE_FMCW_INGRESS_LINE_LAYER_ID = 'service-fmcw-ingress-line-layer'
+const SERVICE_FMCW_TRACK_LAYER_ID = 'service-fmcw-track-layer'
+const SERVICE_GRD_MOTION_SOURCE_ID = 'service-grd-motion-source'
+const SERVICE_GRD_MOTION_FILL_LAYER_ID = 'service-grd-motion-fill-layer'
+const SERVICE_GRD_MOTION_LINE_LAYER_ID = 'service-grd-motion-line-layer'
+
+/** SAR Spotlight(관측 구역 클릭 시 표시되는 인식 결과 샘플 이미지) */
+/** 적 전차(MBT) 클릭 시 SAR·EO 파이프라인 추출 과정 안내용 임시 데모 영상 */
+const SAR_MBT_EXTRACTION_DEMO_VIDEO_URL = '/media/yolo-tank-1.mp4'
+
+/** 지도 빈 곳 클릭 시 팝업을 닫지 않도록 제외할 레이어(객체·라벨·클러스터·SAR 구역 등) */
+const SERVICE_MAP_OBJECT_CLICK_LAYER_IDS: string[] = [
+  SERVICE_ASSETS_LAYER_ID,
+  SERVICE_ASSETS_CLUSTER_LAYER_ID,
+  SERVICE_ASSETS_CLUSTER_COUNT_LAYER_ID,
+  SERVICE_ASSETS_LABEL_LAYER_ID,
+  SERVICE_MOVERS_LAYER_ID,
+  SERVICE_MOVERS_LABEL_LAYER_ID,
+  SERVICE_ENEMY_LAYER_ID,
+  SERVICE_ALLY_LAYER_ID,
+  SERVICE_NEUTRAL_LAYER_ID,
+  SERVICE_SCENARIO_LABEL_LAYER_ID,
+  SERVICE_SAR2_ZONE_FILL_LAYER_ID,
+  SERVICE_SAR2_ZONE_LINE_LAYER_ID,
+  SERVICE_GRD_MOTION_FILL_LAYER_ID,
+  SERVICE_ENEMY_ROUTE_HIT_LAYER_ID,
+  SERVICE_FMCW_RISK_FILL_LAYER_ID,
+  SERVICE_FMCW_INGRESS_LINE_LAYER_ID,
+  SERVICE_FMCW_TRACK_LAYER_ID,
+]
+
+const GOOGLE_SATELLITE_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    google: {
+      type: 'raster',
+      tiles: ['https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}'],
+      tileSize: 256,
+      attribution: 'Google Satellite',
+      maxzoom: 21,
+    },
+  },
+  layers: [
+    {
+      id: 'google-satellite',
+      type: 'raster',
+      source: 'google',
+      minzoom: 0,
+      maxzoom: 22,
+    },
+  ],
+}
+
 type MapVideoModalState = {
   title: string
   subtitle?: string
@@ -170,6 +613,9 @@ type FriendlyUnit = {
   branch: string
   lat: number
   lng: number
+  formation?: string | null
+  elevationM?: number | null
+  mgrs?: string | null
   personnel: number
   equipment: string
   readiness: '양호' | '경계' | '최고'
@@ -182,6 +628,35 @@ type FriendlyUnit = {
 
 type FriendlyUnitFromApi = Omit<FriendlyUnit, 'situationVideoUrl'> & {
   situationVideoUrl?: string | null
+}
+
+/** DB 시드 없이도 프로필명으로 출전 부대 매핑(폴백) */
+function fallbackTacticDeployUnitNames(tacticProfileName: string): string[] {
+  const n = tacticProfileName.trim()
+  if (n.startsWith('부대1')) return ['3기갑소대']
+  if (n.startsWith('부대2')) return ['1보병중대 (전방)']
+  if (n.startsWith('부대3')) return ['2포병포대']
+  return []
+}
+
+function resolveTacticDeployUnitIds(
+  tacticProfileName: string,
+  payload: Record<string, unknown> | null,
+  units: FriendlyUnit[],
+): number[] {
+  let names: string[] = []
+  if (payload && Array.isArray(payload.deployUnitNames)) {
+    names = payload.deployUnitNames.filter((x): x is string => typeof x === 'string')
+  }
+  if (names.length === 0) {
+    names = fallbackTacticDeployUnitNames(tacticProfileName)
+  }
+  const ids: number[] = []
+  for (const name of names) {
+    const u = units.find((fu) => fu.name === name)
+    if (u) ids.push(u.id)
+  }
+  return ids
 }
 
 type EnemyInfiltration = {
@@ -467,6 +942,10 @@ const THREAT_COLOR: Record<EnemyInfiltration['threatLevel'], string> = {
 const SIM_PATH_STEPS = 200
 /** 1배속일 때 재생에 걸리는 시간(초) */
 const SIM_DURATION_SEC = 45
+/** 4단계 통합 시뮬 진입 직후, 적·아군 초기 위치만 보여 주는 시간(ms) */
+const SIM_INTRO_POSITIONS_MS = 3000
+/** 인트로 종료 후 SAR 손실 경고 배너 자동 숨김(ms) — 확인 버튼으로도 닫을 수 있음 */
+const SIM_SAR_LOSS_ALERT_AUTO_DISMISS_MS = 12000
 const SAR_UPDATE_INTERVAL_HOURS = 2
 const UAV_TRANSIT_PROGRESS_SPAN = 0.11
 const DRONE_TRANSIT_PROGRESS_SPAN = 0.11
@@ -1021,6 +1500,7 @@ type MapScene = {
     id: number
     pin: KakaoCustomOverlayInstance
     info: KakaoCustomOverlayInstance
+    pinEl: HTMLDivElement
   }>
   enemies: Array<{
     id: number
@@ -1140,6 +1620,8 @@ type ApplySimFrameOpts = {
   sarContact: boolean
   /** 초기 SAR/UAV 단계에서는 적 핀 자체를 숨김 */
   enemyVisible?: boolean
+  /** false면 적 핀은 유지하고 C2–적 축선·거리 라벨만 숨김 */
+  showC2EnemyAxis?: boolean
   /** 예약: 적을 점(단순 블립)으로만 표현 */
   enemyDotOnly?: boolean
   /** C2–적 거리(km) */
@@ -1152,6 +1634,8 @@ type ApplySimFrameOpts = {
   scenarioIntegratedSimActive?: boolean
   onPrimaryEnemyRadarDetect?: (detected: boolean) => void
   onPrimaryEnemyNearDmz38?: (near: boolean) => void
+  /** 전술 선택에 따라 표적 방향으로 전진 배치되는 아군(출전) */
+  deployedFriendlyUnitIds?: ReadonlySet<number>
 }
 
 function mergeSimFrameOpts(
@@ -1171,6 +1655,7 @@ function mergeSimFrameOpts(
     primaryEnemyId: b.primaryEnemyId ?? null,
     sarContact: b.sarContact,
     enemyVisible: b.enemyVisible !== false,
+    showC2EnemyAxis: b.showC2EnemyAxis !== false,
     enemyDotOnly: b.enemyDotOnly === true,
     scenarioIntegratedSimActive: b.scenarioIntegratedSimActive === true,
     onPrimaryEnemyRadarDetect: b.onPrimaryEnemyRadarDetect,
@@ -1182,6 +1667,7 @@ function mergeSimFrameOpts(
       b.sarContact &&
       dist != null &&
       dist <= SCENARIO_RANGES_KM.DRONE_DISPATCH_MAX_KM,
+    deployedFriendlyUnitIds: b.deployedFriendlyUnitIds,
   }
 }
 
@@ -1202,10 +1688,27 @@ function applySimulationFrame(
     primaryEnemyId,
   } = scene
 
-  units.forEach(({ id, pin, info }) => {
+  units.forEach(({ id, pin, info, pinEl }) => {
     const path = paths.friendly.get(id)
     if (!path) return
-    const { lat, lng } = samplePath(path, progress)
+    const base = samplePath(path, progress)
+    let { lat, lng } = base
+    const deployed = opts?.deployedFriendlyUnitIds?.has(id) ?? false
+    if (
+      deployed &&
+      opts?.primaryEnemyId != null &&
+      progress > 0.01 &&
+      opts.enemyVisible !== false
+    ) {
+      const ePath = paths.enemy.get(opts.primaryEnemyId)
+      if (ePath && ePath.length > 1) {
+        const tgt = samplePath(ePath, progress)
+        const α = 0.26
+        lat = base.lat + (tgt.lat - base.lat) * α
+        lng = base.lng + (tgt.lng - base.lng) * α
+      }
+    }
+    pinEl.classList.toggle('friendly-pin--tactic-deployed', deployed)
     const ll = new kakaoMaps.LatLng(lat, lng)
     pin.setPosition(ll)
     // setPosition만으로 DOM이 갱신되지 않는 카카오맵 버전 대비: 지도에 다시 붙여 그리기
@@ -1292,7 +1795,7 @@ function applySimulationFrame(
     }
   })
 
-  const axisVisible = opts?.enemyVisible !== false
+  const axisVisible = opts?.enemyVisible !== false && opts?.showC2EnemyAxis !== false
   if (
     c2EnemyLine?.setPath &&
     c2UnitId != null &&
@@ -1576,7 +2079,7 @@ function attachKakaoTacticalPins(
       })
     }
 
-    unitScene.push({ id: unit.id, pin: pinOverlay, info: infoOverlay })
+    unitScene.push({ id: unit.id, pin: pinOverlay, info: infoOverlay, pinEl })
   })
 
   enemySource.forEach((enemy) => {
@@ -1757,15 +2260,15 @@ function attachKakaoTacticalPins(
 
 function HomePage({ user }: HomePageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const scenarioStep = useMemo((): 0 | 1 | 2 | 3 | 4 => {
+  const scenarioStep = useMemo((): 0 | 1 | 2 | 3 | 4 | 5 => {
     const q = searchParams.get('scenario')
     const n = q != null && q !== '' ? parseInt(q, 10) : NaN
     if (!Number.isFinite(n) || n < 1) return 0
-    if (n >= 5) return 4
-    return n as 0 | 1 | 2 | 3 | 4
+    if (n > 5) return 5
+    return n as 0 | 1 | 2 | 3 | 4 | 5
   }, [searchParams])
   const setScenarioStep = useCallback(
-    (step: 0 | 1 | 2 | 3 | 4) => {
+    (step: 0 | 1 | 2 | 3 | 4 | 5) => {
       if (step === 0) setSearchParams({}, { replace: true })
       else setSearchParams({ scenario: String(step) }, { replace: true })
     },
@@ -1788,6 +2291,16 @@ function HomePage({ user }: HomePageProps) {
   const [simMapZoomRevision, setSimMapZoomRevision] = useState(0)
   const [simPlaying, setSimPlaying] = useState(false)
   const [simProgress, setSimProgress] = useState(0)
+  /** 4단계 진입 직후 ~SIM_INTRO_POSITIONS_MS: 궤적 재생·타임라인 비활성, 초기 배치만 표시 */
+  const [simIntroActive, setSimIntroActive] = useState(false)
+  /** 인트로 직후: 위성 SAR 신호 손실·적 소실 경고 배너 */
+  const [simSarLossAlertVisible, setSimSarLossAlertVisible] = useState(false)
+  const simIntroActiveRef = useRef(false)
+  const prevScenarioStepForIntroRef = useRef<0 | 1 | 2 | 3 | 4 | 5 | null>(null)
+  const prevSimIntroForLossAlertRef = useRef(false)
+  useEffect(() => {
+    simIntroActiveRef.current = simIntroActive
+  }, [simIntroActive])
   const [simSeekDragging, setSimSeekDragging] = useState(false)
   const simSeekTrackRef = useRef<HTMLDivElement | null>(null)
   const [simSpeed, setSimSpeed] = useState<0.5 | 1 | 2>(1)
@@ -1850,6 +2363,7 @@ function HomePage({ user }: HomePageProps) {
   const [tacticSavePending, setTacticSavePending] = useState(false)
   const [tacticSaveMessage, setTacticSaveMessage] = useState<string | null>(null)
   const [selectedTacticUnit, setSelectedTacticUnit] = useState<string | null>(null)
+  const [tacticDeployedUnitIds, setTacticDeployedUnitIds] = useState<number[]>([])
   const [tacticDecisionNote, setTacticDecisionNote] = useState('')
   const [tacticSupportPopoverOpen, setTacticSupportPopoverOpen] = useState(false)
   const uavOrderModalTitleId = useId()
@@ -1883,7 +2397,7 @@ function HomePage({ user }: HomePageProps) {
   )
 
   const enemyDistanceKm = useMemo(() => {
-    if (scenarioStep !== 4 || !simPaths) return null
+    if (scenarioStep !== 5 || !simPaths) return null
     if (simProgress < enemyCorridorEntryProgress) return null
     return enemyDistanceFromC2Km(
       simPaths,
@@ -1917,7 +2431,7 @@ function HomePage({ user }: HomePageProps) {
   }, [simProgress])
 
   const scenarioV2Phase = useMemo<ScenarioV2Phase>(() => {
-    if (scenarioStep !== 4) return 'sat-watch'
+    if (scenarioStep !== 5) return 'sat-watch'
     if (uavLaunchStartProgress == null) {
       return simProgress >= wideScanPauseProgress ? 'sat-wide-pause' : 'sat-watch'
     }
@@ -1938,24 +2452,50 @@ function HomePage({ user }: HomePageProps) {
     wideScanPauseProgress,
   ])
 
+  /** 전술 선택이 API 추천 1위(최고 적합도)와 일치할 때 — 표적 제압 가정으로 지도·통합 뷰에서 적 핀 숨김 */
+  const enemySuppressedByBestTactic = useMemo(() => {
+    if (scenarioStep !== 5 || scenarioV2Phase !== 'tactics') return false
+    if (!selectedTacticUnit || !bestTacticRecommendation) return false
+    return selectedTacticUnit === bestTacticRecommendation.unitName
+  }, [scenarioStep, scenarioV2Phase, selectedTacticUnit, bestTacticRecommendation])
+
+  const tacticalEnemyDisplay = enemySuppressedByBestTactic ? null : primaryEnemyForSim ?? null
+  const tacticalEnemyDistanceKm = enemySuppressedByBestTactic ? null : enemyDistanceKm
+
+  const tacticDeployedUnitLabels = useMemo(() => {
+    if (tacticDeployedUnitIds.length === 0) return []
+    const idSet = new Set(tacticDeployedUnitIds)
+    return friendlyUnits.filter((u) => idSet.has(u.id)).map((u) => u.name)
+  }, [tacticDeployedUnitIds, friendlyUnits])
+
+  const simIntroPositionsPhase = scenarioStep === 5 && simIntroActive
+
   const enemyFullPinOnMap =
-    scenarioStep !== 4 ||
+    scenarioStep !== 5 ||
     scenarioV2Phase === 'tactical-mid' ||
     scenarioV2Phase === 'fmcw-drone-transit' ||
     scenarioV2Phase === 'tactics'
 
   /** SAR 남하 권역에서 궤적 포착 후 ~ UAV 승인·이동·광역 추적까지는 소형 블립만 */
   const enemySarTrackVisible =
-    scenarioStep === 4 &&
+    scenarioStep === 5 &&
     simProgress >= enemyCorridorEntryProgress &&
     (uavLaunchStartProgress != null ||
       scenarioV2Phase === 'sat-watch' ||
       scenarioV2Phase === 'sat-wide-pause')
 
-  const enemyMapVisible = scenarioStep !== 4 || enemyFullPinOnMap || enemySarTrackVisible
+  const enemyMapVisible =
+    !enemySuppressedByBestTactic &&
+    (scenarioStep !== 5 ||
+      simIntroPositionsPhase ||
+      enemyFullPinOnMap ||
+      enemySarTrackVisible)
 
   const enemyDotOnlyOnMap =
-    scenarioStep === 4 && enemySarTrackVisible && !enemyFullPinOnMap
+    scenarioStep === 5 &&
+    !simIntroPositionsPhase &&
+    enemySarTrackVisible &&
+    !enemyFullPinOnMap
 
   enemyAssetHoverRef.current = {
     enter: (enemy) => {
@@ -1985,14 +2525,14 @@ function HomePage({ user }: HomePageProps) {
 
   /** 지휘통제실 기준 40km 이내일 때만 전술 지도 PiP + 인셋 확대(레이더 API와 무관) */
   const showTacticalPip =
-    scenarioStep === 4 &&
+    scenarioStep === 5 &&
     tacticalSubStep >= 4 &&
     sarContact &&
     enemyDistanceKm != null &&
     enemyDistanceKm <= SCENARIO_RANGES_KM.TACTICAL_RANGE_KM
 
   const fmcwInRange =
-    scenarioStep === 4 &&
+    scenarioStep === 5 &&
     tacticalSubStep >= 5 &&
     sarContact &&
     radarSnapshot != null &&
@@ -2001,7 +2541,7 @@ function HomePage({ user }: HomePageProps) {
 
   /** C2 기준 ≤15km + SAR 접촉 — 정찰 드론 출동·EO/IR 촬영·전송 */
   const droneDispatchActive =
-    scenarioStep === 4 &&
+    scenarioStep === 5 &&
     sarContact &&
     enemyDistanceKm != null &&
     enemyDistanceKm <= SCENARIO_RANGES_KM.DRONE_DISPATCH_MAX_KM
@@ -2011,14 +2551,14 @@ function HomePage({ user }: HomePageProps) {
 
   const insetMinimal =
     sarContact &&
-    scenarioStep === 4 &&
+    scenarioStep === 5 &&
     tacticalSubStep >= 4 &&
     enemyDistanceKm != null &&
     enemyDistanceKm > SCENARIO_RANGES_KM.FMCW_MAX &&
     enemyDistanceKm <= SCENARIO_RANGES_KM.TACTICAL_RANGE_KM
 
   const mapUiActive =
-    scenarioStep === 4 && (tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare')
+    scenarioStep === 5 && (tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare')
 
   useEffect(() => {
     if (!mapUiActive) {
@@ -2107,7 +2647,7 @@ function HomePage({ user }: HomePageProps) {
   }, [enemyMapVisible, clearEnemyAssetFloatTimer])
 
   useEffect(() => {
-    if (scenarioStep !== 4) {
+    if (scenarioStep !== 5) {
       setUavEnemyVideoExpanded(false)
       return
     }
@@ -2116,7 +2656,7 @@ function HomePage({ user }: HomePageProps) {
   }, [scenarioStep, sarContact])
 
   useEffect(() => {
-    if (scenarioStep !== 4 || !simPaths) return
+    if (scenarioStep !== 5 || !simPaths) return
     if (uavLaunchStartProgress != null) return
     // 최초 진입 시 자동 재생하지 않고, 사용자가 버튼을 눌렀을 때만 진행.
     if (simProgress >= wideScanPauseProgress && simPlaying) {
@@ -2125,7 +2665,7 @@ function HomePage({ user }: HomePageProps) {
   }, [scenarioStep, simPaths, uavLaunchStartProgress, simProgress, simPlaying, wideScanPauseProgress])
 
   useEffect(() => {
-    if (scenarioStep !== 4) return
+    if (scenarioStep !== 5) return
     if (uavLaunchStartProgress == null) return
     if (enemyDistanceKm == null || enemyDistanceKm > SCENARIO_RANGES_KM.FMCW_MAX) return
     if (droneLaunchStartProgress == null) {
@@ -2140,7 +2680,7 @@ function HomePage({ user }: HomePageProps) {
   ])
 
   useEffect(() => {
-    if (scenarioStep !== 4) {
+    if (scenarioStep !== 5) {
       setUavLaunchStartProgress(null)
       setDroneLaunchStartProgress(null)
       setUavEnemyVideoExpanded(false)
@@ -2148,6 +2688,7 @@ function HomePage({ user }: HomePageProps) {
       setSelectedTacticUnit(null)
       setTacticDecisionNote('')
       setTacticRecommendations([])
+      setTacticDeployedUnitIds([])
       return
     }
     setTacticLoading(true)
@@ -2163,6 +2704,31 @@ function HomePage({ user }: HomePageProps) {
       .finally(() => setTacticLoading(false))
   }, [scenarioStep])
 
+  useEffect(() => {
+    if (scenarioStep !== 5 || scenarioV2Phase !== 'tactics') {
+      setTacticDeployedUnitIds([])
+      return
+    }
+    if (!selectedTacticUnit) {
+      setTacticDeployedUnitIds([])
+      return
+    }
+    const rec = tacticRecommendations.find((r) => r.unitName === selectedTacticUnit)
+    if (!rec) {
+      setTacticDeployedUnitIds([])
+      return
+    }
+    setTacticDeployedUnitIds(
+      resolveTacticDeployUnitIds(rec.unitName, rec.payload, friendlyUnits),
+    )
+  }, [
+    scenarioStep,
+    scenarioV2Phase,
+    selectedTacticUnit,
+    tacticRecommendations,
+    friendlyUnits,
+  ])
+
   const radarSnapshotRef = useRef<RadarSnapshot | null>(null)
   radarSnapshotRef.current = radarSnapshot
 
@@ -2171,14 +2737,74 @@ function HomePage({ user }: HomePageProps) {
   const [enemyNearDmz38, setEnemyNearDmz38] = useState(false)
   const enemyNearDmzPrevRef = useRef(false)
 
+  useEffect(() => {
+    const prev = prevScenarioStepForIntroRef.current
+    prevScenarioStepForIntroRef.current = scenarioStep
+
+    if (scenarioStep !== 5) {
+      setSimIntroActive(false)
+      return
+    }
+
+    if (prev !== 5) {
+      simProgressRef.current = 0
+      setSimProgress(0)
+      setSimPlaying(false)
+      radarDiscoveryAnnouncedRef.current = false
+      setEnemyRadarDiscovered(false)
+      enemyNearDmzPrevRef.current = false
+      setEnemyNearDmz38(false)
+      setUavLaunchStartProgress(null)
+      setDroneLaunchStartProgress(null)
+      setUavOrderedProfile(null)
+      setUavOrderModalOpen(false)
+      setTacticalSubStep(3)
+      setSelectedTacticUnit(null)
+      setTacticDeployedUnitIds([])
+      setTacticSaveMessage(null)
+      setSimSarLossAlertVisible(false)
+      setSimIntroActive(true)
+    }
+  }, [scenarioStep])
+
+  useEffect(() => {
+    if (scenarioStep !== 5) {
+      setSimSarLossAlertVisible(false)
+      prevSimIntroForLossAlertRef.current = false
+      return
+    }
+    const wasIntro = prevSimIntroForLossAlertRef.current
+    prevSimIntroForLossAlertRef.current = simIntroActive
+    if (wasIntro && !simIntroActive) {
+      setSimSarLossAlertVisible(true)
+    }
+  }, [scenarioStep, simIntroActive])
+
+  useEffect(() => {
+    if (!simSarLossAlertVisible || scenarioStep !== 5) return
+    const tid = window.setTimeout(() => {
+      setSimSarLossAlertVisible(false)
+    }, SIM_SAR_LOSS_ALERT_AUTO_DISMISS_MS)
+    return () => window.clearTimeout(tid)
+  }, [simSarLossAlertVisible, scenarioStep])
+
+  useEffect(() => {
+    if (scenarioStep !== 5 || !simIntroActive) return
+    const tid = window.setTimeout(() => {
+      setSimIntroActive(false)
+    }, SIM_INTRO_POSITIONS_MS)
+    return () => window.clearTimeout(tid)
+  }, [scenarioStep, simIntroActive])
+
   const simFrameOptsRef = useRef<ApplySimFrameOpts | undefined>(undefined)
   simFrameOptsRef.current = {
     radarSite: (radarSnapshot?.fmcw.radar as RadarSite) ?? null,
     primaryEnemyId: primaryEnemyForSim?.id ?? null,
     sarContact,
     enemyVisible: enemyMapVisible,
+    showC2EnemyAxis: scenarioStep !== 5 || !simIntroActive,
     enemyDotOnly: enemyDotOnlyOnMap,
-    scenarioIntegratedSimActive: scenarioStep === 4,
+    scenarioIntegratedSimActive: scenarioStep === 5,
     onPrimaryEnemyRadarDetect: (detected) => {
       if (detected && !radarDiscoveryAnnouncedRef.current) {
         radarDiscoveryAnnouncedRef.current = true
@@ -2191,10 +2817,11 @@ function HomePage({ user }: HomePageProps) {
         setEnemyNearDmz38(near)
       }
     },
+    deployedFriendlyUnitIds: new Set(tacticDeployedUnitIds),
   }
 
   useEffect(() => {
-    if (scenarioStep !== 4 || enemyDistanceKm == null) return
+    if (scenarioStep !== 5 || enemyDistanceKm == null) return
     if (tacticalSubStep === 3 && enemyDistanceKm <= SCENARIO_RANGES_KM.TACTICAL_RANGE_KM) {
       setTacticalSubStep(4)
     } else if (tacticalSubStep === 4 && enemyDistanceKm <= SCENARIO_RANGES_KM.FMCW_MAX) {
@@ -2302,7 +2929,7 @@ function HomePage({ user }: HomePageProps) {
 
   /** 카카오맵을 쓰지 않는 단독 모드에서만 38선·FMCW 락 상태 동기화(비교 모드는 왼쪽 지도가 담당) */
   useEffect(() => {
-    if (!noMapRadarSync || scenarioStep !== 4 || !simPaths || !primaryEnemyForSim) {
+    if (!noMapRadarSync || scenarioStep !== 5 || !simPaths || !primaryEnemyForSim) {
       return
     }
     const path = simPaths.enemy.get(primaryEnemyForSim.id)
@@ -2479,10 +3106,16 @@ function HomePage({ user }: HomePageProps) {
     const opts = mergeSimFrameOpts(base, dist)
     if (scene) applySimulationFrame(scene, simPaths, simProgressRef.current, opts)
     if (inset) applySimulationFrame(inset, simPaths, simProgressRef.current, opts)
-  }, [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
+  }, [
+    simPaths,
+    c2UnitForSim?.id,
+    primaryEnemyForSim?.id,
+    tacticDeployedUnitIds,
+    simIntroActive,
+  ])
 
   const handleLaunchUavFromBattalion = useCallback(() => {
-    if (scenarioStep !== 4) return
+    if (scenarioStep !== 5) return
     const now = Math.max(simProgressRef.current, wideScanPauseProgress)
     simProgressRef.current = now
     setSimProgress(now)
@@ -2501,6 +3134,7 @@ function HomePage({ user }: HomePageProps) {
   const handleSelectBestTactic = useCallback(() => {
     if (!bestTacticRecommendation) return
     setSelectedTacticUnit(bestTacticRecommendation.unitName)
+    setTacticSupportPopoverOpen(false)
     setTacticSaveMessage(
       `최고 적합도 자동 선택: ${bestTacticRecommendation.unitName} (${bestTacticRecommendation.suitabilityPct.toFixed(0)}%)`,
     )
@@ -2531,6 +3165,7 @@ function HomePage({ user }: HomePageProps) {
       setTacticSaveMessage(
         `전술 선택 저장 완료: ${picked.unitName} (${picked.suitabilityPct.toFixed(0)}%)`,
       )
+      setTacticSupportPopoverOpen(false)
     } catch (err) {
       setTacticSaveMessage(err instanceof Error ? err.message : '전술 저장 실패')
     } finally {
@@ -2557,6 +3192,7 @@ function HomePage({ user }: HomePageProps) {
     setUavEnemyVideoExpanded(false)
     setTacticSupportPopoverOpen(false)
     setSelectedTacticUnit(null)
+    setTacticDeployedUnitIds([])
     setTacticDecisionNote('')
     setTacticSaveMessage(null)
     mapCursorSetterRef.current(null)
@@ -2579,7 +3215,7 @@ function HomePage({ user }: HomePageProps) {
   }, [simPaths, c2UnitForSim?.id, primaryEnemyForSim?.id])
 
   const scenarioHoldForUav =
-    scenarioStep === 4 &&
+    scenarioStep === 5 &&
     scenarioV2Phase === 'sat-wide-pause' &&
     uavLaunchStartProgress == null
 
@@ -2624,7 +3260,8 @@ function HomePage({ user }: HomePageProps) {
 
   const simTimelineDisabled =
     !simPaths ||
-    scenarioStep !== 4 ||
+    scenarioStep !== 5 ||
+    simIntroActive ||
     scenarioHoldForUav ||
     ((tacticalPhaseUi === 'map' || tacticalPhaseUi === 'compare') && mapLoading)
 
@@ -2734,7 +3371,7 @@ function HomePage({ user }: HomePageProps) {
   useEffect(() => {
     let routeRevealTid: ReturnType<typeof setTimeout> | undefined
 
-    if (scenarioStep !== 4 || !mapUiActive) {
+    if (scenarioStep !== 5 || !mapUiActive) {
       return () => {
         if (routeRevealTid !== undefined) clearTimeout(routeRevealTid)
       }
@@ -2904,6 +3541,15 @@ function HomePage({ user }: HomePageProps) {
         }
 
         const syncBattalionRegions = (_progress: number) => {
+          if (simIntroActiveRef.current) {
+            routeZonePoly.setMap(null)
+            routeZoneOv.setMap(null)
+            for (const layer of sarTankLossLayers) {
+              layer.circle.setMap(null)
+              layer.ov.setMap(null)
+            }
+            return
+          }
           const lossVisible = pyongyangLossUnlockedRef.current
           const routeVisible = routeCorridorUnlockedRef.current
           if (routeVisible) {
@@ -3156,7 +3802,7 @@ function HomePage({ user }: HomePageProps) {
         let c2Uid: number | undefined
         let eid: number | undefined
 
-        if (c2Unit && primaryEnemy && sarContact && scenarioStep === 4) {
+        if (c2Unit && primaryEnemy && sarContact && scenarioStep === 5) {
           c2Uid = c2Unit.id
           eid = primaryEnemy.id
           const p0 = new kakaoMaps.LatLng(c2Unit.lat, c2Unit.lng)
@@ -3267,9 +3913,9 @@ function HomePage({ user }: HomePageProps) {
   ])
 
   useEffect(() => {
-    if (scenarioStep !== 4 || !mapUiActive) return
+    if (scenarioStep !== 5 || !mapUiActive) return
     sceneRef.current?.battalionRegionsSync?.(simProgress)
-  }, [scenarioStep, simProgress, mapUiActive])
+  }, [scenarioStep, simProgress, mapUiActive, simIntroActive])
 
   useEffect(() => {
     if (!simPlaying || !simPaths) {
@@ -3330,7 +3976,8 @@ function HomePage({ user }: HomePageProps) {
       <p className="muted">
         {scenarioStep === 0 ? (
           <>
-            <strong>0</strong> 요약 → <strong>1~3</strong> 단계별 센서 → <strong>4</strong> 통합 상황(40km/15km 전환).
+            <strong>0</strong> 요약 → <strong>1~3</strong> 센서 → <strong>4</strong> 드론 EO/IR 식별 →{' '}
+            <strong>5</strong> 통합 상황(지도·시뮬·40km/15km).
           </>
         ) : scenarioStep === 1 ? (
           <>1단계: SAR 광역 탐지·변화분석.</>
@@ -3338,9 +3985,11 @@ function HomePage({ user }: HomePageProps) {
           <>2단계: UAV 실시간 추적·EO/IR.</>
         ) : scenarioStep === 3 ? (
           <>3단계: FMCW·VoD 근거리 레이더.</>
+        ) : scenarioStep === 4 ? (
+          <>4단계: 드론 EO/IR 식별 — 웹 파이프라인 4번, 데모 영상·정찰 흐름.</>
         ) : (
           <>
-            4단계: 통합 상황 — C2 기준 <strong>40km</strong> 전술 권역, <strong>15km</strong> FMCW.
+            5단계: 통합 상황 — C2 기준 <strong>40km</strong> 전술 권역, <strong>15km</strong> FMCW, 지도·시뮬·전술.
           </>
         )}
       </p>
@@ -3378,6 +4027,13 @@ function HomePage({ user }: HomePageProps) {
       )}
 
       {scenarioStep === 4 && (
+        <DroneEoIrIdentificationPanel
+          embedded
+          scenarioNext={{ label: '5단계: 통합 상황', onContinue: () => setScenarioStep(5) }}
+        />
+      )}
+
+      {scenarioStep === 5 && (
       <>
       <div className="kpi-grid" style={{ marginTop: '1rem' }}>
         <article className="kpi-card safe">
@@ -3414,63 +4070,72 @@ function HomePage({ user }: HomePageProps) {
           <p className="scenario-theory-apply-panel__lead muted">
             C2–표적 방위·이동 방향·거리(≤40km 전술, ≤15km FMCW).
           </p>
-          {tacticalSimPoints && primaryEnemyForSim && c2UnitForSim ? (
-            <dl className="scenario-theory-apply-panel__metrics">
-              <div>
-                <dt>우선 표적</dt>
-                <dd>
-                  <strong>{primaryEnemyForSim.codename}</strong> · {primaryEnemyForSim.enemyBranch}
-                </dd>
-              </div>
-              <div>
-                <dt>지휘통제실→표적 방위</dt>
-                <dd>
-                  <strong>{tacticalSimPoints.bearing.toFixed(1)}°</strong> (
-                  {bearingToCardinalKo(tacticalSimPoints.bearing)} 방향)
-                </dd>
-              </div>
-              <div>
-                <dt>표적 이동 방향(궤적 접선)</dt>
-                <dd>
-                  {enemyMovementBearingDeg != null ? (
-                    <>
-                      <strong>{enemyMovementBearingDeg.toFixed(1)}°</strong> (
-                      {bearingToCardinalKo(enemyMovementBearingDeg)} 쪽으로 진행)
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>C2–표적 거리</dt>
-                <dd>
-                  {enemyDistanceKm != null ? (
-                    <strong>{enemyDistanceKm.toFixed(2)} km</strong>
-                  ) : (
-                    '타임라인 재생 후 표시'
-                  )}
-                </dd>
-              </div>
-              {radarSnapshot && fmcwInRange ? (
-                <>
-                  <div>
-                    <dt>FMCW 탐지 점(스냅샷)</dt>
-                    <dd>
-                      <strong>{radarSnapshot.fmcw.detections.length}</strong>개
-                    </dd>
-                  </div>
-                  {radarSnapshot.fmcw.track ? (
+          {tacticalSimPoints && c2UnitForSim ? (
+            enemySuppressedByBestTactic ? (
+              <p className="muted scenario-theory-apply-panel__pending">
+                <strong>최적 전술 적용</strong> — 추천 1위 부대로 표적이 제압된 상태입니다. 지도·전술 뷰에서 적 표시가
+                제거됩니다.
+              </p>
+            ) : primaryEnemyForSim ? (
+              <dl className="scenario-theory-apply-panel__metrics">
+                <div>
+                  <dt>우선 표적</dt>
+                  <dd>
+                    <strong>{primaryEnemyForSim.codename}</strong> · {primaryEnemyForSim.enemyBranch}
+                  </dd>
+                </div>
+                <div>
+                  <dt>지휘통제실→표적 방위</dt>
+                  <dd>
+                    <strong>{tacticalSimPoints.bearing.toFixed(1)}°</strong> (
+                    {bearingToCardinalKo(tacticalSimPoints.bearing)} 방향)
+                  </dd>
+                </div>
+                <div>
+                  <dt>표적 이동 방향(궤적 접선)</dt>
+                  <dd>
+                    {enemyMovementBearingDeg != null ? (
+                      <>
+                        <strong>{enemyMovementBearingDeg.toFixed(1)}°</strong> (
+                        {bearingToCardinalKo(enemyMovementBearingDeg)} 쪽으로 진행)
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>C2–표적 거리</dt>
+                  <dd>
+                    {enemyDistanceKm != null ? (
+                      <strong>{enemyDistanceKm.toFixed(2)} km</strong>
+                    ) : (
+                      '타임라인 재생 후 표시'
+                    )}
+                  </dd>
+                </div>
+                {radarSnapshot && fmcwInRange ? (
+                  <>
                     <div>
-                      <dt>FMCW 트랙 방위(스냅샷)</dt>
+                      <dt>FMCW 탐지 점(스냅샷)</dt>
                       <dd>
-                        <strong>{radarSnapshot.fmcw.track.bearingDeg}°</strong>
+                        <strong>{radarSnapshot.fmcw.detections.length}</strong>개
                       </dd>
                     </div>
-                  ) : null}
-                </>
-              ) : null}
-            </dl>
+                    {radarSnapshot.fmcw.track ? (
+                      <div>
+                        <dt>FMCW 트랙 방위(스냅샷)</dt>
+                        <dd>
+                          <strong>{radarSnapshot.fmcw.track.bearingDeg}°</strong>
+                        </dd>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </dl>
+            ) : (
+              <p className="muted scenario-theory-apply-panel__pending">부대·적 궤적을 불러오면 수치가 채워집니다.</p>
+            )
           ) : (
             <p className="muted scenario-theory-apply-panel__pending">부대·적 궤적을 불러오면 수치가 채워집니다.</p>
           )}
@@ -3528,6 +4193,46 @@ function HomePage({ user }: HomePageProps) {
                 상황이 일시 정지되어 있습니다. 상태 안내 바로 아래 <strong>UAV 출정 승인</strong>을 눌러 출정 절차를 진행하세요.
               </span>
             </div>
+          </div>
+        )}
+        {simIntroActive && (
+          <div className="sim-intro-positions-banner" role="status" aria-live="polite">
+            <span className="sim-intro-positions-banner__dot" aria-hidden />
+            <div className="sim-intro-positions-banner__text">
+              <strong className="sim-intro-positions-banner__title">초기 배치 확인</strong>
+              <span className="sim-intro-positions-banner__sub">
+                적·아군 시작 위치만 표시 중입니다. 약 {Math.round(SIM_INTRO_POSITIONS_MS / 1000)}초 후 타임라인·재생이
+                활성화됩니다.
+              </span>
+            </div>
+          </div>
+        )}
+        {simSarLossAlertVisible && !simIntroActive && (
+          <div
+            className="sim-sar-loss-alert"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            <span className="sim-sar-loss-alert__icon" aria-hidden>
+              !
+            </span>
+            <div className="sim-sar-loss-alert__body">
+              <strong className="sim-sar-loss-alert__title">경고 · 위성 SAR 신호 손실</strong>
+              <p className="sim-sar-loss-alert__line">
+                위성 SAR 연속 궤적이 끊겼습니다. 평양·후방 소실 구간에서 <strong>적 표적이 관측 화면에서 사라졌습니다</strong>.
+              </p>
+              <p className="sim-sar-loss-alert__line sim-sar-loss-alert__line--sub">
+                남하 관측 권역 재포착 및 UAV·다중 센서로 표적을 재확정해야 합니다. 타임라인 재생으로 상황을 전개하세요.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary sim-sar-loss-alert__dismiss"
+              onClick={() => setSimSarLossAlertVisible(false)}
+            >
+              확인
+            </button>
           </div>
         )}
         <div className="sim-toolbar">
@@ -3760,20 +4465,23 @@ function HomePage({ user }: HomePageProps) {
           </div>
         )}
 
-        {tacticSupportPopoverOpen && scenarioV2Phase === 'tactics' && (
-          <>
-            <div
-              className="tactic-popover-backdrop"
-              role="presentation"
-              aria-hidden
-              onClick={() => setTacticSupportPopoverOpen(false)}
-            />
-            <div
-              className="tactic-popover"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={tacticPopoverTitleId}
-            >
+        {tacticSupportPopoverOpen &&
+          scenarioV2Phase === 'tactics' &&
+          createPortal(
+            <div className="tactic-popover-portal">
+              <div
+                className="tactic-popover-backdrop"
+                role="presentation"
+                aria-hidden
+                onClick={() => setTacticSupportPopoverOpen(false)}
+              />
+              <div
+                className="tactic-popover"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={tacticPopoverTitleId}
+                onClick={(e) => e.stopPropagation()}
+              >
               <div className="tactic-popover__head">
                 <div className="tactic-popover__head-text">
                   <p className="tactic-popover__badge">지휘결심 지원</p>
@@ -3781,7 +4489,7 @@ function HomePage({ user }: HomePageProps) {
                     전술 선택
                   </h3>
                   <p className="muted tactic-popover__lead">
-                    화면 중앙에서 전술을 선택합니다. 배경을 누르거나 닫기로 접을 수 있습니다.
+                    지도가 보이는 화면 위쪽 중앙에 뜹니다. 배경을 누르거나 닫기로 접을 수 있습니다.
                   </p>
                 </div>
                 <div className="tactic-popover__head-actions">
@@ -3818,7 +4526,10 @@ function HomePage({ user }: HomePageProps) {
                           type="radio"
                           name="tactic-unit-popover"
                           checked={selectedTacticUnit === rec.unitName}
-                          onChange={() => setSelectedTacticUnit(rec.unitName)}
+                          onChange={() => {
+                            setSelectedTacticUnit(rec.unitName)
+                            setTacticSupportPopoverOpen(false)
+                          }}
                         />
                         <span className="tactic-decision-panel__item-main">
                           <strong>{rec.unitName}</strong>
@@ -3853,8 +4564,9 @@ function HomePage({ user }: HomePageProps) {
                 </div>
               </div>
             </div>
-          </>
-        )}
+            </div>,
+            document.body,
+          )}
 
         {roadPathStatus === 'loading' && (
           <p className="muted road-path-hint">도로 궤적 계산 중(OSRM)…</p>
@@ -3873,7 +4585,7 @@ function HomePage({ user }: HomePageProps) {
           <p className="muted">지도 데이터 로딩 중...</p>
         )}
 
-        {scenarioStep === 4 &&
+        {scenarioStep === 5 &&
           enemyDistanceKm != null &&
           enemyDistanceKm > SCENARIO_RANGES_KM.TACTICAL_RANGE_KM && (
           <div className="scenario-standby-banner" role="status">
@@ -3891,7 +4603,7 @@ function HomePage({ user }: HomePageProps) {
             </span>
           </div>
         )}
-        {enemyRadarDiscovered && scenarioStep === 4 && tacticalSubStep >= 5 && (
+        {enemyRadarDiscovered && scenarioStep === 5 && tacticalSubStep >= 5 && (
           <div className="scenario-discover-alert" role="alert">
             <span className="scenario-discover-alert__badge">FMCW</span>
             <span>
@@ -3907,11 +4619,31 @@ function HomePage({ user }: HomePageProps) {
             </span>
           </div>
         )}
-        {scenarioStep === 4 && fmcwInRange && (
+        {scenarioStep === 5 && fmcwInRange && (
           <div className="scenario-red-alert" role="alert">
             <span className="scenario-red-alert__badge">FMCW</span>
             <span>
               <strong>FMCW 활성</strong> — 방위·예측 궤적 표시. 드론: 지도/카드에서 재생.
+            </span>
+          </div>
+        )}
+        {scenarioStep === 5 &&
+          scenarioV2Phase === 'tactics' &&
+          tacticDeployedUnitLabels.length > 0 && (
+            <div className="scenario-tactic-deploy-banner" role="status">
+              <span className="scenario-tactic-deploy-banner__badge">출전</span>
+              <span>
+                <strong>선택 전술</strong> — 지도상 전진 배치:{' '}
+                {tacticDeployedUnitLabels.join(' · ')}
+              </span>
+            </div>
+          )}
+        {scenarioStep === 5 && scenarioV2Phase === 'tactics' && enemySuppressedByBestTactic && (
+          <div className="scenario-tactic-suppress-banner" role="status" aria-live="polite">
+            <span className="scenario-tactic-suppress-banner__badge">제압</span>
+            <span>
+              <strong>최적 전술 적용</strong> — 추천 1위 부대 배치로 표적 구역이 정리되었습니다. 지도에서{' '}
+              <strong>적 표적이 제거</strong>된 상태로 표시됩니다. 다른 부대를 고르면 다시 나타납니다.
             </span>
           </div>
         )}
@@ -4085,7 +4817,7 @@ function HomePage({ user }: HomePageProps) {
                     <div className="scenario-corner-video scenario-corner-video--right">
                       <span className="scenario-corner-video__head">YOLO 기반 전차 판별</span>
                       <video
-                        src={primaryEnemyForSim.droneVideoUrl}
+                        src={YOLO_TANK_CORNER_VIDEO_URL}
                         controls
                         autoPlay
                         muted
@@ -4315,12 +5047,12 @@ function HomePage({ user }: HomePageProps) {
               값을 표시합니다.
             </p>
             <TacticalPhaseDashboard
-              enemyDistanceKm={enemyDistanceKm}
+              enemyDistanceKm={tacticalEnemyDistanceKm}
               simProgress={simProgress}
               tacticalSubStep={tacticalSubStep}
               fmcwInRange={fmcwInRange}
               c2Name={c2UnitForSim?.name ?? '지휘통제실'}
-              enemy={primaryEnemyForSim ?? null}
+              enemy={tacticalEnemyDisplay}
               radarCharts={tacticalDashboardRadarCharts}
               onOpenDroneVideo={() => {
                 if (!primaryEnemyForSim) return
@@ -4344,8 +5076,8 @@ function HomePage({ user }: HomePageProps) {
             <TacticalSchematicMap
               bounds={schematicBounds}
               c2={tacticalSimPoints.c2}
-              enemy={tacticalSimPoints.enemy}
-              enemyDistanceKm={enemyDistanceKm}
+              enemy={enemySuppressedByBestTactic ? null : tacticalSimPoints.enemy}
+              enemyDistanceKm={tacticalEnemyDistanceKm}
               fmcwInRange={fmcwInRange}
               c2Name={c2UnitForSim?.name ?? '지휘통제실'}
               enemyName={primaryEnemyForSim?.codename ?? '우선 표적'}
@@ -4379,7 +5111,7 @@ function HomePage({ user }: HomePageProps) {
             </p>
             <TacticalRadarCanvas
               bearingToEnemyDeg={tacticalSimPoints.bearing}
-              rangeKm={enemyDistanceKm}
+              rangeKm={tacticalEnemyDistanceKm}
               maxRangeKm={radarCanvasConfig.maxRangeKm}
               fmcwInRange={fmcwInRange}
               radarHeadingDeg={radarCanvasConfig.headingDeg}
@@ -4422,12 +5154,12 @@ function HomePage({ user }: HomePageProps) {
             </p>
             {compareRightPane === 'dashboard' && (
               <TacticalPhaseDashboard
-                enemyDistanceKm={enemyDistanceKm}
+                enemyDistanceKm={tacticalEnemyDistanceKm}
                 simProgress={simProgress}
                 tacticalSubStep={tacticalSubStep}
                 fmcwInRange={fmcwInRange}
                 c2Name={c2UnitForSim?.name ?? '지휘통제실'}
-                enemy={primaryEnemyForSim ?? null}
+                enemy={tacticalEnemyDisplay}
                 radarCharts={tacticalDashboardRadarCharts}
                 onOpenDroneVideo={() => {
                   if (!primaryEnemyForSim) return
@@ -4443,8 +5175,8 @@ function HomePage({ user }: HomePageProps) {
               <TacticalSchematicMap
                 bounds={schematicBounds}
                 c2={tacticalSimPoints.c2}
-                enemy={tacticalSimPoints.enemy}
-                enemyDistanceKm={enemyDistanceKm}
+                enemy={enemySuppressedByBestTactic ? null : tacticalSimPoints.enemy}
+                enemyDistanceKm={tacticalEnemyDistanceKm}
                 fmcwInRange={fmcwInRange}
                 c2Name={c2UnitForSim?.name ?? '지휘통제실'}
                 enemyName={primaryEnemyForSim?.codename ?? '우선 표적'}
@@ -4453,7 +5185,7 @@ function HomePage({ user }: HomePageProps) {
             {compareRightPane === 'canvasScope' && tacticalSimPoints && (
               <TacticalRadarCanvas
                 bearingToEnemyDeg={tacticalSimPoints.bearing}
-                rangeKm={enemyDistanceKm}
+                rangeKm={tacticalEnemyDistanceKm}
                 maxRangeKm={radarCanvasConfig.maxRangeKm}
                 fmcwInRange={fmcwInRange}
                 radarHeadingDeg={radarCanvasConfig.headingDeg}
@@ -5091,7 +5823,11 @@ function IdentificationTrackingPage() {
   return (
     <section className="page">
       <h1>전차 식별 및 추적</h1>
-      <p className="muted">YOLO 검출·추적. 카메라: <NavLink to="/monitor">모니터</NavLink></p>
+      <p className="muted">
+        YOLO 검출·추적(파일 업로드). 드론 탑재 EO/IR 시나리오는{' '}
+        <NavLink to="/drone-eo-ir">드론 EO/IR 식별</NavLink> · 카메라:{' '}
+        <NavLink to="/monitor">모니터</NavLink>
+      </p>
 
       <form className="form yolo-upload-form" onSubmit={handleSubmitImage}>
         <label>
@@ -5242,62 +5978,10 @@ function IdentificationTrackingPage() {
   )
 }
 
-function DistanceAnalysisPage() {
-  return (
-    <section className="page">
-      <h1>거리 분석</h1>
-      <p className="muted">거리·경고·이력(연동 예정).</p>
-      <div className="kpi-grid" style={{ marginTop: '1rem' }}>
-        <article className="kpi-card neutral">
-          <p className="kpi-label">객체별 거리</p>
-          <strong className="kpi-value">추정 결과 표시 예정</strong>
-        </article>
-        <article className="kpi-card warning">
-          <p className="kpi-label">위험 경고</p>
-          <strong className="kpi-value">임계 거리 초과 시 알림</strong>
-        </article>
-        <article className="kpi-card safe">
-          <p className="kpi-label">시간축 로그</p>
-          <strong className="kpi-value">거리 변화 이력</strong>
-        </article>
-      </div>
-      <p className="muted" style={{ marginTop: '1.5rem' }}>
-        SAR·센서 연동 시 이 페이지에 통합 예정.
-      </p>
-    </section>
-  )
-}
-
-function GuidePage() {
-  return (
-    <section className="page">
-      <h1>가이드</h1>
-      <p className="muted">다층 감시: SAR → UAV → FMCW → 통합 상황판.</p>
-      <ul style={{ lineHeight: 1.8, marginTop: '1rem' }}>
-        <li>
-          <strong>홈</strong> — 단계별 센서·통합 상황
-        </li>
-        <li>
-          <strong>전차 식별/추적</strong> — YOLO·영상
-        </li>
-        <li>
-          <strong>거리 분석</strong> — 거리·경고(확장 예정)
-        </li>
-        <li>
-          <NavLink to="/sensor-pipeline">센서 파이프라인</NavLink> — 단계 요약
-        </li>
-        <li>
-          <strong>위험지역</strong> — 지도·경로
-        </li>
-      </ul>
-      <p className="muted" style={{ marginTop: '1.5rem' }}>
-        로그인 후 이용.
-      </p>
-    </section>
-  )
-}
-
-const DEMO_DRONE_VIDEO_URL = '/media/yolo_tank_temp.mp4'
+/** 시나리오 우측 「YOLO 기반 전차 판별」 고정 클립 (yolo_tank_temp2) */
+const YOLO_TANK_CORNER_VIDEO_URL = '/media/yolo-tank-2.mp4'
+/** 센서 파이프라인 4단계(드론 EO/IR) 등 데모 루프 (yolo_tank_temp) */
+const DEMO_DRONE_VIDEO_URL = '/media/yolo-tank-3.mp4'
 
 type SensorStepDef = {
   id: 'sat_sar' | 'uav_sar' | 'fmcw' | 'drone'
@@ -5309,72 +5993,84 @@ type SensorStepDef = {
   meta: { label: string; value: string }[]
 }
 
-/** 센서 파이프라인 개요 (홈 1~4단계와 동일 순서) */
+/** 센서 파이프라인 개요 (홈 1~4단계 — 기획 1·2·3·4단계 핵심을 웹 흐름에 대응) */
 const SENSOR_TECHNICAL_FLOW_OVERVIEW: string[] = [
-  'SAR 광역 탐지·이상 징후.',
-  'UAV 실시간 추적·EO/IR.',
-  'FMCW·VoD 근거리 (live: /map/radar/snapshot?source=live).',
-  '드론 EO/IR 식별·통합 상황 연동.',
+  'Sentinel-1 IW·SLC/GRD, Burst 병합(위상 연속), Sub-Aperture 위상차로 기동 표적 분리, RCS·OSM 2차 필터.',
+  'Spotlight·SARDet-100K·MSFA+R-CNN 계열로 전차/차량 이진 분류 후 좌표 유도; UAV에서 YOLO+ByteTrack·경로·EO/IR 융합.',
+  'VoD FMCW(3+1D) 점군 DBSCAN·연속 프레임 추적, LiDAR·Camera 교차검증, 규칙 기반 위험도→AI 위험지역 예측 확장.',
+  '근접 드론 YOLOv8n·SAHI·BoT-SORT, 레이더·영상 융합, Top-K·HITL UI로 정밀 기종 식별.',
 ]
 
 const SENSOR_WEB_SCENARIO_OVERVIEW: string[] = [
-  '1 SAR 광역·변화분석.',
-  '2 UAV 추적.',
-  '3 FMCW·VoD.',
-  '4 통합 상황 — 40km/15km·드론 전환.',
+  '1단계: 조기 경보(SAR)에 대응 — 광역 타일·변화·후보 AOI 시각화.',
+  '2단계: 정밀 SAR·UAV — 궤적, EO/IR 패널, 다중 표적 ID·경로 개요.',
+  '3단계: 레이더 인계·FMCW — 부채꼴, live 스냅샷(/map/radar/snapshot?source=live), 위험 예측 파이프.',
+  '4단계·5단계(웹 C2): 통합 상황판 — 40/15 km, 정찰 영상, 이벤트·전술, 지휘결심 지원.',
 ]
 
 const SENSOR_PIPELINE_STEPS: SensorStepDef[] = [
   {
     id: 'sat_sar',
     title: 'SAR 광역',
-    tag: '광역 탐지',
-    description: '광역 SAR로 이동·이상 징후 1차 탐지.',
-    technicalDetail: 'Wide/변화분석 → 후보 AOI. (전술부대급 표적 범위.)',
-    scenarioDetail: '홈 1단계: 전·후 비교 타일.',
+    tag: '조기 경보',
+    description:
+      'Sentinel-1 IW(Wide) 광역에서 대규모 기동 징후를 조기 포착하고, 정밀 자산 유도를 위한 후보를 산출합니다.',
+    technicalDetail:
+      '데이터: SLC(위상+진폭, 시분할 위상차)·GRD(진폭, RCS 대조). SNAP 기반 Burst 병합(Debursting)으로 위상 연속 단일 SLC. FFT 후 Sub-Aperture 분할·위상 간섭으로 정지 배경 제거·도플러 편이 픽셀 추출. RCS 임계 필터 후 OSM 도로·수역·지형과 공간 매칭해 최종 기동 후보 확정.',
+    scenarioDetail:
+      '웹 1단계: 전·후 SAR 타일·광역 지도로 기획서 ①조기 경보 파이프라인에 상응하는 상황 인지.',
     meta: [
-      { label: '산출', value: 'AOI·변화 신호' },
-      { label: '웹', value: 'SAR 타일·광역 지도' },
-      { label: '다음', value: 'UAV·정밀' },
+      { label: '데이터 예', value: '이집트 선박·한국 차량·북한 전차(SLC/GRD 각 1)' },
+      { label: '산출', value: '기동 후보 좌표·신뢰도' },
+      { label: '다음', value: '고해상 SAR·UAV 유도' },
     ],
   },
   {
     id: 'uav_sar',
     title: 'UAV',
-    tag: '추적 · EO/IR',
-    description: 'UAV로 표적 실시간 추적·식별.',
-    technicalDetail: 'YOLO/트래킹 등 연속 관측.',
-    scenarioDetail: '홈 2단계 · 통합 상황 UAV 구간.',
+    tag: '정밀 SAR · 추적',
+    description:
+      '1단계 후보 좌표를 바탕으로 Spotlight 고해상 SAR에서 전차·차량을 구분하고, UAV로 실시간 추적·경로를 유지합니다.',
+    technicalDetail:
+      '학습: SARDet-100K(Spotlight), Tank·Car 집중. 백본 ResNet-152·R-CNN 계열+MSFA 융합, ImageNet·DOTA·WST 사전학습 가중치, 최종층 파인튜닝. 위기 시 이진 분류, 평시 주둔지 전차 박스 카운트. UAV: YOLO 검출+ByteTrack 다중 추적, 프레임 중심 좌표로 경로·집단 패턴, ARMA3 기반 EO/IR 시뮬 학습 데이터, IR 열 대비 반영.',
+    scenarioDetail:
+      '웹 2단계·통합: UAV 궤적·EO/IR 패널로 기획 ②고해상 SAR+MSFA 및 ③무인기 추적 흐름을 한 화면 흐름에 대응.',
     meta: [
-      { label: '산출', value: '궤적·클래스' },
-      { label: '웹', value: '부호·위치' },
-      { label: '다음', value: '≤40km 전술 → FMCW' },
+      { label: '시뮬(3.1)', value: '공항·주거·산악 × EO/IR, 전차·차량 각 250샘플/셀' },
+      { label: '산출', value: '트랙 ID·경로·EO/IR 클립' },
+      { label: '다음', value: '레이더 구역 → FMCW' },
     ],
   },
   {
     id: 'fmcw',
     title: 'FMCW·VoD',
-    tag: '≤15km',
-    description: '근거리 레이더·VoD 융합.',
-    technicalDetail: 'DBSCAN·연속 프레임. live: ?source=live.',
-    scenarioDetail: '홈 3단계 · 통합 상황 부채꼴·탐지점.',
+    tag: '레이더 인계',
+    description:
+      '표적이 레이더 감시 구역으로 진입하면 연속 추적을 이어받고, VoD FMCW로 근거리 탐지·위치·위험 예측을 수행합니다.',
+    technicalDetail:
+      '군용 레이더 대체로 VoD: Camera·Velodyne LiDAR·ZF FRGen21 FMCW(bin N×7: x,y,z,RCS,v_r…). DBSCAN 군집으로 후보 중심, 동일 프레임 LiDAR·영상 교차검증, 연속 프레임 매칭으로 속도·방향·진행 가능 영역·위험지역(규칙→weak label·시뮬 GT로 AI 확장). 웹: live API ?source=live.',
+    scenarioDetail:
+      '웹 3단계·통합: 부채꼴·탐지 차트·지도 오버레이로 기획 ④⑧ FMCW·위험 예측 및 레이더 인계에 대응.',
     meta: [
-      { label: '산출', value: '탐지·트랙·예측' },
-      { label: '웹', value: '차트·지도 오버레이' },
-      { label: '다음', value: '드론 EO/IR' },
+      { label: 'VoD 규모', value: '프레임 8,682+ / 3D 박스 123k+ 등' },
+      { label: '산출', value: '탐지·트랙·위험 힌트' },
+      { label: '다음', value: '근접 드론 EO/IR' },
     ],
   },
   {
     id: 'drone',
     title: '드론 EO/IR',
-    tag: '근접 식별',
-    description: '임계 거리 내 EO/IR 확정.',
-    technicalDetail: 'YOLO 등 영상 분류.',
-    scenarioDetail: '통합 상황: 배너·핀 클릭 재생.',
+    tag: '정밀 식별',
+    description:
+      '근접에서 영상으로 기종을 세분하고, 레이더·영상을 융합하며 Top-K로 지휘관 HITL 결심을 지원합니다.',
+    technicalDetail:
+      '후보 9종 벤치 후 YOLOv8n 채택(mAP~0.793, ~4.23 ms). 라벨 무결·기초·Mosaic/Mixup 증강. 고고도 시 SAHI 슬라이싱 선택 활성화. BoT-SORT로 밀집·가림 시 ID 안정. 레이더 속도·패턴과 영상 분류 융합. UI: Top-K 클래스·신뢰도 표시.',
+    scenarioDetail:
+      '통합 상황: 정찰 영상 모달·핀·배너, 전술 추천과 연계. 기획 ④ 정밀 식별·⑥융합·⑦Top-K 및 드론 파이프.',
     meta: [
-      { label: '산출', value: '영상·식별' },
-      { label: '웹', value: '모달·정찰 영상' },
-      { label: '다음', value: '전술 추천' },
+      { label: '산출', value: '기종·신뢰도·Top-K·궤적' },
+      { label: '웹', value: 'EO/IR·HITL 뷰' },
+      { label: '다음', value: '종합 상황판·전술' },
     ],
   },
 ]
@@ -5520,9 +6216,38 @@ function SensorPipelineRadarLivePanel() {
   )
 }
 
+function sensorPipelineViewportBadge(stepId: SensorStepDef['id']): string {
+  switch (stepId) {
+    case 'sat_sar':
+      return 'Sentinel-1 · Sub-Aperture · RCS/OSM'
+    case 'uav_sar':
+      return 'MSFA·SARDet / YOLO·ByteTrack·EOIR'
+    case 'fmcw':
+      return 'VoD FMCW live · DBSCAN·융합'
+    case 'drone':
+      return 'YOLOv8n·SAHI·BoT-SORT·Top-K'
+    default:
+      return '개요 뷰'
+  }
+}
+
 function SensorPipelinePage() {
+  const [searchParams] = useSearchParams()
   const [stepIndex, setStepIndex] = useState(0)
   const [autoPlay, setAutoPlay] = useState(false)
+
+  useEffect(() => {
+    const key = searchParams.get('step')
+    const idx: Record<string, number> = {
+      sat_sar: 0,
+      uav_sar: 1,
+      fmcw: 2,
+      drone: 3,
+    }
+    if (key != null && idx[key] !== undefined) {
+      setStepIndex(idx[key])
+    }
+  }, [searchParams])
 
   const step = SENSOR_PIPELINE_STEPS[stepIndex]
   const isFirst = stepIndex === 0
@@ -5542,7 +6267,10 @@ function SensorPipelinePage() {
         <div>
           <h1>센서 파이프라인</h1>
           <p className="muted">
-            SAR → UAV → FMCW·VoD → 드론(EO/IR). 홈 1~4단계와 동일 흐름. 단계 선택 시 왼쪽 개요 강조.
+            시스템 설계상 ①SAR 조기경보 ②고해상 SAR+MSFA ③UAV 추적 ④레이더·드론 정밀식별 ⑤웹 종합상황판을, 본 화면에서는{' '}
+            <strong>SAR → UAV → FMCW·VoD → 드론(EO/IR)</strong> 네 구간으로 압축해 보여 줍니다(홈 시나리오 1~4와
+            동일 순서). 단계 선택 시 왼쪽 개요 강조. URL <code>?step=</code> 직접 진입. 근접 식별 전용:{' '}
+            <Link to="/drone-eo-ir">드론 EO/IR 식별</Link>.
           </p>
         </div>
         <label className="sensor-autoplay-toggle">
@@ -5609,35 +6337,42 @@ function SensorPipelinePage() {
           <div className="sensor-viewport-card">
             <div className="sensor-viewport-label">
               <span>{step.title}</span>
-              <span className="sensor-viewport-badge">
-                {step.id === 'fmcw'
-                  ? '실제 파이프라인 · /map/radar/snapshot?source=live (FMCW)'
-                  : '개요 뷰'}
-              </span>
+              <span className="sensor-viewport-badge">{sensorPipelineViewportBadge(step.id)}</span>
             </div>
 
             {step.id === 'sat_sar' && (
               <div className="sensor-sar-plate sensor-sar-plate--sat" aria-hidden>
-                <div className="sensor-sar-grid" />
-                <div className="sensor-sar-hotspots">
-                  <span style={{ top: '28%', left: '42%' }} />
-                  <span style={{ top: '55%', left: '63%' }} />
-                  <span style={{ top: '72%', left: '35%' }} />
+                <div className="sensor-sar-scene">
+                  <div className="sensor-sar-ground">
+                    <div className="sensor-sar-grid sensor-sar-grid--perspective" />
+                    <div className="sensor-sar-hotspots sensor-sar-hotspots--wide">
+                      <span style={{ top: '28%', left: '42%' }} />
+                      <span style={{ top: '55%', left: '63%' }} />
+                      <span style={{ top: '72%', left: '35%' }} />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
             {step.id === 'uav_sar' && (
-              <div className="sensor-sar-plate sensor-sar-plate--uav" aria-hidden>
-                <div className="sensor-sar-grid sensor-sar-grid--fine" />
-                <div className="sensor-sar-hotspots sensor-sar-hotspots--tight">
-                  <span style={{ top: '44%', left: '48%' }} />
-                  <span style={{ top: '51%', left: '54%' }} />
+              <div className="sensor-uav-viewport" aria-hidden>
+                <div className="sensor-uav-viewport__terrain" />
+                <div className="sensor-uav-viewport__scanlines" />
+                <div className="sensor-uav-viewport__crosshair" />
+                <div className="sensor-uav-viewport__target-box" />
+                <div className="sensor-uav-viewport__corners" />
+                <div className="sensor-uav-viewport__hud">
+                  <span className="sensor-uav-viewport__hud-line">EO/IR</span>
+                  <span className="sensor-uav-viewport__hud-line sensor-uav-viewport__hud-line--accent">
+                    TGT LOCK
+                  </span>
+                  <span className="sensor-uav-viewport__hud-line">AZ 042° · EL −12°</span>
                 </div>
               </div>
             )}
             {step.id === 'fmcw' && <SensorPipelineRadarLivePanel />}
             {step.id === 'drone' && (
-              <div className="sensor-drone-wrap">
+              <div className="sensor-drone-stage">
                 <video
                   className="sensor-drone-video"
                   src={DEMO_DRONE_VIDEO_URL}
@@ -5649,6 +6384,13 @@ function SensorPipelinePage() {
                 >
                   브라우저가 video를 지원하지 않습니다.
                 </video>
+                <div className="sensor-drone-stage__overlay" aria-hidden>
+                  <div className="sensor-drone-stage__overlay-top">
+                    <span className="sensor-drone-stage__rec" />
+                    <span className="sensor-drone-stage__label">EO/IR 근접</span>
+                  </div>
+                  <span className="sensor-drone-stage__corners" />
+                </div>
               </div>
             )}
           </div>
@@ -5693,6 +6435,12 @@ function SensorPipelinePage() {
                 다음 →
               </button>
             </div>
+            {step.id === 'drone' ? (
+              <p className="muted sensor-pipeline-crosslinks">
+                동일 단계를 전용 레이아웃으로 보려면{' '}
+                <Link to="/drone-eo-ir">드론 EO/IR 식별</Link> 페이지로 이동하세요.
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -5832,21 +6580,3191 @@ function CameraMonitorPage() {
   )
 }
 
-function HomeScenarioNavLink({
-  step,
-  label,
-}: {
-  step: '1' | '2' | '3' | '4'
-  label: string
-}) {
-  const location = useLocation()
-  const cur = new URLSearchParams(location.search).get('scenario')
-  const active = location.pathname === '/' && (cur ?? '') === step
-  return (
-    <Link to={`/?scenario=${step}`} className={active ? 'active' : undefined}>
-      {label}
-    </Link>
+function branchToServiceCategory(branch: string): ServiceAssetCategory | null {
+  if (branch.includes('상급지휘소') || branch.includes('상위대대')) return 'UPPER_COMMAND'
+  if (branch.includes('사단') || branch === '대대') return 'DIVISION'
+  if (branch.includes('포병')) return 'ARTILLERY'
+  if (branch.includes('전차') || branch.includes('기갑')) return 'ARMOR'
+  if (branch.includes('SAR')) return 'SAR'
+  if (branch.includes('UAV')) return 'UAV'
+  if (branch.includes('드론')) return 'DRONE'
+  return null
+}
+
+function toMapSourceData(
+  points: Array<{
+    id: number
+    name: string
+    lat: number
+    lng: number
+    category: string
+    relation?: string
+    kind?: string
+    status?: string
+    speedKph?: number
+    headingDeg?: number
+    riskLevel?: string
+    level?: string
+    formation?: string
+    elevationM?: number
+    mgrs?: string
+    readiness?: string
+    mission?: string
+    grdTankEstimate?: number
+    grdRiskScore?: number
+  }>,
+): Parameters<GeoJSONSource['setData']>[0] {
+  return {
+    type: 'FeatureCollection',
+    features: points.map((point) => ({
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: [point.lng, point.lat],
+      },
+      properties: {
+        id: point.id,
+        name: point.name,
+        category: point.category,
+        relation: point.relation ?? '',
+        kind: point.kind ?? '',
+        status: point.status ?? '',
+        speedKph: point.speedKph ?? null,
+        headingDeg: point.headingDeg ?? null,
+        riskLevel: point.riskLevel ?? '',
+        level: point.level ?? '',
+        formation: point.formation ?? '',
+        elevationM: point.elevationM ?? null,
+        mgrs: point.mgrs ?? '',
+        readiness: point.readiness ?? '',
+        mission: point.mission ?? '',
+        lat: point.lat,
+        lng: point.lng,
+        grdTankEstimate: point.grdTankEstimate ?? null,
+        grdRiskScore: point.grdRiskScore ?? null,
+      },
+    })),
+  } as Parameters<GeoJSONSource['setData']>[0]
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function renderServiceAssetPopupHtml(
+  asset: {
+    name: string
+    category: string
+    lat: number
+    lng: number
+    level?: string
+    formation?: string
+    elevationM?: number | null
+    mgrs?: string
+    readiness?: string
+    mission?: string
+  },
+  phaseNote?: string,
+): string {
+  const categoryLabel =
+    SERVICE_CATEGORY_LABEL[asset.category as ServiceAssetCategory] ?? asset.category
+  const elev =
+    typeof asset.elevationM === 'number' ? `${asset.elevationM.toFixed(1)} m` : '-'
+  return `
+    <div class="service-asset-popup">
+      <h4 class="service-asset-popup__title">${escapeHtml(asset.name)}</h4>
+      <dl class="service-asset-popup__dl">
+        <div class="service-asset-popup__row"><dt>분류</dt><dd>${escapeHtml(categoryLabel)}</dd></div>
+        <div class="service-asset-popup__row"><dt>단대오</dt><dd>${escapeHtml(asset.formation ?? '-')}</dd></div>
+        <div class="service-asset-popup__row"><dt>제대</dt><dd>${escapeHtml(asset.level ?? '-')}</dd></div>
+        <div class="service-asset-popup__row"><dt>표고</dt><dd>${elev}</dd></div>
+        <div class="service-asset-popup__row"><dt>MGRS</dt><dd class="service-asset-popup__mono">${escapeHtml(asset.mgrs ?? '-')}</dd></div>
+        <div class="service-asset-popup__row"><dt>WGS84</dt><dd class="service-asset-popup__mono">${asset.lat.toFixed(5)}, ${asset.lng.toFixed(5)}</dd></div>
+        <div class="service-asset-popup__row"><dt>준비태세</dt><dd>${escapeHtml(asset.readiness ?? '-')}</dd></div>
+        <div class="service-asset-popup__row service-asset-popup__row--mission"><dt>임무</dt><dd>${escapeHtml(asset.mission ?? '-')}</dd></div>
+        ${
+          phaseNote
+            ? `<div class="service-asset-popup__row"><dt>시나리오</dt><dd>${escapeHtml(phaseNote)}</dd></div>`
+            : ''
+        }
+      </dl>
+    </div>
+  `
+}
+
+function relationLabel(relation: ScenarioEntityRelation): '적' | '우군' | '중립' {
+  if (relation === 'ENEMY') return '적'
+  if (relation === 'ALLY') return '우군'
+  return '중립'
+}
+
+function getTacticScoresForEnemy(enemy: ScenarioEntity): ScenarioTacticScore[] {
+  if (enemy.riskLevel === '높음') {
+    return [
+      { name: '즉응 화력 차단', score: 91, rationale: '접근 속도·위협도가 모두 높아 즉응 타격 우선' },
+      { name: '우회 차단 기동', score: 82, rationale: '예상 진입축 우회 차단에 적합' },
+      { name: '감시 지속·교란', score: 66, rationale: '교전 전 추적 유지/교란은 보조 전술' },
+    ]
+  }
+  if (enemy.riskLevel === '중간') {
+    return [
+      { name: '감시 지속·추적', score: 88, rationale: '위협이 가변적이므로 추적 유지가 가장 효율적' },
+      { name: '선제 화력 경고사격', score: 74, rationale: '확인 타격 전 억제 효과 기대' },
+      { name: '우회 차단 기동', score: 69, rationale: '차단 기동은 지형 조건에 따라 선택' },
+    ]
+  }
+  return [
+    { name: '감시 유지', score: 83, rationale: '저위협 표적은 감시 유지가 최적' },
+    { name: '예비대 대기', score: 71, rationale: '타격보다는 예비대 대기 권장' },
+    { name: '즉응 화력 차단', score: 52, rationale: '현재 위협 수준에서 우선순위 낮음' },
+  ]
+}
+
+function renderGrdMotionPopupHtml(
+  meta: { classLabel: string; probPercent: number },
+  distKm: number | null,
+  inRange: boolean,
+  opts?: { usedFallbackDispatchOrigin?: boolean },
+): string {
+  const distLine =
+    distKm != null
+      ? `<div class="service-asset-popup__row"><dt>최근접 SAR/UAV</dt><dd>${distKm.toFixed(0)} km${
+          opts?.usedFallbackDispatchOrigin ? ' · DB 없음 시 시연 거점' : ''
+        }</dd></div>`
+      : `<div class="service-asset-popup__row"><dt>최근접 SAR/UAV</dt><dd>거점 없음(DB)</dd></div>`
+  const gateLine = inRange
+    ? `<div class="service-asset-popup__row"><dt>출동</dt><dd>허용 거리 이내 — UAV·드론 버튼 활성화</dd></div>`
+    : `<div class="service-asset-popup__row"><dt>출동</dt><dd>${GRD_DISPATCH_RANGE_KM} km 이내로 SAR/UAV 거점이 더 가까워야 합니다</dd></div>`
+  return `
+    <div class="service-asset-popup">
+      <h4 class="service-asset-popup__title">GRD 이동 검출(변화 픽셀)</h4>
+      <dl class="service-asset-popup__dl">
+        <div class="service-asset-popup__row"><dt>분류·신뢰도</dt><dd>${escapeHtml(meta.classLabel)}: ${meta.probPercent}%</dd></div>
+        ${distLine}
+        ${gateLine}
+      </dl>
+    </div>
+  `
+}
+
+function renderSarRouteMovementTooltipHtml(p: SarMovementRouteTooltipProps): string {
+  const pct = (p.moveProbability * 100).toFixed(0)
+  const routeMeta =
+    p.routeSource != null
+      ? `<div class="service-asset-popup__row"><dt>경로 산출</dt><dd>${escapeHtml(p.routeSource)}</dd></div>`
+      : ''
+  const target =
+    p.targetUnit != null
+      ? `<div class="service-asset-popup__row"><dt>도달 목표(아군)</dt><dd>${escapeHtml(p.targetUnit)}</dd></div>`
+      : ''
+  return `
+    <div class="service-asset-popup">
+      <h4 class="service-asset-popup__title">${escapeHtml(p.name)}</h4>
+      <dl class="service-asset-popup__dl">
+        <div class="service-asset-popup__row"><dt>적 전차 수</dt><dd>약 ${p.tankCount}대</dd></div>
+        <div class="service-asset-popup__row"><dt>이동 확률</dt><dd>${pct}%</dd></div>
+        <div class="service-asset-popup__row"><dt>이동 방향</dt><dd>${escapeHtml(p.moveDirectionLabel)} (${p.moveHeadingDeg.toFixed(0)}°)</dd></div>
+        ${target}
+        ${routeMeta}
+      </dl>
+    </div>
+  `
+}
+
+function renderScenarioEntityPopupHtml(entity: ScenarioEntity, phaseNote?: string): string {
+  return `
+    <div class="service-asset-popup">
+      <h4 class="service-asset-popup__title">${escapeHtml(entity.name)}</h4>
+      <dl class="service-asset-popup__dl">
+        <div class="service-asset-popup__row"><dt>분류</dt><dd>${relationLabel(entity.relation)}</dd></div>
+        <div class="service-asset-popup__row"><dt>유형</dt><dd>${escapeHtml(entity.kind)}</dd></div>
+        <div class="service-asset-popup__row"><dt>상태</dt><dd>${escapeHtml(entity.status)}</dd></div>
+        <div class="service-asset-popup__row"><dt>속도</dt><dd>${entity.speedKph.toFixed(1)} km/h</dd></div>
+        <div class="service-asset-popup__row"><dt>방향</dt><dd>${entity.headingDeg.toFixed(1)}°</dd></div>
+        <div class="service-asset-popup__row"><dt>위협도</dt><dd>${entity.riskLevel}</dd></div>
+        ${
+          entity.grdTankEstimate != null
+            ? `<div class="service-asset-popup__row"><dt>전차</dt><dd>${entity.grdTankEstimate}대</dd></div>`
+            : ''
+        }
+        ${
+          entity.grdRiskScore != null
+            ? `<div class="service-asset-popup__row"><dt>위험도</dt><dd>${entity.grdRiskScore}</dd></div>`
+            : ''
+        }
+        ${
+          phaseNote
+            ? `<div class="service-asset-popup__row"><dt>시나리오</dt><dd>${escapeHtml(phaseNote)}</dd></div>`
+            : ''
+        }
+      </dl>
+    </div>
+  `
+}
+
+function buildFallbackPath(baseLat: number, baseLng: number): Array<{ lat: number; lng: number }> {
+  return [
+    { lat: baseLat - 0.04, lng: baseLng - 0.05 },
+    { lat: baseLat - 0.015, lng: baseLng + 0.03 },
+    { lat: baseLat + 0.03, lng: baseLng + 0.07 },
+    { lat: baseLat + 0.05, lng: baseLng + 0.015 },
+    { lat: baseLat + 0.015, lng: baseLng - 0.06 },
+  ]
+}
+
+function BattlefieldServicePage() {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
+  const popupRef = useRef<maplibregl.Popup | null>(null)
+  const didFitRef = useRef(false)
+  const [assets, setAssets] = useState<ServiceAssetPoint[]>([])
+  const [assetLoading, setAssetLoading] = useState(true)
+  const [assetError, setAssetError] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory] = useState<ServiceAssetCategory | null>(null)
+  const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null)
+  const [sensorState, setSensorState] = useState<ServiceSensorState>(INITIAL_SENSOR_STATE)
+  const [scenarioPhase, setScenarioPhase] = useState<BattlefieldScenarioPhase>(
+    BattlefieldScenarioPhase.IDLE,
   )
+  const scenarioPhaseRef = useRef(scenarioPhase)
+  scenarioPhaseRef.current = scenarioPhase
+  const sensorStateRef = useRef(sensorState)
+  sensorStateRef.current = sensorState
+
+  const [selectedDetail, setSelectedDetail] = useState<SelectedObjectDetail | null>(null)
+  const [tacticScores, setTacticScores] = useState<ScenarioTacticScore[] | null>(null)
+  const [scenarioNotice, setScenarioNotice] = useState<string | null>(null)
+  const [sarZoneProbabilities, setSarZoneProbabilities] = useState<ReadonlyArray<SarPassProbability> | null>(null)
+  const [sarSpotlightOpen, setSarSpotlightOpen] = useState(false)
+  const sarSpotlightOpenRef = useRef(false)
+  sarSpotlightOpenRef.current = sarSpotlightOpen
+
+  const [sarMbtExtractionModalOpen, setSarMbtExtractionModalOpen] = useState(false)
+  const [sarMbtExtractionTitle, setSarMbtExtractionTitle] = useState('')
+  const sarMbtExtractionModalOpenRef = useRef(false)
+  sarMbtExtractionModalOpenRef.current = sarMbtExtractionModalOpen
+  const sarMbtExtractionVideoRef = useRef<HTMLVideoElement | null>(null)
+
+  const [scenarioSummaryOpen, setScenarioSummaryOpen] = useState(false)
+  const scenarioSummaryTitleId = useId()
+
+  const [sarMvpRevealStep, setSarMvpRevealStep] = useState<SarMvpRevealStepId>('prep')
+  const [sarSpotlightEmphasis, setSarSpotlightEmphasis] = useState(false)
+
+  const [baseMapPreset, setBaseMapPreset] = useState<GoogleBasePresetId>('hybrid')
+  const [rasterTuning, setRasterTuning] = useState<MapRasterTuning>(DEFAULT_MAP_RASTER_TUNING)
+  const [mapReady, setMapReady] = useState(false)
+  const [cursorReadout, setCursorReadout] = useState<{ lat: number; lng: number; mgrs: string } | null>(null)
+  const [layerVisible, setLayerVisible] = useState<Record<LayerToggleKey, boolean>>({
+    friendly: true,
+    enemy: true,
+    ally: true,
+    neutral: true,
+    terrain: true,
+  })
+
+  const [grdHoverId, setGrdHoverId] = useState<string | null>(null)
+  const [grdSelectedId, setGrdSelectedId] = useState<string | null>(null)
+  const setGrdSelectedIdRef = useRef<(id: string | null) => void>(() => {})
+  setGrdSelectedIdRef.current = setGrdSelectedId
+  const assetsRef = useRef(assets)
+  assetsRef.current = assets
+  const grdDispatchGateRef = useRef<{ focusId: string | null; eligible: boolean }>({
+    focusId: null,
+    eligible: false,
+  })
+
+  const grdFocusId = grdHoverId ?? grdSelectedId
+  const grdDispatchEligible = useMemo(() => {
+    if (!grdFocusId) return false
+    const meta = GRD_MOTION_META[grdFocusId]
+    if (!meta) return false
+    let sarUav = assets.filter((a) => a.category === 'SAR' || a.category === 'UAV')
+    if (sarUav.length === 0) {
+      sarUav = [
+        {
+          lat: GRD_FALLBACK_SAR_UAV_ORIGIN.lat,
+          lng: GRD_FALLBACK_SAR_UAV_ORIGIN.lng,
+        } as ServiceAssetPoint,
+      ]
+    }
+    const p = { lat: meta.centerLat, lng: meta.centerLng }
+    const dist = Math.min(...sarUav.map((a) => haversineKm({ lat: a.lat, lng: a.lng }, p)))
+    return dist <= GRD_DISPATCH_RANGE_KM
+  }, [grdFocusId, assets])
+
+  grdDispatchGateRef.current = { focusId: grdFocusId, eligible: grdDispatchEligible }
+
+  useEffect(() => {
+    let cancelled = false
+    setAssetLoading(true)
+    setAssetError(null)
+
+    void requestJson<FriendlyUnit[]>(`${getApiBaseUrl()}/map/units`)
+      .then((units) => {
+        if (cancelled) return
+        const next = units
+          .map((unit) => {
+            const category = branchToServiceCategory(unit.branch)
+            if (!category) return null
+            return {
+              id: unit.id,
+              name: unit.name,
+              lat: unit.lat,
+              lng: unit.lng,
+              category,
+              level: unit.level,
+              formation: unit.formation ?? '단대오-미지정',
+              elevationM: unit.elevationM ?? 0,
+              mgrs: unit.mgrs ?? 'MGRS-미지정',
+              readiness: unit.readiness,
+              mission: unit.mission,
+            } satisfies ServiceAssetPoint
+          })
+          .filter((row): row is ServiceAssetPoint => row != null)
+        setAssets(next)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setAssetError(error instanceof Error ? error.message : '자산 위치를 불러오지 못했습니다.')
+      })
+      .finally(() => {
+        if (!cancelled) setAssetLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const grouped = useMemo(
+    () => ({
+      SAR: assets.filter((asset) => asset.category === 'SAR'),
+      UAV: assets.filter((asset) => asset.category === 'UAV'),
+      DRONE: assets.filter((asset) => asset.category === 'DRONE'),
+      DIVISION: assets.filter((asset) => asset.category === 'DIVISION'),
+      UPPER_COMMAND: assets.filter((asset) => asset.category === 'UPPER_COMMAND'),
+      ARTILLERY: assets.filter((asset) => asset.category === 'ARTILLERY'),
+      ARMOR: assets.filter((asset) => asset.category === 'ARMOR'),
+    }),
+    [assets],
+  )
+
+  const visibleAssets = useMemo(
+    () => (activeCategory ? grouped[activeCategory] : assets),
+    [activeCategory, assets, grouped],
+  )
+
+  const phasePanel = BATTLEFIELD_PHASE_PANEL[scenarioPhase]
+
+  const recommendedSensorSummary = useMemo(() => {
+    const panel = BATTLEFIELD_PHASE_PANEL[scenarioPhase]
+    if (tacticScores && tacticScores.length > 0) {
+      const top = tacticScores[0]!
+      return `현재 상황에서 ${panel.recommendedSensor} 중심 운용 + "${top.name}" 전술 병행을 권장합니다.`
+    }
+    return panel.recommendDetail
+  }, [scenarioPhase, tacticScores])
+
+  const sensorPaths = useMemo(() => {
+    const fallback = buildFallbackPath(37.67, 126.95)
+    const battalionTrack = [...grouped.DIVISION, ...grouped.UPPER_COMMAND]
+      .slice(0, 7)
+      .map((asset) => ({ lat: asset.lat, lng: asset.lng }))
+
+    return {
+      sar: grouped.SAR.length > 0 ? grouped.SAR.map((asset) => ({ lat: asset.lat, lng: asset.lng })) : fallback,
+      uav: grouped.UAV.length > 0 ? grouped.UAV.map((asset) => ({ lat: asset.lat, lng: asset.lng })) : fallback,
+      drone:
+        grouped.DRONE.length > 0 ? grouped.DRONE.map((asset) => ({ lat: asset.lat, lng: asset.lng })) : fallback,
+      fmcw: battalionTrack.length > 0 ? battalionTrack : fallback,
+    } satisfies Record<ServiceSensorId, Array<{ lat: number; lng: number }>>
+  }, [grouped.DIVISION, grouped.DRONE, grouped.SAR, grouped.UAV, grouped.UPPER_COMMAND])
+
+  const sensorPathsRef = useRef(sensorPaths)
+  sensorPathsRef.current = sensorPaths
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSensorState((prev) => {
+        const next: ServiceSensorState = { ...prev }
+        let changed = false
+        const ids: ServiceSensorId[] = ['sar', 'uav', 'drone', 'fmcw']
+        for (const id of ids) {
+          if (id === 'sar') continue
+          const current = prev[id]
+          if (!current.running) continue
+          const pathLength = sensorPaths[id].length
+          if (pathLength <= 1) continue
+          next[id] = { running: true, index: (current.index + 1) % pathLength }
+          changed = true
+        }
+        return changed ? next : prev
+      })
+    }, 1200)
+
+    return () => window.clearInterval(timer)
+  }, [sensorPaths])
+
+  const movingPoints = useMemo(() => {
+    const ids: ServiceSensorId[] = ['sar', 'uav', 'drone', 'fmcw']
+    const out: Array<{ id: number; name: string; lat: number; lng: number; category: string }> = []
+    for (const id of ids) {
+      if (id === 'sar') continue
+      const state = sensorState[id]
+      if (!state.running) continue
+      const path = sensorPaths[id]
+      if (path.length === 0) continue
+      const point = path[state.index % path.length]!
+      out.push({
+        id: -1000 - out.length,
+        name: id === 'drone' ? '드론 · 근접 EO 정찰' : `${SENSOR_BUTTON_META[id].label} 이동`,
+        lat: point.lat,
+        lng: point.lng,
+        category: `MOVING_${id.toUpperCase()}`,
+      })
+    }
+    return out
+  }, [sensorPaths, sensorState])
+
+  const movingPointsForMap = useMemo(() => {
+    return movingPoints.filter((row) => {
+      if (row.category === 'MOVING_UAV') {
+        return phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.UAV_DISPATCHED)
+      }
+      if (row.category === 'MOVING_DRONE') {
+        return phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.DRONE_RECON)
+      }
+      if (row.category === 'MOVING_FMCW') {
+        return phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.FMCW_ANALYSIS)
+      }
+      return true
+    })
+  }, [movingPoints, scenarioPhase])
+
+  const uavMvpHudSnapshot = useMemo((): UavMvpSnapshot | null => {
+    if (!phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.UAV_DISPATCHED)) return null
+    const path = sensorPaths.uav
+    if (path.length === 0) return null
+    const st = sensorState.uav
+    const point = path[st.index % path.length]!
+    return buildUavMvpSnapshot({
+      lat: point.lat,
+      lng: point.lng,
+      mgrs: latLngToMgrsSafe(point.lat, point.lng),
+      pathLength: path.length,
+      pathIndex: st.index,
+      running: st.running,
+      phaseAtLeastUav: true,
+    })
+  }, [scenarioPhase, sensorPaths.uav, sensorState.uav])
+
+  const droneMvpHudSnapshot = useMemo((): DroneMvpSnapshot | null => {
+    if (!phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.DRONE_RECON)) return null
+    const path = sensorPaths.drone
+    if (path.length === 0) return null
+    const st = sensorState.drone
+    const point = path[st.index % path.length]!
+    return snapshotDroneMvpForBattlefieldService({
+      lat: point.lat,
+      lng: point.lng,
+      mgrs: latLngToMgrsSafe(point.lat, point.lng),
+      pathLength: path.length,
+      pathIndex: st.index,
+      running: st.running,
+      phaseAtLeastDrone: true,
+    })
+  }, [scenarioPhase, sensorPaths.drone, sensorState.drone])
+
+  const fmcwMvpBundle = useMemo(
+    () =>
+      buildFmcwMvpBundle(
+        assets.map((a) => ({
+          name: a.name,
+          category: a.category,
+          lat: a.lat,
+          lng: a.lng,
+        })),
+      ),
+    [assets],
+  )
+
+  const fmcwBundleRef = useRef<FmcwMvpBundle>(fmcwMvpBundle)
+  fmcwBundleRef.current = fmcwMvpBundle
+
+  const scenarioSummaryReport = useMemo(
+    () =>
+      buildScenarioSummaryReport({
+        enemyMbtEntityCount: DUMMY_SCENARIO_ENTITIES.filter(
+          (e) => e.relation === 'ENEMY' && e.kind === 'MBT',
+        ).length,
+        fmcwZoneLabel: fmcwMvpBundle.zoneLabel,
+        fmcwIngressSummary: fmcwMvpBundle.ingressSummary,
+        fmcwDetectionRangeKm: fmcwMvpBundle.detectionRangeKm,
+        fmcwStrikeCapable: fmcwMvpBundle.engagements.filter((e) => e.strikeCapable).length,
+        fmcwEngagementCount: fmcwMvpBundle.engagements.length,
+      }),
+    [fmcwMvpBundle],
+  )
+
+  const applyHamhungSarVisuals = useCallback((focusEntity?: ScenarioEntity) => {
+    const target = focusEntity ?? DUMMY_SCENARIO_ENTITIES.find((entity) => entity.id === 9002)
+    setSarZoneProbabilities(null)
+    setScenarioNotice(BATTLEFIELD_SCENARIO_NOTICES.enterSarScan)
+    if (!target) return
+    setSelectedDetail({
+      title: target.name,
+      affiliation: '적',
+      lat: target.lat,
+      lng: target.lng,
+      mgrs: latLngToMgrsSafe(target.lat, target.lng),
+      summary: '함흥 남하 축선에서 SAR-2 관측 지역 내 적 전차가 발견되었습니다.',
+      speedKph: target.speedKph,
+      headingDeg: target.headingDeg,
+      riskLevel: target.riskLevel,
+    })
+    setTacticScores(getTacticScoresForEnemy(target))
+
+    const map = mapRef.current
+    if (!map) return
+    map.flyTo({
+      center: HAMHUNG_VIEW_CENTER,
+      zoom: 8.35,
+      pitch: 0,
+      bearing: 0,
+      essential: true,
+      speed: 0.75,
+    })
+
+    if (!popupRef.current) {
+      popupRef.current = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 14,
+      })
+    }
+    popupRef.current
+      .setLngLat([target.lng, target.lat])
+      .setHTML(
+        renderScenarioEntityPopupHtml(
+          target,
+          getEntityPhasePopupNote(BattlefieldScenarioPhase.SAR_SCAN, target.relation),
+        ),
+      )
+      .addTo(map)
+  }, [])
+
+  const enterSarScanPhase = useCallback(
+    (focusEntity?: ScenarioEntity) => {
+      setScenarioPhase(BattlefieldScenarioPhase.SAR_SCAN)
+      setSensorState((prev) => ({
+        ...prev,
+        sar: { running: true, index: prev.sar.index },
+      }))
+      applyHamhungSarVisuals(focusEntity)
+    },
+    [applyHamhungSarVisuals],
+  )
+
+  const selectOperationRegion = useCallback(() => {
+    setScenarioPhase(BattlefieldScenarioPhase.REGION_SELECTED)
+    setScenarioNotice(BATTLEFIELD_SCENARIO_NOTICES.regionSelected)
+    const map = mapRef.current
+    if (map) {
+      map.fitBounds(
+        [
+          [KOREA_OPS_BOUNDS.west, KOREA_OPS_BOUNDS.south],
+          [KOREA_OPS_BOUNDS.east, KOREA_OPS_BOUNDS.north],
+        ],
+        { padding: 60, duration: 650, maxZoom: 7.4 },
+      )
+    }
+  }, [])
+
+  const enterSarScanPhaseRef = useRef(enterSarScanPhase)
+  enterSarScanPhaseRef.current = enterSarScanPhase
+  const selectOperationRegionRef = useRef(selectOperationRegion)
+  selectOperationRegionRef.current = selectOperationRegion
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return
+
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: GOOGLE_SATELLITE_STYLE,
+      center: [126.95, 37.67],
+      zoom: 8.5,
+      pitch: 0,
+      bearing: 0,
+      /** 위에서 내려다보는 정면 시점 유지(사용자가 기울이지 못하도록 상한 0) */
+      maxPitch: 0,
+    })
+    map.addControl(new maplibregl.NavigationControl(), 'top-right')
+
+    map.on('load', () => {
+      const presetIds = Object.keys(GOOGLE_BASE_PRESETS) as GoogleBasePresetId[]
+      for (const presetId of presetIds) {
+        const preset = GOOGLE_BASE_PRESETS[presetId]
+        if (!map.getSource(preset.sourceId)) {
+          map.addSource(preset.sourceId, {
+            type: 'raster',
+            tiles: [GOOGLE_BASE_SOURCE_TILES[presetId]],
+            tileSize: 256,
+            attribution: 'Google',
+            maxzoom: 21,
+          })
+        }
+        if (!map.getLayer(preset.layerId)) {
+          map.addLayer({
+            id: preset.layerId,
+            type: 'raster',
+            source: preset.sourceId,
+            minzoom: 0,
+            maxzoom: 22,
+            layout: {
+              visibility: presetId === baseMapPreset ? 'visible' : 'none',
+            },
+          })
+        }
+      }
+
+      if (!map.getSource(SERVICE_GRD_MOTION_SOURCE_ID)) {
+        map.addSource(SERVICE_GRD_MOTION_SOURCE_ID, {
+          type: 'geojson',
+          data: GRD_MOTION_DETECTIONS_GEOJSON,
+        })
+      }
+      if (!map.getLayer(SERVICE_GRD_MOTION_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_GRD_MOTION_FILL_LAYER_ID,
+          type: 'fill',
+          source: SERVICE_GRD_MOTION_SOURCE_ID,
+          filter: ['==', ['geometry-type'], 'Polygon'],
+          paint: {
+            'fill-color': '#2563eb',
+            'fill-opacity': 0.38,
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_GRD_MOTION_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_GRD_MOTION_LINE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_GRD_MOTION_SOURCE_ID,
+          filter: ['==', ['geometry-type'], 'Polygon'],
+          paint: {
+            'line-color': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              '#ef4444',
+              'rgba(37,99,235,0.65)',
+            ],
+            'line-width': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              2.8,
+              1,
+            ],
+            'line-opacity': 0.92,
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+
+      if (!map.getSource(SERVICE_ASSETS_SOURCE_ID)) {
+        map.addSource(SERVICE_ASSETS_SOURCE_ID, {
+          type: 'geojson',
+          data: toMapSourceData([]),
+          cluster: true,
+          clusterMaxZoom: 10,
+          clusterRadius: 56,
+        })
+      }
+      if (!map.getLayer(SERVICE_ASSETS_CLUSTER_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ASSETS_CLUSTER_LAYER_ID,
+          type: 'circle',
+          source: SERVICE_ASSETS_SOURCE_ID,
+          filter: ['has', 'point_count'],
+          paint: {
+            'circle-color': '#22d3ee',
+            'circle-radius': ['step', ['get', 'point_count'], 16, 8, 20, 20, 26],
+            'circle-opacity': 0.72,
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#ecfeff',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_ASSETS_CLUSTER_COUNT_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ASSETS_CLUSTER_COUNT_LAYER_ID,
+          type: 'symbol',
+          source: SERVICE_ASSETS_SOURCE_ID,
+          filter: ['has', 'point_count'],
+          layout: {
+            'text-field': ['get', 'point_count_abbreviated'],
+            'text-size': 12,
+            'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
+          },
+          paint: {
+            'text-color': '#e2e8f0',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_ASSETS_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ASSETS_LAYER_ID,
+          type: 'circle',
+          source: SERVICE_ASSETS_SOURCE_ID,
+          filter: ['!', ['has', 'point_count']],
+          paint: {
+            'circle-radius': [
+              'match',
+              ['get', 'category'],
+              'DIVISION',
+              7.5,
+              'UPPER_COMMAND',
+              8.5,
+              6.2,
+            ],
+            'circle-color': [
+              'match',
+              ['get', 'category'],
+              'SAR',
+              SERVICE_CATEGORY_COLOR.SAR,
+              'UAV',
+              SERVICE_CATEGORY_COLOR.UAV,
+              'DRONE',
+              SERVICE_CATEGORY_COLOR.DRONE,
+              'DIVISION',
+              SERVICE_CATEGORY_COLOR.DIVISION,
+              'UPPER_COMMAND',
+              SERVICE_CATEGORY_COLOR.UPPER_COMMAND,
+              'ARTILLERY',
+              SERVICE_CATEGORY_COLOR.ARTILLERY,
+              'ARMOR',
+              SERVICE_CATEGORY_COLOR.ARMOR,
+              '#f8fafc',
+            ],
+            'circle-stroke-width': 1.3,
+            'circle-stroke-color': '#0b1220',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_ASSETS_LABEL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ASSETS_LABEL_LAYER_ID,
+          type: 'symbol',
+          source: SERVICE_ASSETS_SOURCE_ID,
+          filter: ['!', ['has', 'point_count']],
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': 11,
+            'text-offset': [0, 1.2],
+            'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          },
+          paint: {
+            'text-color': '#e2e8f0',
+            'text-halo-color': '#020617',
+            'text-halo-width': 1.2,
+          },
+        })
+      }
+
+      if (!map.getSource(SERVICE_MOVERS_SOURCE_ID)) {
+        map.addSource(SERVICE_MOVERS_SOURCE_ID, { type: 'geojson', data: toMapSourceData([]) })
+      }
+      if (!map.getLayer(SERVICE_MOVERS_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_MOVERS_LAYER_ID,
+          type: 'circle',
+          source: SERVICE_MOVERS_SOURCE_ID,
+          paint: {
+            'circle-radius': [
+              'match',
+              ['get', 'category'],
+              'MOVING_DRONE',
+              12.5,
+              'MOVING_UAV',
+              10,
+              9,
+            ],
+            'circle-color': [
+              'match',
+              ['get', 'category'],
+              'MOVING_UAV',
+              '#38bdf8',
+              'MOVING_DRONE',
+              '#c026d3',
+              'MOVING_FMCW',
+              '#c084fc',
+              '#f97316',
+            ],
+            'circle-stroke-width': [
+              'match',
+              ['get', 'category'],
+              'MOVING_DRONE',
+              3,
+              2,
+            ],
+            'circle-stroke-color': [
+              'match',
+              ['get', 'category'],
+              'MOVING_UAV',
+              '#bae6fd',
+              'MOVING_DRONE',
+              '#fae8ff',
+              'MOVING_FMCW',
+              '#e9d5ff',
+              '#fdba74',
+            ],
+            'circle-opacity': [
+              'match',
+              ['get', 'category'],
+              'MOVING_DRONE',
+              0.95,
+              1,
+            ],
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_MOVERS_LABEL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_MOVERS_LABEL_LAYER_ID,
+          type: 'symbol',
+          source: SERVICE_MOVERS_SOURCE_ID,
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': 12,
+            'text-offset': [0, 1.5],
+            'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
+          },
+          paint: {
+            'text-color': [
+              'match',
+              ['get', 'category'],
+              'MOVING_UAV',
+              '#e0f2fe',
+              'MOVING_DRONE',
+              '#fae8ff',
+              'MOVING_FMCW',
+              '#f3e8ff',
+              '#fef3c7',
+            ],
+            'text-halo-color': [
+              'match',
+              ['get', 'category'],
+              'MOVING_DRONE',
+              '#4a044e',
+              'MOVING_UAV',
+              '#0c4a6e',
+              '#7c2d12',
+            ],
+            'text-halo-width': 1.1,
+          },
+        })
+      }
+
+      if (!map.getSource(SERVICE_SCENARIO_SOURCE_ID)) {
+        map.addSource(SERVICE_SCENARIO_SOURCE_ID, {
+          type: 'geojson',
+          data: toMapSourceData(
+            DUMMY_SCENARIO_ENTITIES.map((entity) => ({
+              id: entity.id,
+              name: entity.name,
+              lat: entity.lat,
+              lng: entity.lng,
+              category: 'SCENARIO',
+              relation: entity.relation,
+              kind: entity.kind,
+              status: entity.status,
+              speedKph: entity.speedKph,
+              headingDeg: entity.headingDeg,
+              riskLevel: entity.riskLevel,
+              grdTankEstimate: entity.grdTankEstimate,
+              grdRiskScore: entity.grdRiskScore,
+            })),
+          ),
+        })
+      }
+
+      if (!map.getLayer(SERVICE_ENEMY_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ENEMY_LAYER_ID,
+          type: 'circle',
+          source: SERVICE_SCENARIO_SOURCE_ID,
+          filter: ['==', ['get', 'relation'], 'ENEMY'],
+          paint: {
+            'circle-radius': 7.2,
+            'circle-color': '#f43f5e',
+            'circle-stroke-width': 1.8,
+            'circle-stroke-color': '#ffe4e6',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_ALLY_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ALLY_LAYER_ID,
+          type: 'circle',
+          source: SERVICE_SCENARIO_SOURCE_ID,
+          filter: ['==', ['get', 'relation'], 'ALLY'],
+          paint: {
+            'circle-radius': 6.4,
+            'circle-color': '#38bdf8',
+            'circle-stroke-width': 1.5,
+            'circle-stroke-color': '#e0f2fe',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_NEUTRAL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_NEUTRAL_LAYER_ID,
+          type: 'circle',
+          source: SERVICE_SCENARIO_SOURCE_ID,
+          filter: ['==', ['get', 'relation'], 'NEUTRAL'],
+          paint: {
+            'circle-radius': 6.2,
+            'circle-color': '#facc15',
+            'circle-stroke-width': 1.5,
+            'circle-stroke-color': '#fef9c3',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_SCENARIO_LABEL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_SCENARIO_LABEL_LAYER_ID,
+          type: 'symbol',
+          source: SERVICE_SCENARIO_SOURCE_ID,
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': 10,
+            'text-offset': [0, 1.25],
+            'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          },
+          paint: {
+            'text-color': [
+              'match',
+              ['get', 'relation'],
+              'ENEMY',
+              '#fecdd3',
+              'ALLY',
+              '#bae6fd',
+              'NEUTRAL',
+              '#fef08a',
+              '#e2e8f0',
+            ],
+            'text-halo-color': '#111827',
+            'text-halo-width': 1.1,
+          },
+        })
+      }
+
+      if (!map.getSource(SERVICE_TERRAIN_SOURCE_ID)) {
+        map.addSource(SERVICE_TERRAIN_SOURCE_ID, { type: 'geojson', data: DUMMY_TERRAIN_AREAS })
+      }
+      if (!map.getLayer(SERVICE_TERRAIN_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_TERRAIN_FILL_LAYER_ID,
+          type: 'fill',
+          source: SERVICE_TERRAIN_SOURCE_ID,
+          paint: {
+            'fill-color': '#14b8a6',
+            'fill-opacity': 0.16,
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_TERRAIN_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_TERRAIN_LINE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_TERRAIN_SOURCE_ID,
+          paint: {
+            'line-color': '#5eead4',
+            'line-width': 1.4,
+            'line-opacity': 0.62,
+          },
+        })
+      }
+
+      if (!map.getSource(SERVICE_SAR2_ZONE_SOURCE_ID)) {
+        map.addSource(SERVICE_SAR2_ZONE_SOURCE_ID, {
+          type: 'geojson',
+          data: SAR_OBSERVATION_ZONE_GEOJSON as Parameters<GeoJSONSource['setData']>[0],
+        })
+      }
+      if (!map.getLayer(SERVICE_SAR2_ZONE_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_SAR2_ZONE_FILL_LAYER_ID,
+          type: 'fill',
+          source: SERVICE_SAR2_ZONE_SOURCE_ID,
+          paint: {
+            'fill-color': '#ef4444',
+            'fill-opacity': 0.18,
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_SAR2_ZONE_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_SAR2_ZONE_LINE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_SAR2_ZONE_SOURCE_ID,
+          paint: {
+            'line-color': '#fecaca',
+            'line-width': 2,
+            'line-dasharray': [2, 1],
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+
+      if (!map.getSource(SERVICE_ENEMY_ROUTE_SOURCE_ID)) {
+        map.addSource(SERVICE_ENEMY_ROUTE_SOURCE_ID, {
+          type: 'geojson',
+          data: SAR_ENEMY_MOVEMENT_ROUTE_GEOJSON as Parameters<GeoJSONSource['setData']>[0],
+        })
+      }
+      if (!map.getLayer(SERVICE_ENEMY_ROUTE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ENEMY_ROUTE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_ENEMY_ROUTE_SOURCE_ID,
+          paint: {
+            'line-color': '#fb7185',
+            'line-width': 2.2,
+            'line-opacity': 0.88,
+            'line-dasharray': [1, 1.4],
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_ENEMY_ROUTE_HIT_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_ENEMY_ROUTE_HIT_LAYER_ID,
+          type: 'line',
+          source: SERVICE_ENEMY_ROUTE_SOURCE_ID,
+          paint: {
+            'line-color': '#000',
+            'line-opacity': 0,
+            'line-width': 18,
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+
+      if (!map.getSource(SERVICE_FMCW_RISK_SOURCE_ID)) {
+        map.addSource(SERVICE_FMCW_RISK_SOURCE_ID, {
+          type: 'geojson',
+          data: FMCW_SCENARIO_GEOJSON,
+        })
+      }
+      if (!map.getLayer(SERVICE_FMCW_RISK_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_FMCW_RISK_FILL_LAYER_ID,
+          type: 'fill',
+          source: SERVICE_FMCW_RISK_SOURCE_ID,
+          filter: ['==', ['get', 'kind'], 'risk'],
+          paint: {
+            'fill-color': '#f97316',
+            'fill-opacity': 0.16,
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_FMCW_RISK_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_FMCW_RISK_LINE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_FMCW_RISK_SOURCE_ID,
+          filter: ['==', ['get', 'kind'], 'risk'],
+          paint: {
+            'line-color': '#fdba74',
+            'line-width': 2,
+            'line-opacity': 0.88,
+            'line-dasharray': [3, 2],
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_FMCW_INGRESS_LINE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_FMCW_INGRESS_LINE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_FMCW_RISK_SOURCE_ID,
+          filter: ['==', ['get', 'kind'], 'ingress'],
+          paint: {
+            'line-color': '#fb923c',
+            'line-width': 2.8,
+            'line-opacity': 0.92,
+            'line-dasharray': [1.2, 1.1],
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_FMCW_TRACK_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_FMCW_TRACK_LAYER_ID,
+          type: 'circle',
+          source: SERVICE_FMCW_RISK_SOURCE_ID,
+          filter: ['==', ['get', 'kind'], 'track'],
+          paint: {
+            'circle-radius': 7,
+            'circle-color': '#fb923c',
+            'circle-opacity': 0.95,
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#fff7ed',
+          },
+          layout: {
+            visibility: 'none',
+          },
+        })
+      }
+
+      map.on('mouseenter', SERVICE_FMCW_RISK_FILL_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mousemove', SERVICE_FMCW_RISK_FILL_LAYER_ID, (event) => {
+        const html = renderFmcwRiskPopupHtml(fmcwBundleRef.current)
+        if (!popupRef.current) {
+          popupRef.current = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 14,
+          })
+        }
+        popupRef.current.setLngLat(event.lngLat).setHTML(html).addTo(map)
+      })
+      map.on('mouseleave', SERVICE_FMCW_RISK_FILL_LAYER_ID, () => {
+        map.getCanvas().style.cursor = ''
+        if (popupRef.current) {
+          popupRef.current.remove()
+          popupRef.current = null
+        }
+      })
+
+      map.on('mousemove', (event) => {
+        const lat = event.lngLat.lat
+        const lng = event.lngLat.lng
+        setCursorReadout({
+          lat,
+          lng,
+          mgrs: latLngToMgrsSafe(lat, lng),
+        })
+      })
+
+      map.on('mouseenter', SERVICE_ASSETS_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+
+      map.on('mouseenter', SERVICE_ASSETS_CLUSTER_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+
+      map.on('mouseleave', SERVICE_ASSETS_LAYER_ID, () => {
+        map.getCanvas().style.cursor = ''
+        if (popupRef.current) {
+          popupRef.current.remove()
+          popupRef.current = null
+        }
+      })
+
+      map.on('mouseleave', SERVICE_ASSETS_CLUSTER_LAYER_ID, () => {
+        map.getCanvas().style.cursor = ''
+      })
+
+      map.on('click', SERVICE_ASSETS_CLUSTER_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const props = (feature.properties ?? {}) as Record<string, unknown>
+        const clusterId = Number(props.cluster_id)
+        if (!Number.isFinite(clusterId)) return
+        const source = map.getSource(SERVICE_ASSETS_SOURCE_ID)
+        if (!source) return
+        const geometry = feature.geometry as { coordinates?: unknown }
+        const coordinates = geometry.coordinates
+        if (!Array.isArray(coordinates)) return
+
+        const clusterSource = source as GeoJSONSource & {
+          getClusterExpansionZoom: (
+            clusterId: number,
+            callback: (error: Error | null, zoom: number) => void,
+          ) => void
+        }
+        clusterSource.getClusterExpansionZoom(clusterId, (error, zoom) => {
+          if (error) return
+          map.easeTo({
+            center: [Number(coordinates[0]), Number(coordinates[1])],
+            zoom,
+            duration: 450,
+          })
+        })
+      })
+
+      map.on('mousemove', SERVICE_ASSETS_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature || !feature.geometry || feature.geometry.type !== 'Point') return
+
+        const props = (feature.properties ?? {}) as Record<string, unknown>
+        const geometry = feature.geometry as { coordinates?: unknown }
+        const coordinates = geometry.coordinates
+        const lng = Array.isArray(coordinates) ? Number(coordinates[0]) : Number(props.lng)
+        const lat = Array.isArray(coordinates) ? Number(coordinates[1]) : Number(props.lat)
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+        const cat = String(props.category ?? '')
+        const html = renderServiceAssetPopupHtml(
+          {
+            name: String(props.name ?? ''),
+            category: cat,
+            lat,
+            lng,
+            level: String(props.level ?? ''),
+            formation: String(props.formation ?? ''),
+            elevationM:
+              props.elevationM == null || props.elevationM === ''
+                ? null
+                : Number(props.elevationM),
+            mgrs: String(props.mgrs ?? ''),
+            readiness: String(props.readiness ?? ''),
+            mission: String(props.mission ?? ''),
+          },
+          getFriendlyAssetPhaseNote(scenarioPhaseRef.current, cat),
+        )
+
+        if (!popupRef.current) {
+          popupRef.current = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 14,
+          })
+        }
+        popupRef.current.setLngLat([lng, lat]).setHTML(html).addTo(map)
+      })
+
+      map.on('mouseenter', SERVICE_MOVERS_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mousemove', SERVICE_MOVERS_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature || !feature.geometry || feature.geometry.type !== 'Point') return
+        const props = (feature.properties ?? {}) as Record<string, unknown>
+        const cat = String(props.category ?? '')
+        const geometry = feature.geometry as { coordinates?: unknown }
+        const coordinates = geometry.coordinates
+        const lng = Array.isArray(coordinates) ? Number(coordinates[0]) : Number(props.lng)
+        const lat = Array.isArray(coordinates) ? Number(coordinates[1]) : Number(props.lat)
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+        if (cat === 'MOVING_UAV') {
+          const path = sensorPathsRef.current.uav
+          const st = sensorStateRef.current.uav
+          const snap = buildUavMvpSnapshot({
+            lat,
+            lng,
+            mgrs: latLngToMgrsSafe(lat, lng),
+            pathLength: Math.max(1, path.length),
+            pathIndex: st.index,
+            running: st.running,
+            phaseAtLeastUav: phaseAtLeast(scenarioPhaseRef.current, BattlefieldScenarioPhase.UAV_DISPATCHED),
+          })
+          const html = renderUavMvpPopupHtml(snap)
+          if (!popupRef.current) {
+            popupRef.current = new maplibregl.Popup({
+              closeButton: false,
+              closeOnClick: false,
+              offset: 14,
+            })
+          }
+          popupRef.current.setLngLat([lng, lat]).setHTML(html).addTo(map)
+          return
+        }
+
+        if (cat === 'MOVING_DRONE') {
+          const path = sensorPathsRef.current.drone
+          const st = sensorStateRef.current.drone
+          const snap = snapshotDroneMvpForBattlefieldService({
+            lat,
+            lng,
+            mgrs: latLngToMgrsSafe(lat, lng),
+            pathLength: Math.max(1, path.length),
+            pathIndex: st.index,
+            running: st.running,
+            phaseAtLeastDrone: phaseAtLeast(scenarioPhaseRef.current, BattlefieldScenarioPhase.DRONE_RECON),
+          })
+          const html = renderDroneMvpPopupHtml(snap)
+          if (!popupRef.current) {
+            popupRef.current = new maplibregl.Popup({
+              closeButton: false,
+              closeOnClick: false,
+              offset: 14,
+            })
+          }
+          popupRef.current.setLngLat([lng, lat]).setHTML(html).addTo(map)
+          return
+        }
+
+        const moverName = String(props.name ?? '센서 이동')
+        const simple = `
+          <div class="service-asset-popup">
+            <h4 class="service-asset-popup__title">${escapeHtml(moverName)}</h4>
+            <p class="muted" style="margin:0;font-size:12px;">시나리오 센서 궤적(더미)</p>
+          </div>`
+        if (!popupRef.current) {
+          popupRef.current = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 14,
+          })
+        }
+        popupRef.current.setLngLat([lng, lat]).setHTML(simple).addTo(map)
+      })
+      map.on('mouseleave', SERVICE_MOVERS_LAYER_ID, () => {
+        map.getCanvas().style.cursor = ''
+        if (popupRef.current) {
+          popupRef.current.remove()
+          popupRef.current = null
+        }
+      })
+
+      map.on('click', SERVICE_MOVERS_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const props = (feature.properties ?? {}) as Record<string, unknown>
+        const cat = String(props.category ?? '')
+        const geometry = feature.geometry as { coordinates?: unknown }
+        const coordinates = geometry.coordinates
+        const lng = Array.isArray(coordinates) ? Number(coordinates[0]) : Number(props.lng)
+        const lat = Array.isArray(coordinates) ? Number(coordinates[1]) : Number(props.lat)
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+        if (cat === 'MOVING_UAV') {
+          const path = sensorPathsRef.current.uav
+          const st = sensorStateRef.current.uav
+          const snap = buildUavMvpSnapshot({
+            lat,
+            lng,
+            mgrs: latLngToMgrsSafe(lat, lng),
+            pathLength: Math.max(1, path.length),
+            pathIndex: st.index,
+            running: st.running,
+            phaseAtLeastUav: phaseAtLeast(scenarioPhaseRef.current, BattlefieldScenarioPhase.UAV_DISPATCHED),
+          })
+          setTacticScores(null)
+          setSelectedAssetId(null)
+          setActiveCategory(null)
+          setSelectedDetail({
+            title: snap.callSign,
+            affiliation: '아군',
+            lat,
+            lng,
+            mgrs: snap.mgrs,
+            summary: snap.sarFollowupLine,
+            speedKph: snap.speedKphEst,
+            headingDeg: snap.headingDegEst,
+            uavMvp: snap,
+          })
+          return
+        }
+
+        if (cat === 'MOVING_DRONE') {
+          const path = sensorPathsRef.current.drone
+          const st = sensorStateRef.current.drone
+          const snap = snapshotDroneMvpForBattlefieldService({
+            lat,
+            lng,
+            mgrs: latLngToMgrsSafe(lat, lng),
+            pathLength: Math.max(1, path.length),
+            pathIndex: st.index,
+            running: st.running,
+            phaseAtLeastDrone: phaseAtLeast(scenarioPhaseRef.current, BattlefieldScenarioPhase.DRONE_RECON),
+          })
+          setTacticScores(null)
+          setSelectedAssetId(null)
+          setActiveCategory(null)
+          setSelectedDetail({
+            title: snap.droneId,
+            affiliation: '아군',
+            lat,
+            lng,
+            mgrs: snap.mgrs,
+            summary: snap.afterUavContextLine,
+            speedKph: snap.speedKphEst,
+            headingDeg: snap.headingDegEst,
+            riskLevel: snap.threatLevel,
+            droneMvp: snap,
+          })
+        }
+      })
+
+      map.on('click', SERVICE_ASSETS_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const props = (feature.properties ?? {}) as Record<string, unknown>
+        const idNum = Number(props.id)
+        const lat = Number(props.lat)
+        const lng = Number(props.lng)
+        if (!Number.isFinite(idNum) || !Number.isFinite(lat) || !Number.isFinite(lng)) return
+        const category = String(props.category ?? '') as ServiceAssetCategory
+        if (
+          scenarioPhaseRef.current === BattlefieldScenarioPhase.REGION_SELECTED &&
+          category === 'SAR'
+        ) {
+          enterSarScanPhaseRef.current(undefined)
+          return
+        }
+        setActiveCategory(category)
+        setSelectedAssetId(idNum)
+        setTacticScores(null)
+        setSelectedDetail({
+          title: String(props.name ?? ''),
+          affiliation: '아군',
+          lat,
+          lng,
+          mgrs: String(props.mgrs ?? latLngToMgrsSafe(lat, lng)),
+          summary: String(props.mission ?? '아군 자산 위치 정보'),
+        })
+      })
+
+      const scenarioPointLayers = [SERVICE_ALLY_LAYER_ID, SERVICE_NEUTRAL_LAYER_ID] as const
+      for (const lid of scenarioPointLayers) {
+        map.on('mouseenter', lid, () => {
+          map.getCanvas().style.cursor = 'pointer'
+        })
+        map.on('mouseleave', lid, () => {
+          map.getCanvas().style.cursor = ''
+        })
+      }
+
+      map.on('mouseenter', SERVICE_ENEMY_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mousemove', SERVICE_ENEMY_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature || !feature.geometry || feature.geometry.type !== 'Point') return
+        const idNum = Number((feature.properties ?? {}).id)
+        const target = DUMMY_SCENARIO_ENTITIES.find((entity) => entity.id === idNum)
+        if (!target) return
+        const geometry = feature.geometry as { coordinates?: unknown }
+        const coordinates = geometry.coordinates
+        const lng = Array.isArray(coordinates) ? Number(coordinates[0]) : target.lng
+        const lat = Array.isArray(coordinates) ? Number(coordinates[1]) : target.lat
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+        const html = renderScenarioEntityPopupHtml(
+          target,
+          getEntityPhasePopupNote(scenarioPhaseRef.current, target.relation),
+        )
+        if (!popupRef.current) {
+          popupRef.current = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 14,
+          })
+        }
+        popupRef.current.setLngLat([lng, lat]).setHTML(html).addTo(map)
+      })
+      map.on('mouseleave', SERVICE_ENEMY_LAYER_ID, () => {
+        map.getCanvas().style.cursor = ''
+        if (popupRef.current) {
+          popupRef.current.remove()
+          popupRef.current = null
+        }
+      })
+
+      map.on('click', SERVICE_ENEMY_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const idNum = Number((feature.properties ?? {}).id)
+        const target = DUMMY_SCENARIO_ENTITIES.find((entity) => entity.id === idNum)
+        if (!target) return
+        const ph = scenarioPhaseRef.current
+        if (ph === BattlefieldScenarioPhase.IDLE || ph === BattlefieldScenarioPhase.REGION_SELECTED) {
+          enterSarScanPhaseRef.current(target)
+          return
+        }
+        setSelectedDetail({
+          title: target.name,
+          affiliation: '적',
+          lat: target.lat,
+          lng: target.lng,
+          mgrs: latLngToMgrsSafe(target.lat, target.lng),
+          summary: `${target.kind} · ${target.status}`,
+          speedKph: target.speedKph,
+          headingDeg: target.headingDeg,
+          riskLevel: target.riskLevel,
+        })
+        setTacticScores(getTacticScoresForEnemy(target))
+        if (phaseAtLeast(ph, BattlefieldScenarioPhase.SAR_SCAN) && target.kind === 'MBT') {
+          setSarMbtExtractionTitle(target.name)
+          setSarMbtExtractionModalOpen(true)
+        }
+      })
+
+      map.on('click', SERVICE_ALLY_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const idNum = Number((feature.properties ?? {}).id)
+        const target = DUMMY_SCENARIO_ENTITIES.find((entity) => entity.id === idNum)
+        if (!target) return
+        setSelectedDetail({
+          title: target.name,
+          affiliation: '우군',
+          lat: target.lat,
+          lng: target.lng,
+          mgrs: latLngToMgrsSafe(target.lat, target.lng),
+          summary: `${target.kind} · ${target.status}`,
+          speedKph: target.speedKph,
+          headingDeg: target.headingDeg,
+          riskLevel: target.riskLevel,
+        })
+        setTacticScores(null)
+        if (!popupRef.current) {
+          popupRef.current = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 14,
+          })
+        }
+        popupRef.current
+          .setLngLat([target.lng, target.lat])
+          .setHTML(
+            renderScenarioEntityPopupHtml(
+              target,
+              getEntityPhasePopupNote(scenarioPhaseRef.current, target.relation),
+            ),
+          )
+          .addTo(map)
+      })
+
+      map.on('click', SERVICE_NEUTRAL_LAYER_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const idNum = Number((feature.properties ?? {}).id)
+        const target = DUMMY_SCENARIO_ENTITIES.find((entity) => entity.id === idNum)
+        if (!target) return
+        setSelectedDetail({
+          title: target.name,
+          affiliation: '중립',
+          lat: target.lat,
+          lng: target.lng,
+          mgrs: latLngToMgrsSafe(target.lat, target.lng),
+          summary: `${target.kind} · ${target.status}`,
+          speedKph: target.speedKph,
+          headingDeg: target.headingDeg,
+          riskLevel: target.riskLevel,
+        })
+        setTacticScores(null)
+        if (!popupRef.current) {
+          popupRef.current = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 14,
+          })
+        }
+        popupRef.current
+          .setLngLat([target.lng, target.lat])
+          .setHTML(
+            renderScenarioEntityPopupHtml(
+              target,
+              getEntityPhasePopupNote(scenarioPhaseRef.current, target.relation),
+            ),
+          )
+          .addTo(map)
+      })
+
+      map.on('mouseenter', SERVICE_SAR2_ZONE_FILL_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mouseleave', SERVICE_SAR2_ZONE_FILL_LAYER_ID, () => {
+        map.getCanvas().style.cursor = ''
+      })
+      map.on('mouseenter', SERVICE_ENEMY_ROUTE_HIT_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mousemove', SERVICE_ENEMY_ROUTE_HIT_LAYER_ID, (e) => {
+        if (!phaseAtLeast(scenarioPhaseRef.current, BattlefieldScenarioPhase.SAR_SCAN)) return
+        const feature = e.features?.[0]
+        const props = parseMovementRouteTooltipProps(
+          feature?.properties as Record<string, unknown> | undefined,
+        )
+        if (!props) return
+        const html = renderSarRouteMovementTooltipHtml(props)
+        const g = feature?.geometry as { type?: string; coordinates?: [number, number][] } | undefined
+        let lngLat: [number, number] = [127.73, 39.82]
+        if (g?.type === 'LineString' && g.coordinates?.length) {
+          const mid = Math.floor(g.coordinates.length / 2)
+          const c = g.coordinates[mid]!
+          lngLat = [c[0], c[1]]
+        }
+        if (!popupRef.current) {
+          popupRef.current = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            offset: 10,
+          })
+        }
+        popupRef.current.setLngLat(lngLat).setHTML(html).addTo(map)
+      })
+      map.on('mouseleave', SERVICE_ENEMY_ROUTE_HIT_LAYER_ID, () => {
+        map.getCanvas().style.cursor = ''
+        if (popupRef.current) {
+          popupRef.current.remove()
+          popupRef.current = null
+        }
+      })
+
+      map.on('click', SERVICE_SAR2_ZONE_FILL_LAYER_ID, () => {
+        setSarZoneProbabilities([...SAR_ZONE_PASS_PROBABILITIES])
+        setSarSpotlightEmphasis(true)
+        setSarSpotlightOpen(true)
+        setScenarioNotice('SAR-2 관측 지역 분석: 함흥 남하 축선 전차 통과 확률을 산출했습니다.')
+        setSelectedDetail({
+          title: 'SAR-2 광역 관측 지역',
+          affiliation: '적',
+          lat: 39.8417,
+          lng: 127.7264,
+          mgrs: latLngToMgrsSafe(39.8417, 127.7264),
+          summary: `함흥 남하 축선에서 적 전차 통과 확률이 높게 탐지되었습니다. (${BATTLEFIELD_PHASE_PANEL[BattlefieldScenarioPhase.SAR_SCAN].title})`,
+          riskLevel: '높음',
+        })
+
+        if (popupRef.current) {
+          popupRef.current.remove()
+          popupRef.current = null
+        }
+      })
+
+      const layersToBlockPopupDismiss = SERVICE_MAP_OBJECT_CLICK_LAYER_IDS.filter((id) => map.getLayer(id))
+      map.on('click', (event) => {
+        if (map.getLayer(SERVICE_GRD_MOTION_FILL_LAYER_ID)) {
+          const grdHits = map.queryRenderedFeatures(event.point, {
+            layers: [SERVICE_GRD_MOTION_FILL_LAYER_ID],
+          })
+          if (grdHits.length > 0) {
+            const motionId = grdHits[0]?.properties?.motionId
+            if (motionId != null) setGrdSelectedIdRef.current(String(motionId))
+            return
+          }
+        }
+
+        const hits = map.queryRenderedFeatures(event.point, { layers: layersToBlockPopupDismiss })
+        if (hits.length > 0) {
+          setGrdSelectedIdRef.current(null)
+          return
+        }
+        setGrdSelectedIdRef.current(null)
+        if (popupRef.current) {
+          popupRef.current.remove()
+          popupRef.current = null
+        }
+        if (sarSpotlightOpenRef.current) {
+          setSarSpotlightOpen(false)
+          setSarSpotlightEmphasis(false)
+        }
+        if (sarMbtExtractionModalOpenRef.current) {
+          setSarMbtExtractionModalOpen(false)
+        }
+        const clickLat = event.lngLat.lat
+        const clickLng = event.lngLat.lng
+        if (
+          scenarioPhaseRef.current === BattlefieldScenarioPhase.IDLE &&
+          isInsideKoreaOpsRegion(clickLat, clickLng)
+        ) {
+          selectOperationRegionRef.current()
+          return
+        }
+        setScenarioNotice(null)
+      })
+
+      setMapReady(true)
+    })
+
+    mapRef.current = map
+
+    return () => {
+      if (popupRef.current) {
+        popupRef.current.remove()
+        popupRef.current = null
+      }
+      map.remove()
+      mapRef.current = null
+      setMapReady(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const source = map.getSource(SERVICE_ASSETS_SOURCE_ID)
+    if (source && 'setData' in source) {
+      ;(source as GeoJSONSource).setData(toMapSourceData(visibleAssets))
+    }
+
+    if (!didFitRef.current && visibleAssets.length > 0) {
+      const bounds = new maplibregl.LngLatBounds(
+        [visibleAssets[0]!.lng, visibleAssets[0]!.lat],
+        [visibleAssets[0]!.lng, visibleAssets[0]!.lat],
+      )
+      for (const asset of visibleAssets) {
+        bounds.extend([asset.lng, asset.lat])
+      }
+      map.fitBounds(bounds, { padding: 80, duration: 700, maxZoom: 10.5 })
+      didFitRef.current = true
+    }
+  }, [visibleAssets])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const source = map.getSource(SERVICE_MOVERS_SOURCE_ID)
+    if (source && 'setData' in source) {
+      ;(source as GeoJSONSource).setData(toMapSourceData(movingPointsForMap))
+    }
+  }, [movingPointsForMap])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const applyVisibility = (layerId: string, visible: boolean) => {
+      if (!map.getLayer(layerId)) return
+      map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none')
+    }
+
+    applyVisibility(SERVICE_ASSETS_LAYER_ID, layerVisible.friendly)
+    applyVisibility(SERVICE_ASSETS_LABEL_LAYER_ID, layerVisible.friendly)
+    applyVisibility(SERVICE_ASSETS_CLUSTER_LAYER_ID, layerVisible.friendly)
+    applyVisibility(SERVICE_ASSETS_CLUSTER_COUNT_LAYER_ID, layerVisible.friendly)
+    applyVisibility(SERVICE_ENEMY_LAYER_ID, layerVisible.enemy)
+    applyVisibility(SERVICE_ALLY_LAYER_ID, layerVisible.ally)
+    applyVisibility(SERVICE_NEUTRAL_LAYER_ID, layerVisible.neutral)
+    applyVisibility(
+      SERVICE_SCENARIO_LABEL_LAYER_ID,
+      layerVisible.enemy || layerVisible.ally || layerVisible.neutral,
+    )
+    applyVisibility(SERVICE_TERRAIN_FILL_LAYER_ID, layerVisible.terrain)
+    applyVisibility(SERVICE_TERRAIN_LINE_LAYER_ID, layerVisible.terrain)
+    const mapFlags = BATTLEFIELD_PHASE_MAP_FLAGS[scenarioPhase]
+    applyVisibility(SERVICE_SAR2_ZONE_FILL_LAYER_ID, mapFlags.sar2Zone)
+    applyVisibility(SERVICE_SAR2_ZONE_LINE_LAYER_ID, mapFlags.sar2Zone)
+    applyVisibility(SERVICE_ENEMY_ROUTE_LAYER_ID, mapFlags.enemyRoute && layerVisible.enemy)
+    applyVisibility(SERVICE_ENEMY_ROUTE_HIT_LAYER_ID, mapFlags.enemyRoute && layerVisible.enemy)
+    applyVisibility(SERVICE_FMCW_RISK_FILL_LAYER_ID, mapFlags.showFmcwRiskFootprint)
+    applyVisibility(SERVICE_FMCW_RISK_LINE_LAYER_ID, mapFlags.showFmcwRiskFootprint)
+    applyVisibility(SERVICE_FMCW_INGRESS_LINE_LAYER_ID, mapFlags.showFmcwRiskFootprint)
+    applyVisibility(SERVICE_FMCW_TRACK_LAYER_ID, mapFlags.showFmcwRiskFootprint)
+
+    const sarStaged = scenarioPhase === BattlefieldScenarioPhase.SAR_SCAN
+    const pen = mapFlags.showSarGrdPeninsulaOverlay
+    const showMotion =
+      pen && (!sarStaged || sarMvpRevealStep === 'motion' || sarMvpRevealStep === 'objects')
+
+    applyVisibility(SERVICE_GRD_MOTION_FILL_LAYER_ID, showMotion)
+    applyVisibility(SERVICE_GRD_MOTION_LINE_LAYER_ID, showMotion)
+  }, [layerVisible, scenarioPhase, sarMvpRevealStep])
+
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map) return
+
+    const visibleLayerId = GOOGLE_BASE_PRESETS[baseMapPreset].layerId
+    for (const layerId of GOOGLE_BASE_LAYER_IDS) {
+      if (!map.getLayer(layerId)) continue
+      map.setLayoutProperty(layerId, 'visibility', layerId === visibleLayerId ? 'visible' : 'none')
+    }
+  }, [baseMapPreset, mapReady])
+
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map) return
+
+    const brightness = Math.max(-60, Math.min(60, rasterTuning.brightness))
+    const brightnessMin = brightness >= 0 ? brightness / 100 : 0
+    const brightnessMax = brightness >= 0 ? 1 : 1 + brightness / 100
+    const contrast = Math.max(-1, Math.min(1, rasterTuning.contrast / 100))
+    const saturation = Math.max(-1, Math.min(1, rasterTuning.saturation / 100))
+    const hue = Math.max(-180, Math.min(180, rasterTuning.hue))
+    const opacity = Math.max(0.2, Math.min(1, rasterTuning.opacity / 100))
+
+    for (const layerId of GOOGLE_BASE_LAYER_IDS) {
+      if (!map.getLayer(layerId)) continue
+      map.setPaintProperty(layerId, 'raster-brightness-min', brightnessMin)
+      map.setPaintProperty(layerId, 'raster-brightness-max', brightnessMax)
+      map.setPaintProperty(layerId, 'raster-contrast', contrast)
+      map.setPaintProperty(layerId, 'raster-saturation', saturation)
+      map.setPaintProperty(layerId, 'raster-hue-rotate', hue)
+      map.setPaintProperty(layerId, 'raster-opacity', opacity)
+    }
+  }, [mapReady, rasterTuning])
+
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map || !map.getLayer(SERVICE_GRD_MOTION_FILL_LAYER_ID)) return
+
+    const src = SERVICE_GRD_MOTION_SOURCE_ID
+    let prevHoverId: string | null = null
+
+    const clearHoverVisual = (id: string | null) => {
+      if (!id) return
+      try {
+        map.setFeatureState({ source: src, id }, { hover: false })
+      } catch {
+        /* MapLibre: id 미일치 시 무시 */
+      }
+    }
+
+    const clearGrdHoverUi = () => {
+      if (prevHoverId) clearHoverVisual(prevHoverId)
+      prevHoverId = null
+      setGrdHoverId(null)
+      if (popupRef.current) {
+        popupRef.current.remove()
+        popupRef.current = null
+      }
+    }
+
+    const onMove = (e: MapLayerMouseEvent) => {
+      const top = map.queryRenderedFeatures(e.point)[0]
+      const lid = top?.layer?.id
+      if (lid !== SERVICE_GRD_MOTION_FILL_LAYER_ID) {
+        clearGrdHoverUi()
+        return
+      }
+
+      const motionIdRaw = top.properties?.motionId
+      const motionId = motionIdRaw != null ? String(motionIdRaw) : null
+      if (!motionId) {
+        clearGrdHoverUi()
+        return
+      }
+
+      if (motionId !== prevHoverId) {
+        if (prevHoverId) clearHoverVisual(prevHoverId)
+        prevHoverId = motionId
+        try {
+          map.setFeatureState({ source: src, id: motionId }, { hover: true })
+        } catch {
+          /* noop */
+        }
+      }
+
+      setGrdHoverId(motionId)
+
+      const meta = GRD_MOTION_META[motionId]
+      if (!meta) return
+
+      let sarUav = assetsRef.current.filter(
+        (a) => a.category === 'SAR' || a.category === 'UAV',
+      )
+      const usedFallback = sarUav.length === 0
+      if (usedFallback) {
+        sarUav = [
+          {
+            lat: GRD_FALLBACK_SAR_UAV_ORIGIN.lat,
+            lng: GRD_FALLBACK_SAR_UAV_ORIGIN.lng,
+          } as ServiceAssetPoint,
+        ]
+      }
+
+      const p = { lat: meta.centerLat, lng: meta.centerLng }
+      const distKm = Math.min(...sarUav.map((a) => haversineKm({ lat: a.lat, lng: a.lng }, p)))
+      const inRange = distKm <= GRD_DISPATCH_RANGE_KM
+
+      const html = renderGrdMotionPopupHtml(
+        { classLabel: meta.classLabel, probPercent: meta.probPercent },
+        distKm,
+        inRange,
+        { usedFallbackDispatchOrigin: usedFallback },
+      )
+      if (!popupRef.current) {
+        popupRef.current = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          offset: 14,
+        })
+      }
+      popupRef.current.setLngLat([meta.centerLng, meta.centerLat]).setHTML(html).addTo(map)
+    }
+
+    const onLeave = () => {
+      map.getCanvas().style.cursor = ''
+      clearGrdHoverUi()
+    }
+
+    const onEnter = () => {
+      map.getCanvas().style.cursor = 'pointer'
+    }
+
+    map.on('mouseenter', SERVICE_GRD_MOTION_FILL_LAYER_ID, onEnter)
+    map.on('mousemove', SERVICE_GRD_MOTION_FILL_LAYER_ID, onMove)
+    map.on('mouseleave', SERVICE_GRD_MOTION_FILL_LAYER_ID, onLeave)
+
+    return () => {
+      clearGrdHoverUi()
+      map.off('mouseenter', SERVICE_GRD_MOTION_FILL_LAYER_ID, onEnter)
+      map.off('mousemove', SERVICE_GRD_MOTION_FILL_LAYER_ID, onMove)
+      map.off('mouseleave', SERVICE_GRD_MOTION_FILL_LAYER_ID, onLeave)
+    }
+  }, [mapReady])
+
+  const handleSensorActivate = (sensorId: ServiceSensorId) => {
+    const s = sensorId as BattlefieldSensorId
+    if (
+      scenarioPhaseRef.current === BattlefieldScenarioPhase.REGION_SELECTED &&
+      sensorId === 'sar'
+    ) {
+      enterSarScanPhase(undefined)
+      return
+    }
+
+    const phaseNow = scenarioPhaseRef.current
+    const gate = grdDispatchGateRef.current
+    if (sensorId === 'uav' && phaseNow === BattlefieldScenarioPhase.SAR_SCAN) {
+      if (!gate.focusId || !gate.eligible) {
+        setScenarioNotice(
+          `파란 GRD 검출 영역을 마우스로 가리키거나 클릭한 뒤, 가장 가까운 SAR·UAV 거점이 ${GRD_DISPATCH_RANGE_KM}km 이내일 때만 UAV를 출동시킬 수 있습니다.`,
+        )
+        return
+      }
+    }
+    if (sensorId === 'drone' && phaseNow === BattlefieldScenarioPhase.UAV_DISPATCHED) {
+      if (!gate.focusId || !gate.eligible) {
+        setScenarioNotice(
+          `동일하게 GRD 표적을 포커스하고 SAR·UAV 거점이 ${GRD_DISPATCH_RANGE_KM}km 이내일 때만 드론을 출동시킬 수 있습니다.`,
+        )
+        return
+      }
+    }
+
+    let advancedTo: BattlefieldScenarioPhase | null = null
+    setScenarioPhase((prev) => {
+      const next = tryAdvancePhaseWithSensor(prev, s)
+      if (next) advancedTo = next
+      return next ?? prev
+    })
+
+    if (advancedTo === BattlefieldScenarioPhase.UAV_DISPATCHED) {
+      setScenarioNotice(BATTLEFIELD_SCENARIO_NOTICES.uavDispatched)
+    }
+    if (advancedTo === BattlefieldScenarioPhase.DRONE_RECON) {
+      setScenarioNotice(BATTLEFIELD_SCENARIO_NOTICES.droneRecon)
+    }
+    if (advancedTo === BattlefieldScenarioPhase.FMCW_ANALYSIS) {
+      setScenarioNotice(BATTLEFIELD_SCENARIO_NOTICES.fmcwAnalysis)
+    }
+
+    setSensorState((prev) => {
+      const pathLength = sensorPaths[sensorId].length
+      const nextIndex = pathLength <= 1 ? 0 : (prev[sensorId].index + 1) % pathLength
+      return {
+        ...prev,
+        [sensorId]: { running: true, index: nextIndex },
+      }
+    })
+  }
+
+  const focusAssetOnMap = useCallback((asset: ServiceAssetPoint) => {
+    const map = mapRef.current
+    if (!map) return
+
+    map.flyTo({
+      center: [asset.lng, asset.lat],
+      zoom: 11.2,
+      pitch: 0,
+      bearing: 0,
+      speed: 0.8,
+      essential: true,
+    })
+
+    const html = renderServiceAssetPopupHtml(
+      {
+        name: asset.name,
+        category: asset.category,
+        lat: asset.lat,
+        lng: asset.lng,
+        level: asset.level,
+        formation: asset.formation,
+        elevationM: asset.elevationM,
+        mgrs: asset.mgrs,
+        readiness: asset.readiness,
+        mission: asset.mission,
+      },
+      getFriendlyAssetPhaseNote(scenarioPhaseRef.current, asset.category),
+    )
+    if (!popupRef.current) {
+      popupRef.current = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 14,
+      })
+    }
+    popupRef.current.setLngLat([asset.lng, asset.lat]).setHTML(html).addTo(map)
+  }, [])
+
+  const handleCategoryClick = useCallback(
+    (category: ServiceAssetCategory) => {
+      setSelectedAssetId(null)
+      setActiveCategory((prev) => (prev === category ? null : category))
+      const list = grouped[category]
+      if (list.length === 0) return
+      const map = mapRef.current
+      if (!map) return
+      const bounds = new maplibregl.LngLatBounds(
+        [list[0]!.lng, list[0]!.lat],
+        [list[0]!.lng, list[0]!.lat],
+      )
+      for (const asset of list) {
+        bounds.extend([asset.lng, asset.lat])
+      }
+      map.fitBounds(bounds, { padding: 80, duration: 550, maxZoom: 10.8 })
+    },
+    [grouped],
+  )
+
+  const handleAssetClick = useCallback(
+    (asset: ServiceAssetPoint) => {
+      if (
+        scenarioPhase === BattlefieldScenarioPhase.REGION_SELECTED &&
+        asset.category === 'SAR'
+      ) {
+        enterSarScanPhase(undefined)
+        return
+      }
+      setActiveCategory(asset.category)
+      setSelectedAssetId(asset.id)
+      setTacticScores(null)
+      setSelectedDetail({
+        title: asset.name,
+        affiliation: '아군',
+        lat: asset.lat,
+        lng: asset.lng,
+        mgrs: asset.mgrs,
+        summary: asset.mission,
+      })
+      focusAssetOnMap(asset)
+    },
+    [enterSarScanPhase, focusAssetOnMap, scenarioPhase],
+  )
+
+  const handlePhaseShift = (delta: -1 | 1) => {
+    setScenarioPhase((prev) => shiftBattlefieldPhase(prev, delta))
+  }
+
+  const toggleLayer = (key: LayerToggleKey) => {
+    setLayerVisible((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const handleRasterTuningChange = useCallback((key: keyof MapRasterTuning, value: number) => {
+    setRasterTuning((prev) => ({ ...prev, [key]: value }))
+  }, [])
+
+  const handleRasterTuningReset = useCallback(() => {
+    setRasterTuning(DEFAULT_MAP_RASTER_TUNING)
+  }, [])
+
+  const handleResetScenario = useCallback(() => {
+    setScenarioSummaryOpen(false)
+    setScenarioPhase(BattlefieldScenarioPhase.IDLE)
+    setSensorState(INITIAL_SENSOR_STATE)
+    setSarZoneProbabilities(null)
+    setSarSpotlightOpen(false)
+    setSarSpotlightEmphasis(false)
+    setSarMvpRevealStep('prep')
+    setSarMbtExtractionModalOpen(false)
+    setScenarioNotice(null)
+    setSelectedDetail(null)
+    setTacticScores(null)
+    setSelectedAssetId(null)
+  }, [])
+
+  const handlePrimaryScenarioAction = useCallback(() => {
+    if (scenarioPhase === BattlefieldScenarioPhase.IDLE) {
+      selectOperationRegion()
+      return
+    }
+    if (scenarioPhase === BattlefieldScenarioPhase.REGION_SELECTED) {
+      enterSarScanPhase(undefined)
+      return
+    }
+    if (scenarioPhase === BattlefieldScenarioPhase.FMCW_ANALYSIS) {
+      setScenarioPhase(BattlefieldScenarioPhase.SCENARIO_COMPLETE)
+      setScenarioNotice(BATTLEFIELD_SCENARIO_NOTICES.scenarioComplete)
+      return
+    }
+    if (scenarioPhase === BattlefieldScenarioPhase.SCENARIO_COMPLETE) {
+      handleResetScenario()
+    }
+  }, [enterSarScanPhase, handleResetScenario, scenarioPhase, selectOperationRegion])
+
+  const primaryScenarioCta = useMemo(() => {
+    if (scenarioPhase === BattlefieldScenarioPhase.IDLE) {
+      return { label: '작전 구역 선택', active: false, disabled: false }
+    }
+    if (scenarioPhase === BattlefieldScenarioPhase.REGION_SELECTED) {
+      return { label: 'SAR 전개', active: false, disabled: false }
+    }
+    if (scenarioPhase === BattlefieldScenarioPhase.FMCW_ANALYSIS) {
+      return { label: '시나리오 완료', active: true, disabled: false }
+    }
+    if (scenarioPhase === BattlefieldScenarioPhase.SCENARIO_COMPLETE) {
+      return { label: '시나리오 다시 시작', active: false, disabled: false }
+    }
+    return {
+      label: '센서 버튼으로 단계 진행',
+      active: true,
+      disabled: true,
+    }
+  }, [scenarioPhase])
+
+  useEffect(() => {
+    if (!scenarioNotice) return undefined
+    const t = window.setTimeout(() => setScenarioNotice(null), 6500)
+    return () => window.clearTimeout(t)
+  }, [scenarioNotice])
+
+  useEffect(() => {
+    if (!sarSpotlightOpen && !sarMbtExtractionModalOpen) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (sarMbtExtractionModalOpen) {
+        sarMbtExtractionVideoRef.current?.pause()
+        setSarMbtExtractionModalOpen(false)
+      }
+      if (sarSpotlightOpen) {
+        setSarSpotlightOpen(false)
+        setSarSpotlightEmphasis(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [sarSpotlightOpen, sarMbtExtractionModalOpen])
+
+  const prevPhaseForSarRef = useRef(scenarioPhase)
+  useEffect(() => {
+    const prev = prevPhaseForSarRef.current
+    prevPhaseForSarRef.current = scenarioPhase
+    if (
+      scenarioPhase === BattlefieldScenarioPhase.SAR_SCAN &&
+      prev !== BattlefieldScenarioPhase.SAR_SCAN
+    ) {
+      setSarMvpRevealStep('prep')
+    }
+  }, [scenarioPhase])
+
+  const prevPhaseForSummaryRef = useRef(scenarioPhase)
+  useEffect(() => {
+    const prev = prevPhaseForSummaryRef.current
+    prevPhaseForSummaryRef.current = scenarioPhase
+    if (
+      scenarioPhase === BattlefieldScenarioPhase.SCENARIO_COMPLETE &&
+      prev !== BattlefieldScenarioPhase.SCENARIO_COMPLETE
+    ) {
+      setScenarioSummaryOpen(true)
+    }
+  }, [scenarioPhase])
+
+  useEffect(() => {
+    if (!scenarioSummaryOpen) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setScenarioSummaryOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [scenarioSummaryOpen])
+
+  useEffect(() => {
+    if (scenarioPhase !== BattlefieldScenarioPhase.SCENARIO_COMPLETE) {
+      setScenarioSummaryOpen(false)
+    }
+  }, [scenarioPhase])
+
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map?.getLayer(SERVICE_ENEMY_LAYER_ID)) return
+    const emphasize =
+      scenarioPhase === BattlefieldScenarioPhase.SAR_SCAN && sarMvpRevealStep === 'objects'
+    map.setPaintProperty(SERVICE_ENEMY_LAYER_ID, 'circle-radius', emphasize ? 10.5 : 7.2)
+    map.setPaintProperty(SERVICE_ENEMY_LAYER_ID, 'circle-stroke-width', emphasize ? 2.4 : 1.8)
+  }, [mapReady, scenarioPhase, sarMvpRevealStep])
+
+  return (
+    <section className="page service-battlefield-page">
+      <header className="service-battlefield-header">
+        <h1>실시간 전장 통합 서비스</h1>
+        <p className="muted">
+          로그인 후 즉시 접속되는 작전 화면입니다. 중앙 전장판은 Google 위성 타일 기반이며, 센서 버튼을 누르면
+          SAR·UAV·드론·FMCW 객체가 이동합니다.
+        </p>
+      </header>
+
+      <div className="service-map-layout">
+        <div className="service-map-main-col">
+        <div className="service-map-shell">
+          <div
+            className="service-sensor-controls service-sensor-controls--overlay"
+            role="group"
+            aria-label="센서 이동 제어"
+          >
+            {(Object.keys(SENSOR_BUTTON_META) as ServiceSensorId[]).map((sensorId) => {
+              const meta = SENSOR_BUTTON_META[sensorId]
+              const running = sensorState[sensorId].running
+              const uavRangeGate =
+                sensorId === 'uav' &&
+                scenarioPhase === BattlefieldScenarioPhase.SAR_SCAN &&
+                (!grdFocusId || !grdDispatchEligible)
+              const droneRangeGate =
+                sensorId === 'drone' &&
+                scenarioPhase === BattlefieldScenarioPhase.UAV_DISPATCHED &&
+                (!grdFocusId || !grdDispatchEligible)
+              const rangeGated = uavRangeGate || droneRangeGate
+              return (
+                <button
+                  key={sensorId}
+                  type="button"
+                  className={`service-sensor-btn${running ? ' service-sensor-btn--active' : ''}`}
+                  disabled={rangeGated}
+                  title={
+                    rangeGated
+                      ? `GRD 파란 영역을 호버/클릭하고 SAR·UAV 거점이 ${GRD_DISPATCH_RANGE_KM}km 이내일 때 활성화`
+                      : undefined
+                  }
+                  onClick={() => handleSensorActivate(sensorId)}
+                  style={{
+                    borderColor: meta.color,
+                    boxShadow: running ? `0 0 0 1px ${meta.color}, 0 0 16px ${meta.color}55` : undefined,
+                  }}
+                >
+                  {meta.label}
+                </button>
+              )
+            })}
+          </div>
+          {scenarioPhase === BattlefieldScenarioPhase.SAR_SCAN && (
+            <div className="sar-mvp-reveal-panel" role="region" aria-label="SAR MVP 결과 단계">
+              <p className="sar-mvp-reveal-panel__title">SAR MVP · 단계별 표시</p>
+              <div className="sar-mvp-reveal-panel__btns">
+                {SAR_MVP_REVEAL_SEQUENCE.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`sar-mvp-reveal-step${sarMvpRevealStep === s.id ? ' sar-mvp-reveal-step--active' : ''}`}
+                    onClick={() => setSarMvpRevealStep(s.id)}
+                  >
+                    <span className="sar-mvp-reveal-step__title">{s.title}</span>
+                    <span className="sar-mvp-reveal-step__desc">{s.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={mapContainerRef} className="service-map-canvas" />
+          <div className="service-map-legend" aria-label="아군 적 우군 중립 범례">
+            <span className="service-map-legend__item">
+              <i style={{ backgroundColor: '#22c55e' }} />
+              아(아군)
+            </span>
+            <span className="service-map-legend__item">
+              <i style={{ backgroundColor: '#f43f5e' }} />
+              적
+            </span>
+            <span className="service-map-legend__item">
+              <i style={{ backgroundColor: '#38bdf8' }} />
+              우(우군)
+            </span>
+            <span className="service-map-legend__item">
+              <i style={{ backgroundColor: '#facc15' }} />
+              중립
+            </span>
+            <span className="service-map-legend__item">
+              <i style={{ backgroundColor: '#2563eb', opacity: 0.55 }} />
+              GRD 이동 검출
+            </span>
+            {phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.FMCW_ANALYSIS) && (
+              <>
+                <span className="service-map-legend__item">
+                  <i style={{ backgroundColor: '#f97316', opacity: 0.45 }} />
+                  FMCW 위험구역
+                </span>
+                <span className="service-map-legend__item">
+                  <i
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: '2px dashed #fb923c',
+                      opacity: 0.95,
+                    }}
+                  />
+                  예상 진입축
+                </span>
+                <span className="service-map-legend__item">
+                  <i style={{ backgroundColor: '#fb923c' }} />
+                  mock 트랙
+                </span>
+              </>
+            )}
+          </div>
+          <p className="service-cursor-readout">
+            {cursorReadout
+              ? `LAT ${cursorReadout.lat.toFixed(5)} · LNG ${cursorReadout.lng.toFixed(5)} · MGRS ${cursorReadout.mgrs}`
+              : '지도 위 마우스 오버 시 좌표/MGRS 표시'}
+          </p>
+          {scenarioNotice && <p className="service-scenario-alert">{scenarioNotice}</p>}
+          {assetLoading && <p className="service-overlay-message">DB 자산 로딩 중…</p>}
+          {assetError && <p className="service-overlay-message service-overlay-message--error">{assetError}</p>}
+        </div>
+        {phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.FMCW_ANALYSIS) && (
+          <FmcwServiceDock bundle={fmcwMvpBundle} />
+        )}
+        </div>
+
+        <aside className="service-asset-panel">
+          <section className="service-panel-section">
+            <button
+              type="button"
+              className={`service-start-scenario-btn${primaryScenarioCta.active ? ' service-start-scenario-btn--active' : ''}`}
+              onClick={handlePrimaryScenarioAction}
+              disabled={primaryScenarioCta.disabled}
+            >
+              {primaryScenarioCta.label}
+            </button>
+            <h2>DB 자산 현황</h2>
+            <ul className="service-asset-summary">
+              {(Object.keys(SERVICE_CATEGORY_LABEL) as ServiceAssetCategory[]).map((category) => (
+                <li key={category} className="service-asset-group">
+                  <button
+                    type="button"
+                    className={`service-asset-group-head${activeCategory === category ? ' service-asset-group-head--active' : ''}`}
+                    onClick={() => handleCategoryClick(category)}
+                  >
+                    <span
+                      className="service-asset-dot"
+                      style={{ backgroundColor: SERVICE_CATEGORY_COLOR[category] }}
+                    />
+                    <strong>{SERVICE_CATEGORY_LABEL[category]}</strong>
+                    <span>{grouped[category].length}개</span>
+                  </button>
+                  {activeCategory === category && (
+                    <ul className="service-asset-items">
+                      {grouped[category].map((asset) => (
+                        <li key={asset.id}>
+                          <button
+                            type="button"
+                            className={`service-asset-item-btn${selectedAssetId === asset.id ? ' service-asset-item-btn--active' : ''}`}
+                            onClick={() => handleAssetClick(asset)}
+                          >
+                            {asset.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            <div className="service-layer-toggle">
+              <p className="service-layer-toggle__title">레이어 on/off</p>
+              <div className="service-layer-toggle__grid">
+                {(Object.keys(LAYER_TOGGLE_LABEL) as LayerToggleKey[]).map((key) => (
+                  <label key={key}>
+                    <input
+                      type="checkbox"
+                      checked={layerVisible[key]}
+                      onChange={() => toggleLayer(key)}
+                    />
+                    {LAYER_TOGGLE_LABEL[key]}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="service-map-style-editor">
+              <p className="service-map-style-editor__title">Google 지도 스타일</p>
+              <div className="service-map-style-editor__preset-grid">
+                {(Object.keys(GOOGLE_BASE_PRESETS) as GoogleBasePresetId[]).map((presetId) => (
+                  <button
+                    key={presetId}
+                    type="button"
+                    className={`service-map-style-editor__preset-btn${baseMapPreset === presetId ? ' service-map-style-editor__preset-btn--active' : ''}`}
+                    onClick={() => setBaseMapPreset(presetId)}
+                  >
+                    {GOOGLE_BASE_PRESETS[presetId].label}
+                  </button>
+                ))}
+              </div>
+              <div className="service-map-style-editor__sliders">
+                <label>
+                  밝기 ({rasterTuning.brightness})
+                  <input
+                    type="range"
+                    min={-60}
+                    max={60}
+                    step={5}
+                    value={rasterTuning.brightness}
+                    onChange={(event) => handleRasterTuningChange('brightness', Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  대비 ({rasterTuning.contrast})
+                  <input
+                    type="range"
+                    min={-100}
+                    max={100}
+                    step={5}
+                    value={rasterTuning.contrast}
+                    onChange={(event) => handleRasterTuningChange('contrast', Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  채도 ({rasterTuning.saturation})
+                  <input
+                    type="range"
+                    min={-100}
+                    max={100}
+                    step={5}
+                    value={rasterTuning.saturation}
+                    onChange={(event) => handleRasterTuningChange('saturation', Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  색상 회전 ({rasterTuning.hue}°)
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    step={5}
+                    value={rasterTuning.hue}
+                    onChange={(event) => handleRasterTuningChange('hue', Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  투명도 ({rasterTuning.opacity}%)
+                  <input
+                    type="range"
+                    min={20}
+                    max={100}
+                    step={5}
+                    value={rasterTuning.opacity}
+                    onChange={(event) => handleRasterTuningChange('opacity', Number(event.target.value))}
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary service-map-style-editor__reset-btn"
+                onClick={handleRasterTuningReset}
+              >
+                스타일 조정 초기화
+              </button>
+            </div>
+          </section>
+
+          <section className="service-panel-section">
+            <h3>현재 시나리오 단계</h3>
+            <p className="service-phase-pill" title="상태 머신 단계 코드">
+              {scenarioPhase}
+            </p>
+            <p className="service-stage-title">{phasePanel.title}</p>
+            <p className="muted">{phasePanel.description}</p>
+            {phasePanel.mapHint && <p className="muted">{phasePanel.mapHint}</p>}
+            {phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.SAR_SCAN) &&
+              !sarZoneProbabilities && (
+                <p className="muted">
+                  붉은 SAR-2 광역 관측 지역을 클릭하면 Spotlight 창에 SAR 인식 결과(샘플)가 뜨고, 우측에 전차 통과
+                  확률(더미)이 표시됩니다.
+                </p>
+              )}
+            {sarZoneProbabilities && (
+              <div className="service-sar-pass-prob">
+                <p className="service-sar-pass-prob__title">SAR-2 관측 영역 전차 통과 확률</p>
+                <ul>
+                  {sarZoneProbabilities.map((row) => (
+                    <li key={row.label}>
+                      <span>{row.label}</span>
+                      <strong>{(row.probability * 100).toFixed(0)}%</strong>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {scenarioPhase === BattlefieldScenarioPhase.SCENARIO_COMPLETE && (
+              <div className="service-scenario-summary-compact">
+                <p className="muted">
+                  SAR → UAV → 드론 → FMCW 파이프라인이 종료되었습니다. 결과 요약 창에서 단계별 탐지·전술·자산 기여도를
+                  확인할 수 있습니다.
+                </p>
+                <button
+                  type="button"
+                  className="btn-secondary service-scenario-summary-compact__btn"
+                  onClick={() => setScenarioSummaryOpen(true)}
+                >
+                  결과 요약 다시 보기
+                </button>
+              </div>
+            )}
+            <div className="service-stage-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => handlePhaseShift(-1)}
+                disabled={scenarioPhase === BattlefieldScenarioPhase.IDLE}
+              >
+                이전 단계
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => handlePhaseShift(1)}
+                disabled={scenarioPhase === BattlefieldScenarioPhase.SCENARIO_COMPLETE}
+              >
+                다음 단계
+              </button>
+            </div>
+          </section>
+
+          <section className="service-panel-section">
+            <h3>감시 자산 추천</h3>
+            <p className="service-recommend-sensor">{phasePanel.recommendedSensor}</p>
+            <p className="muted">{recommendedSensorSummary}</p>
+          </section>
+
+          {uavMvpHudSnapshot && (
+            <section className="service-panel-section service-uav-hud-section">
+              <h3>UAV 임무 요약 · SAR 후속 확인</h3>
+              <p className="service-uav-hud-section__flow muted">{uavMvpHudSnapshot.sarFollowupLine}</p>
+              <dl className="service-detail-dl">
+                <div>
+                  <dt>콜사인</dt>
+                  <dd>{uavMvpHudSnapshot.callSign}</dd>
+                </div>
+                <div>
+                  <dt>플랫폼</dt>
+                  <dd>{uavMvpHudSnapshot.platformId}</dd>
+                </div>
+                <div>
+                  <dt>운용 상태</dt>
+                  <dd>{uavOpsStatusLabelKo(uavMvpHudSnapshot.opsStatus)}</dd>
+                </div>
+                <div>
+                  <dt>EO/IR</dt>
+                  <dd>
+                    {uavMvpHudSnapshot.hasEoIr
+                      ? `탑재 · ${uavMvpHudSnapshot.eoIrNote}`
+                      : '없음'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>식별(추정)</dt>
+                  <dd>
+                    {uavMvpHudSnapshot.tankIdentification}
+                    <span className="muted"> · {uavMvpHudSnapshot.identificationConfidence}</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>위치 · 속도 · 방향</dt>
+                  <dd>
+                    {uavMvpHudSnapshot.lat.toFixed(5)}, {uavMvpHudSnapshot.lng.toFixed(5)}
+                    <span className="service-detail-dl__mono"> · {uavMvpHudSnapshot.mgrs}</span>
+                    <br />
+                    {uavMvpHudSnapshot.speedKphEst.toFixed(0)} km/h · {uavMvpHudSnapshot.headingDegEst.toFixed(0)}°
+                  </dd>
+                </div>
+              </dl>
+              <p className="muted service-uav-hud-section__hint">
+                지도의 UAV 이동 마커(청색 원)에 마우스를 올리면 팝업이, 클릭하면 이 패널에 EO/IR 샘플과 전차 스펙이
+                펼쳐집니다.
+              </p>
+            </section>
+          )}
+
+          {droneMvpHudSnapshot && (
+            <section className="service-panel-section service-drone-hud-section">
+              <h3>드론 근접 정찰 · UAV 후속</h3>
+              <p className="service-drone-hud-section__flow muted">{droneMvpHudSnapshot.afterUavContextLine}</p>
+              <dl className="service-detail-dl">
+                <div>
+                  <dt>드론 ID</dt>
+                  <dd>{droneMvpHudSnapshot.droneId}</dd>
+                </div>
+                <div>
+                  <dt>임무 상태</dt>
+                  <dd>{droneMissionStatusLabelKo(droneMvpHudSnapshot.missionStatus)}</dd>
+                </div>
+                <div>
+                  <dt>드론–최근접 적(MB)</dt>
+                  <dd>
+                    {droneMvpHudSnapshot.distanceToNearestEnemyKm != null
+                      ? `${droneMvpHudSnapshot.distanceToNearestEnemyKm.toFixed(1)} km`
+                      : '계산 불가'}
+                    <span className="muted">
+                      {' '}
+                      · 식별 한계 {droneMvpHudSnapshot.identificationRangeKm} km
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>EO/IR 판별</dt>
+                  <dd>
+                    {droneMvpHudSnapshot.enemyIdentified
+                      ? '가능 (거리 게이트 충족)'
+                      : '불가 — 적 MBT에 더 접근 필요'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>표적 종류</dt>
+                  <dd>{droneMvpHudSnapshot.targetClass}</dd>
+                </div>
+                <div>
+                  <dt>이동 방향 · 속도</dt>
+                  <dd>
+                    {droneMvpHudSnapshot.headingDegEst.toFixed(0)}° · {droneMvpHudSnapshot.speedKphEst.toFixed(0)} km/h
+                  </dd>
+                </div>
+                <div>
+                  <dt>이동 상태</dt>
+                  <dd>{droneMvpHudSnapshot.movementState}</dd>
+                </div>
+                <div>
+                  <dt>위협도</dt>
+                  <dd>{droneMvpHudSnapshot.threatLevel}</dd>
+                </div>
+                <div>
+                  <dt>위치</dt>
+                  <dd>
+                    {droneMvpHudSnapshot.lat.toFixed(5)}, {droneMvpHudSnapshot.lng.toFixed(5)}
+                    <span className="service-detail-dl__mono"> · {droneMvpHudSnapshot.mgrs}</span>
+                  </dd>
+                </div>
+              </dl>
+              <p className="muted service-drone-hud-section__hint">
+                지도의 드론 마커(자홍색·두꺼운 링)는 UAV보다 저고도·근거리 정찰 자산입니다. 적 MBT와의 거리가{' '}
+                {droneMvpHudSnapshot.identificationRangeKm}
+                km 이하일 때만 EO/IR로 표적 종류·위협을 판별합니다(사거리는{' '}
+                <code className="service-detail-dl__mono">battlefield/droneEngagementConfig.ts</code>에서 변경).
+              </p>
+            </section>
+          )}
+
+          {phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.FMCW_ANALYSIS) && (
+            <section className="service-panel-section service-fmcw-hud-section">
+              <h3>FMCW · 위험구역 &amp; 아군 타격</h3>
+              <p className="muted service-fmcw-hud-section__lead">{fmcwMvpBundle.zoneLabel}</p>
+              <dl className="service-detail-dl">
+                <div>
+                  <dt>탐지 거리</dt>
+                  <dd>{fmcwMvpBundle.detectionRangeKm.toFixed(1)} km</dd>
+                </div>
+                <div>
+                  <dt>접근 속도</dt>
+                  <dd>{fmcwMvpBundle.approachSpeedMps.toFixed(1)} m/s</dd>
+                </div>
+                <div>
+                  <dt>예상 진입 경로</dt>
+                  <dd>{fmcwMvpBundle.ingressSummary}</dd>
+                </div>
+              </dl>
+              <p className="service-fmcw-hud-section__sub">아군 자산별 타격 가능(더미 규칙)</p>
+              <ul className="service-fmcw-engage-list">
+                {fmcwMvpBundle.engagements.slice(0, 12).map((row, idx) => (
+                  <li
+                    key={`fmcw-eng-${idx}-${row.assetName}`}
+                    className={
+                      row.strikeCapable
+                        ? 'service-fmcw-engage-list__item service-fmcw-engage-list__item--ok'
+                        : 'service-fmcw-engage-list__item service-fmcw-engage-list__item--no'
+                    }
+                  >
+                    <div className="service-fmcw-engage-list__head">
+                      <strong>{row.assetName}</strong>
+                      <span>{row.strikeCapable ? '타격 가능' : '타격 불가'}</span>
+                    </div>
+                    <p className="muted">
+                      {row.category} · 위험구역 기준 {row.distanceKm.toFixed(1)} km
+                    </p>
+                    <p className="service-fmcw-engage-list__why">{row.rationale}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted service-fmcw-hud-section__hint">
+                지도에 주황 위험 면·진입 점선·트랙 점이 표시됩니다. 면 위에 마우스를 올리면 요약 팝업이 뜹니다. 하단
+                독에서 리포트·트랙·BEV를 확인하세요.
+              </p>
+            </section>
+          )}
+
+          <section className="service-panel-section">
+            <h3>선택 객체 상세 정보</h3>
+            {selectedDetail ? (
+              <>
+                <dl className="service-detail-dl">
+                  <div>
+                    <dt>객체</dt>
+                    <dd>{selectedDetail.title}</dd>
+                  </div>
+                  <div>
+                    <dt>소속</dt>
+                    <dd>{selectedDetail.affiliation}</dd>
+                  </div>
+                  <div>
+                    <dt>좌표</dt>
+                    <dd>
+                      {selectedDetail.lat.toFixed(5)}, {selectedDetail.lng.toFixed(5)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>MGRS</dt>
+                    <dd className="service-detail-dl__mono">{selectedDetail.mgrs}</dd>
+                  </div>
+                  {selectedDetail.speedKph != null && (
+                    <div>
+                      <dt>속도</dt>
+                      <dd>{selectedDetail.speedKph.toFixed(1)} km/h</dd>
+                    </div>
+                  )}
+                  {selectedDetail.headingDeg != null && (
+                    <div>
+                      <dt>방향</dt>
+                      <dd>{selectedDetail.headingDeg.toFixed(1)}°</dd>
+                    </div>
+                  )}
+                  {selectedDetail.riskLevel && (
+                    <div>
+                      <dt>위협도</dt>
+                      <dd>{selectedDetail.riskLevel}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt>요약</dt>
+                    <dd>{selectedDetail.summary}</dd>
+                  </div>
+                  <div>
+                    <dt>시나리오</dt>
+                    <dd className="muted">{getSelectedDetailPhaseLine(scenarioPhase, selectedDetail.affiliation)}</dd>
+                  </div>
+                </dl>
+                {selectedDetail.uavMvp && (
+                  <div className="service-uav-mvp-detail">
+                    <h4 className="service-uav-mvp-detail__title">UAV · EO/IR 확인 자산</h4>
+                    <p className="muted service-uav-mvp-detail__sar">{selectedDetail.uavMvp.sarFollowupLine}</p>
+                    <dl className="service-detail-dl">
+                      <div>
+                        <dt>운용 상태</dt>
+                        <dd>{uavOpsStatusLabelKo(selectedDetail.uavMvp.opsStatus)}</dd>
+                      </div>
+                      <div>
+                        <dt>EO/IR</dt>
+                        <dd>
+                          {selectedDetail.uavMvp.hasEoIr
+                            ? `탑재 · ${selectedDetail.uavMvp.eoIrNote}`
+                            : '없음'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>전차 식별</dt>
+                        <dd>
+                          {selectedDetail.uavMvp.tankIdentification}
+                          <div className="muted">{selectedDetail.uavMvp.identificationConfidence}</div>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{selectedDetail.uavMvp.tankSpecLine}</dt>
+                        <dd>{selectedDetail.uavMvp.tankSpecDetail}</dd>
+                      </div>
+                    </dl>
+                    <div className="service-uav-mvp-inline-media">
+                      {selectedDetail.uavMvp.mediaKind === 'video' ? (
+                        <video
+                          src={selectedDetail.uavMvp.mediaUrl}
+                          controls
+                          playsInline
+                          muted
+                          loop
+                          className="service-uav-mvp-inline-media__video"
+                        />
+                      ) : (
+                        <img
+                          src={selectedDetail.uavMvp.mediaUrl}
+                          alt=""
+                          className="service-uav-mvp-inline-media__img"
+                        />
+                      )}
+                      <p className="muted">{selectedDetail.uavMvp.mediaCaption}</p>
+                    </div>
+                  </div>
+                )}
+                {selectedDetail.droneMvp && (
+                  <div className="service-drone-mvp-detail">
+                    <h4 className="service-drone-mvp-detail__title">드론 · 근접 EO 정찰</h4>
+                    <p className="muted service-drone-mvp-detail__ctx">{selectedDetail.droneMvp.afterUavContextLine}</p>
+                    <dl className="service-detail-dl">
+                      <div>
+                        <dt>드론 ID</dt>
+                        <dd>{selectedDetail.droneMvp.droneId}</dd>
+                      </div>
+                      <div>
+                        <dt>임무 상태</dt>
+                        <dd>{droneMissionStatusLabelKo(selectedDetail.droneMvp.missionStatus)}</dd>
+                      </div>
+                      <div>
+                        <dt>드론–최근접 적(MB)</dt>
+                        <dd>
+                          {selectedDetail.droneMvp.distanceToNearestEnemyKm != null
+                            ? `${selectedDetail.droneMvp.distanceToNearestEnemyKm.toFixed(1)} km`
+                            : '계산 불가'}
+                          <span className="muted">
+                            {' '}
+                            · 한계 {selectedDetail.droneMvp.identificationRangeKm} km
+                          </span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>EO/IR 판별</dt>
+                        <dd>
+                          {selectedDetail.droneMvp.enemyIdentified
+                            ? '가능 (거리 게이트 충족)'
+                            : '불가 — 접근 필요'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>표적 종류</dt>
+                        <dd>{selectedDetail.droneMvp.targetClass}</dd>
+                      </div>
+                      <div>
+                        <dt>이동 방향</dt>
+                        <dd>{selectedDetail.droneMvp.headingDegEst.toFixed(1)}° (추정)</dd>
+                      </div>
+                      <div>
+                        <dt>이동 상태</dt>
+                        <dd>
+                          {selectedDetail.droneMvp.movementState} · {selectedDetail.droneMvp.speedKphEst.toFixed(1)} km/h
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>위협도</dt>
+                        <dd>{selectedDetail.droneMvp.threatLevel}</dd>
+                      </div>
+                    </dl>
+                    <div className="service-drone-mvp-inline-media">
+                      {selectedDetail.droneMvp.enemyIdentified && selectedDetail.droneMvp.mediaUrl ? (
+                        selectedDetail.droneMvp.mediaKind === 'video' ? (
+                          <video
+                            src={selectedDetail.droneMvp.mediaUrl}
+                            controls
+                            playsInline
+                            muted
+                            loop
+                            className="service-drone-mvp-inline-media__video"
+                          />
+                        ) : (
+                          <img
+                            src={selectedDetail.droneMvp.mediaUrl}
+                            alt=""
+                            className="service-drone-mvp-inline-media__img"
+                          />
+                        )
+                      ) : null}
+                      <p className="muted">{selectedDetail.droneMvp.mediaCaption}</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="muted">지도 또는 우측 목록에서 객체를 선택하면 상세 정보가 표시됩니다.</p>
+            )}
+          </section>
+
+          <section className="service-panel-section">
+            <h3>전술 대응 적합도</h3>
+            {tacticScores && tacticScores.length > 0 ? (
+              <ul className="service-tactic-list">
+                {tacticScores.map((row) => (
+                  <li key={row.name}>
+                    <div className="service-tactic-list__head">
+                      <strong>{row.name}</strong>
+                      <span>{row.score}점</span>
+                    </div>
+                    <p>{row.rationale}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">
+                적 객체에 마우스를 올리면 정보 팝업이 표시되고, 클릭하면 전술 대응 적합도가 활성화됩니다. SAR 단계 이후 적
+                전차(MBT)를 클릭하면 SAR·탐지 파이프라인에서 객체를 어떻게 뽑아냈는지 임시 데모 영상이 열립니다.
+              </p>
+            )}
+          </section>
+        </aside>
+      </div>
+
+      {sarSpotlightOpen &&
+        createPortal(
+          <div
+            className={`sar-spotlight-root${sarSpotlightEmphasis ? ' sar-spotlight-root--emphasis' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sar-spotlight-title"
+          >
+            <div
+              className="sar-spotlight-backdrop"
+              role="presentation"
+              onClick={() => {
+                setSarSpotlightEmphasis(false)
+                setSarSpotlightOpen(false)
+              }}
+            />
+            <div className="sar-spotlight-modal sar-spotlight-modal--glow">
+              <div className="sar-spotlight-modal__chrome">
+                <div className="sar-spotlight-modal__head" id="sar-spotlight-title">
+                  Spotlight · SAR 관측 구역 강조
+                </div>
+                <button
+                  type="button"
+                  className="sar-spotlight-modal__close"
+                  aria-label="Spotlight 닫기"
+                  onClick={() => {
+                    setSarSpotlightEmphasis(false)
+                    setSarSpotlightOpen(false)
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <p className="sar-spotlight-modal__sub">{SAR_SPOTLIGHT_MODAL_SUB}</p>
+              <div className="sar-spotlight-modal__body">
+                <img src={SAR_SPOTLIGHT_RESULT_IMAGE_URL} alt="SAR 적 인식 결과(샘플)" />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {sarMbtExtractionModalOpen &&
+        createPortal(
+          <div
+            className="sar-spotlight-root sar-mbt-extraction-root"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sar-mbt-extraction-title"
+          >
+            <div
+              className="sar-spotlight-backdrop"
+              role="presentation"
+              onClick={() => {
+                sarMbtExtractionVideoRef.current?.pause()
+                setSarMbtExtractionModalOpen(false)
+              }}
+            />
+            <div className="sar-spotlight-modal sar-mbt-extraction-modal">
+              <div className="sar-spotlight-modal__chrome">
+                <div className="sar-spotlight-modal__head" id="sar-mbt-extraction-title">
+                  SAR 작업 · 전차 표적 추출 과정(임시 데모)
+                </div>
+                <button
+                  type="button"
+                  className="sar-spotlight-modal__close"
+                  aria-label="추출 데모 닫기"
+                  onClick={() => {
+                    sarMbtExtractionVideoRef.current?.pause()
+                    setSarMbtExtractionModalOpen(false)
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <p className="sar-spotlight-modal__sub">
+                {sarMbtExtractionTitle ? `대상: ${sarMbtExtractionTitle}` : '적 전차(MBT)'} — GRD·변화검출 → 관심 격자 →
+                (샘플) 검출·트래킹 파이프라인 시연 영상입니다. 실제 SAR 영상으로 교체 예정입니다.
+              </p>
+              <div className="sar-spotlight-modal__body sar-mbt-extraction-modal__body">
+                <video
+                  ref={sarMbtExtractionVideoRef}
+                  className="sar-mbt-extraction-modal__video"
+                  src={SAR_MBT_EXTRACTION_DEMO_VIDEO_URL}
+                  controls
+                  playsInline
+                  preload="metadata"
+                >
+                  브라우저가 video 태그를 지원하지 않습니다.
+                </video>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {scenarioSummaryOpen &&
+        scenarioPhase === BattlefieldScenarioPhase.SCENARIO_COMPLETE &&
+        createPortal(
+          <div
+            className="scenario-summary-root"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={scenarioSummaryTitleId}
+          >
+            <div
+              className="scenario-summary-backdrop"
+              role="presentation"
+              onClick={() => setScenarioSummaryOpen(false)}
+            />
+            <div className="scenario-summary-modal">
+              <div className="scenario-summary-modal__chrome">
+                <div className="scenario-summary-modal__head">
+                  <h2 id={scenarioSummaryTitleId}>{scenarioSummaryReport.title}</h2>
+                  <button
+                    type="button"
+                    className="scenario-summary-modal__close"
+                    aria-label="요약 닫기"
+                    onClick={() => setScenarioSummaryOpen(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+                <p className="scenario-summary-modal__sub muted">{scenarioSummaryReport.subtitle}</p>
+              </div>
+              <div className="scenario-summary-modal__body">
+                <section className="scenario-summary-section">
+                  <h3>단계별 탐지 결과</h3>
+                  <ol className="scenario-summary-phases">
+                    {scenarioSummaryReport.phaseResults.map((row) => (
+                      <li key={row.stepLabel}>
+                        <span className="scenario-summary-phases__label">{row.stepLabel}</span>
+                        <strong>{row.headline}</strong>
+                        <p className="muted">{row.detail}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+                <div className="scenario-summary-grid">
+                  <section className="scenario-summary-section">
+                    <h3>최종 식별 · 적 전차(MBT)</h3>
+                    <p className="scenario-summary-highlight">
+                      <span className="scenario-summary-highlight__num">{scenarioSummaryReport.finalEnemyMbtCount}</span>
+                      <span className="scenario-summary-highlight__unit">개 군집</span>
+                    </p>
+                    <p className="muted">{scenarioSummaryReport.finalEnemyMbtDetail}</p>
+                  </section>
+                  <section className="scenario-summary-section">
+                    <h3>{scenarioSummaryReport.movementPathTitle}</h3>
+                    <ul className="scenario-summary-bullets">
+                      {scenarioSummaryReport.movementPathSteps.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                    <p className="muted scenario-summary-note">{scenarioSummaryReport.movementPathNote}</p>
+                  </section>
+                </div>
+                <section className="scenario-summary-section">
+                  <h3>{scenarioSummaryReport.dangerZoneTitle}</h3>
+                  <p>{scenarioSummaryReport.dangerZoneDetail}</p>
+                  <p className="scenario-summary-fmcw-line">
+                    <span className="muted">FMCW 윤곽: </span>
+                    {scenarioSummaryReport.dangerZoneFmcwLine}
+                  </p>
+                  <p className="muted">
+                    아군 타격 적합도(더미): {scenarioSummaryReport.strikeSuitabilityPct}% · 예상 진입:{' '}
+                    {fmcwMvpBundle.ingressSummary}
+                  </p>
+                </section>
+                <section className="scenario-summary-section">
+                  <h3>대응 적합 전술</h3>
+                  <ul className="scenario-summary-tactics">
+                    {scenarioSummaryReport.tactics.map((t) => (
+                      <li key={t.name}>
+                        <div className="scenario-summary-tactics__head">
+                          <strong>{t.name}</strong>
+                          <span>{t.score}점</span>
+                        </div>
+                        <p>{t.rationale}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+                <section className="scenario-summary-section">
+                  <h3>자산별 기여도</h3>
+                  <ul className="scenario-summary-contrib">
+                    {scenarioSummaryReport.assetContributions.map((row) => (
+                      <li key={row.label}>
+                        <div className="scenario-summary-contrib__head">
+                          <span>
+                            <strong>{row.label}</strong>
+                            <span className="muted"> · {row.category}</span>
+                          </span>
+                          <span className="scenario-summary-contrib__pct">{row.contributionPct}%</span>
+                        </div>
+                        <div className="scenario-summary-contrib__bar" aria-hidden>
+                          <span style={{ width: `${row.contributionPct}%` }} />
+                        </div>
+                        <p className="muted">{row.note}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+              <div className="scenario-summary-modal__footer">
+                <button type="button" className="btn-secondary" onClick={() => setScenarioSummaryOpen(false)}>
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    handleResetScenario()
+                  }}
+                >
+                  시나리오 다시 시작
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </section>
+  )
+}
+
+function RequireAuth({ user, authReady }: RequireAuthProps) {
+  if (!authReady) {
+    return (
+      <section className="page auth-page auth-checking-page">
+        <h1>인증 상태 확인 중…</h1>
+      </section>
+    )
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <Outlet />
 }
 
 function AppLayout({ user, onLogout }: AppLayoutProps) {
@@ -5861,20 +9779,20 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
   return (
     <div className={`app-shell${sidebarCollapsed ? ' app-shell--sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
-        <h2 className="brand">제어와드</h2>
+        <h2 className="brand">전장 C2 서비스</h2>
         <nav className="sidebar-nav">
-          <NavLink to="/sensor-pipeline">센서 파이프라인</NavLink>
-          <HomeScenarioNavLink step="1" label="1. SAR 광역" />
-          <HomeScenarioNavLink step="2" label="2. UAV" />
-          <HomeScenarioNavLink step="3" label="3. FMCW" />
-          <HomeScenarioNavLink step="4" label="4. 통합 상황" />
+          <p className="sidebar-nav-group-label">운용</p>
+          <NavLink to="/" end>
+            실시간 전장판
+          </NavLink>
+          <NavLink to="/scenario-playback">시나리오 재생</NavLink>
         </nav>
       </aside>
 
       <div className="content-area">
         <header className="topbar">
           <div>
-            <strong>지휘결심 지원 웹</strong>
+            <strong>로그인 기반 전장 운용 화면</strong>
           </div>
           <div className="topbar-right">
             <button
@@ -5907,24 +9825,45 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
   )
 }
 
-function AuthLayout({ user }: { user: User | null }) {
+function AuthLayout({
+  user,
+  authReady,
+}: {
+  user: User | null
+  authReady: boolean
+}) {
+  if (!authReady) {
+    return (
+      <div className="auth-shell">
+        <section className="page auth-page auth-checking-page">
+          <h1>인증 상태 확인 중…</h1>
+        </section>
+      </div>
+    )
+  }
+
   if (user) {
     return <Navigate to="/" replace />
   }
 
   return (
     <div className="auth-shell">
-      <section className="page auth-page">
-        <Outlet />
-      </section>
+      <div className="auth-hero-grid">
+        <div className="auth-hero-visual" aria-hidden>
+          <img src="/media/login-hero-satellite.png" alt="" />
+        </div>
+        <section className="page auth-page auth-page--panel">
+          <Outlet />
+        </section>
+      </div>
     </div>
   )
 }
 
 function LoginPage({ onLoggedIn }: LoginPageProps) {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('demo@hanhwa.local')
+  const [password, setPassword] = useState('Demo1234!')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -6076,12 +10015,16 @@ function App() {
     localStorage.getItem('accessToken'),
   )
   const [user, setUser] = useState<User | null>(null)
+  const [authReady, setAuthReady] = useState(() => localStorage.getItem('accessToken') == null)
 
   useEffect(() => {
     if (!token) {
+      setUser(null)
+      setAuthReady(true)
       return
     }
 
+    setAuthReady(false)
     void requestJson<User>(`${getApiBaseUrl()}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -6091,32 +10034,38 @@ function App() {
         setUser(null)
         setToken(null)
       })
+      .finally(() => {
+        setAuthReady(true)
+      })
   }, [token])
 
   const handleAuthSuccess = (payload: AuthResponse) => {
     localStorage.setItem('accessToken', payload.accessToken)
     setToken(payload.accessToken)
     setUser(payload.user)
+    setAuthReady(true)
   }
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken')
     setToken(null)
     setUser(null)
+    setAuthReady(true)
   }
 
   return (
     <Routes>
-      <Route element={<AppLayout user={user} onLogout={handleLogout} />}>
-        <Route path="/" element={<HomePage user={user} />} />
-        <Route path="/alert-zone" element={<AlertZonePage />} />
-        <Route path="/identification" element={<IdentificationTrackingPage />} />
-        <Route path="/monitor" element={<CameraMonitorPage />} />
-        <Route path="/distance-analysis" element={<DistanceAnalysisPage />} />
-        <Route path="/sensor-pipeline" element={<SensorPipelinePage />} />
-        <Route path="/guide" element={<GuidePage />} />
+      <Route element={<RequireAuth user={user} authReady={authReady} />}>
+        <Route element={<AppLayout user={user} onLogout={handleLogout} />}>
+          <Route path="/" element={<BattlefieldServicePage />} />
+          <Route path="/scenario-playback" element={<HomePage user={user} />} />
+          <Route path="/identification" element={<IdentificationTrackingPage />} />
+          <Route path="/monitor" element={<CameraMonitorPage />} />
+          <Route path="/sensor-pipeline" element={<SensorPipelinePage />} />
+          <Route path="/drone-eo-ir" element={<DroneEoIrIdentificationPage />} />
+        </Route>
       </Route>
-      <Route element={<AuthLayout user={user} />}>
+      <Route element={<AuthLayout user={user} authReady={authReady} />}>
         <Route path="/login" element={<LoginPage onLoggedIn={handleAuthSuccess} />} />
         <Route path="/signup" element={<SignupPage onSignedUp={handleAuthSuccess} />} />
       </Route>

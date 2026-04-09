@@ -517,6 +517,8 @@ export class MapService {
           antiArmor: 0.84,
           collateralRisk: 0.31,
           uavLinkQuality: 'A',
+          /** 시드 Unit.name 과 일치 — 웹에서 전술 선택 시 해당 부대 출전 표시 */
+          deployUnitNames: ['3기갑소대'],
         },
       },
       {
@@ -530,6 +532,7 @@ export class MapService {
           antiArmor: 0.58,
           collateralRisk: 0.24,
           uavLinkQuality: 'B+',
+          deployUnitNames: ['1보병중대 (전방)'],
         },
       },
       {
@@ -543,6 +546,7 @@ export class MapService {
           antiArmor: 0.42,
           collateralRisk: 0.47,
           uavLinkQuality: 'B',
+          deployUnitNames: ['2포병포대'],
         },
       },
     ] as const;

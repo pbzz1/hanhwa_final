@@ -95,6 +95,12 @@ model Unit {
   branch             String
   lat                Float
   lng                Float
+  /// 단대오(편성) 정보
+  formation          String                  @default("단대오-기본")
+  /// 표고(m)
+  elevationM         Float                   @default(0)
+  /// MGRS 좌표(데모 저장용)
+  mgrs               String                  @default("52SDU0000000000")
   personnel          Int
   equipment          String
   readiness          Readiness

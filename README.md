@@ -70,8 +70,8 @@ cd ai-inference && uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 ### 지도 드론 영상 (로컬 MP4 예시)
 
-- `frontend/public/media/demo-drone-map.mp4`가 Vite로 **`/media/demo-drone-map.mp4`** URL로 제공됩니다.
-- 시드 후 DB의 `적군-ALPHA` 침투 지점 `droneVideoUrl`이 위 경로를 가리키므로, 홈 지도에서 해당 적 마커에 마우스를 올리면 **동일 출처** 영상이 재생됩니다.
+- YOLO 전차 인식 데모 영상: `frontend/public/media/yolo-tank-1.mp4` ~ `yolo-tank-3.mp4`가 Vite로 **`/media/yolo-tank-*.mp4`** 로 제공됩니다.
+- 시드 후 DB의 적 침투 지점 `droneVideoUrl`은 `yolo-tank-1`, 아군 유닛 상황 영상은 `yolo-tank-3`를 가리킵니다. 시뮬 우측 전차 판별 패널은 코드에서 `yolo-tank-2`를 사용합니다.
 - 시드 반영: `cd backend && npx prisma db seed`
 
 ## 라이선스

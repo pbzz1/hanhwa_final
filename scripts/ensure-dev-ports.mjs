@@ -9,6 +9,7 @@ const PORTS = [
   { port: 3308, name: 'HanhwaFinal-Dev-Nest' },
   { port: 5173, name: 'HanhwaFinal-Dev-Vite' },
   { port: 8001, name: 'HanhwaFinal-Dev-AI' },
+  { port: 8090, name: 'HanhwaFinal-Dev-Radar' },
 ]
 
 function main() {

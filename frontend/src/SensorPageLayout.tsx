@@ -8,6 +8,8 @@ type Props = {
   modelBody: ReactNode
   inputTitle?: string
   inputItems: string[]
+  /** 입력 패널 하단 시각 자료(SAR 타일 등) */
+  inputVisual?: ReactNode
   outputTitle?: string
   outputItems: string[]
   children: ReactNode
@@ -26,6 +28,7 @@ export function SensorPageLayout({
   modelBody,
   inputTitle = '입력 (Input)',
   inputItems,
+  inputVisual,
   outputTitle = '출력 (Output)',
   outputItems,
   children,
@@ -57,6 +60,9 @@ export function SensorPageLayout({
               <li key={t}>{t}</li>
             ))}
           </ul>
+          {inputVisual ? (
+            <div className="sensor-intro-page__input-visual">{inputVisual}</div>
+          ) : null}
         </section>
         <section className="sensor-intro-page__panel sensor-intro-page__panel--io" aria-labelledby="sensor-out-h">
           <h3 id="sensor-out-h" className="sensor-intro-page__h">

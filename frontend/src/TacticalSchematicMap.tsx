@@ -11,7 +11,8 @@ export type SchematicBounds = {
 type Props = {
   bounds: SchematicBounds
   c2: { lat: number; lng: number }
-  enemy: { lat: number; lng: number }
+  /** null — 전술 제압 등으로 표적 미표시 */
+  enemy: { lat: number; lng: number } | null
   enemyDistanceKm: number | null
   fmcwInRange: boolean
   c2Name: string
@@ -51,12 +52,13 @@ export function TacticalSchematicMap({
   c2Name,
   enemyName,
 }: Props) {
+  const hasEnemy = enemy != null
   const pc = project(c2.lat, c2.lng, bounds, VB_W, VB_H, PAD)
-  const pe = project(enemy.lat, enemy.lng, bounds, VB_W, VB_H, PAD)
+  const pe = hasEnemy ? project(enemy.lat, enemy.lng, bounds, VB_W, VB_H, PAD) : pc
   const pDmzLeft = project(DMZ_PARALLEL_38_N, bounds.minLng, bounds, VB_W, VB_H, PAD)
   const pDmzRight = project(DMZ_PARALLEL_38_N, bounds.maxLng, bounds, VB_W, VB_H, PAD)
 
-  const brg = bearingDeg(c2.lat, c2.lng, enemy.lat, enemy.lng)
+  const brg = hasEnemy ? bearingDeg(c2.lat, c2.lng, enemy.lat, enemy.lng) : 0
   const rMax = Math.min(VB_W, VB_H) * 0.42
   const rFmcw = rMax * 0.34
 
@@ -117,7 +119,7 @@ export function TacticalSchematicMap({
           휴전선(북위 38° 근사)
         </text>
 
-        {fmcwInRange && (
+        {fmcwInRange && hasEnemy && (
           <path
             d={wedge(rFmcw, 48)}
             fill="rgba(56, 189, 248, 0.14)"
@@ -126,25 +128,35 @@ export function TacticalSchematicMap({
           />
         )}
 
-        <line
-          x1={pc.x}
-          y1={pc.y}
-          x2={pe.x}
-          y2={pe.y}
-          stroke="#eab308"
-          strokeWidth="2.2"
-          strokeOpacity={0.85}
-        />
+        {hasEnemy && (
+          <line
+            x1={pc.x}
+            y1={pc.y}
+            x2={pe.x}
+            y2={pe.y}
+            stroke="#eab308"
+            strokeWidth="2.2"
+            strokeOpacity={0.85}
+          />
+        )}
 
         <circle cx={pc.x} cy={pc.y} r="11" fill="#facc15" stroke="#854d0e" strokeWidth="2" />
-        <circle cx={pe.x} cy={pe.y} r="10" fill="#b91c1c" stroke="#fff" strokeWidth="2" />
+        {hasEnemy && (
+          <circle cx={pe.x} cy={pe.y} r="10" fill="#b91c1c" stroke="#fff" strokeWidth="2" />
+        )}
 
         <text x={pc.x} y={pc.y + 26} textAnchor="middle" fill="#713f12" fontSize="10" fontWeight="800">
           C2
         </text>
-        <text x={pe.x} y={pe.y - 16} textAnchor="middle" fill="#7f1d1d" fontSize="10" fontWeight="800">
-          적
-        </text>
+        {hasEnemy ? (
+          <text x={pe.x} y={pe.y - 16} textAnchor="middle" fill="#7f1d1d" fontSize="10" fontWeight="800">
+            적
+          </text>
+        ) : (
+          <text x={VB_W / 2} y={PAD + 48} textAnchor="middle" fill="#64748b" fontSize="11" fontWeight="700">
+            표적 없음 (제압·미식별)
+          </text>
+        )}
 
         <text x={PAD} y={22} fill="#334155" fontSize="11" fontWeight="800">
           북 ↑

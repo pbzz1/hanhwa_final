@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { GANGSEO_GU_PATH } from './data/gangseoGuPolygon'
-
 type KakaoMap = {
   setBounds: (
     bounds: unknown,
@@ -54,6 +52,14 @@ type EventLogItem = {
   level: '경고' | '주의' | '정보'
   text: string
 }
+
+/** 시연용 단순 폐곡선 (강서구 대략 경계) */
+const GANGSEO_GU_PATH: { lat: number; lng: number }[] = [
+  { lat: 37.598, lng: 126.72 },
+  { lat: 37.598, lng: 126.87 },
+  { lat: 37.518, lng: 126.87 },
+  { lat: 37.518, lng: 126.72 },
+]
 
 const MOCK_EVENTS: EventLogItem[] = [
   {

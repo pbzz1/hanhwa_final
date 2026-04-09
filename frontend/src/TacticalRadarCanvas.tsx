@@ -110,23 +110,30 @@ export function TacticalRadarCanvas({
         ctx.fill()
       }
 
-      const rk = rangeKm ?? 0
-      const clamped = Math.min(Math.max(rk, 0), maxRangeKm)
-      const rPx = (clamped / maxRangeKm) * R
-      const blip = polarToCanvas(bearingToEnemyDeg, rPx)
-      ctx.fillStyle = '#f87171'
-      ctx.beginPath()
-      ctx.arc(blip.x, blip.y, fmcwInRange ? 7 : 5, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 1.5
-      ctx.stroke()
+      if (rangeKm != null) {
+        const clamped = Math.min(Math.max(rangeKm, 0), maxRangeKm)
+        const rPx = (clamped / maxRangeKm) * R
+        const blip = polarToCanvas(bearingToEnemyDeg, rPx)
+        ctx.fillStyle = '#f87171'
+        ctx.beginPath()
+        ctx.arc(blip.x, blip.y, fmcwInRange ? 7 : 5, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+      }
 
       ctx.fillStyle = 'rgba(226, 232, 240, 0.88)'
       ctx.font = '11px system-ui, sans-serif'
       ctx.fillText(`북 0° · 최대 ${maxRangeKm} km`, 12, 18)
       ctx.fillText(`주시 ${radarHeadingDeg.toFixed(0)}° / 시야 ${radarFovDeg}°`, 12, 34)
-      ctx.fillText(`표적 방위 ${bearingToEnemyDeg.toFixed(0)}° · 거리 ${rk.toFixed(1)} km`, 12, 50)
+      ctx.fillText(
+        rangeKm == null
+          ? `표적 없음 (제압·미식별)`
+          : `표적 방위 ${bearingToEnemyDeg.toFixed(0)}° · 거리 ${rangeKm.toFixed(1)} km`,
+        12,
+        50,
+      )
 
       raf = requestAnimationFrame(draw)
     }

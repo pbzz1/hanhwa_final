@@ -3,10 +3,31 @@ type Props = {
 }
 
 const STEPS = [
-  { n: '1', name: 'SAR 광역', desc: '광역 탐지·변화분석' },
-  { n: '2', name: 'UAV', desc: '실시간 추적·EO/IR' },
-  { n: '3', name: 'FMCW', desc: '근거리 레이더·VoD 연동' },
-  { n: '4', name: '통합', desc: '종합 상황도' },
+  {
+    n: '1',
+    name: 'SAR 광역',
+    desc: 'Sentinel-1 조기경보 — Sub-Aperture·RCS/OSM 후보',
+  },
+  {
+    n: '2',
+    name: 'UAV',
+    desc: 'MSFA·SARDet 좌표 유도 후 YOLO+ByteTrack·EO/IR',
+  },
+  {
+    n: '3',
+    name: 'FMCW',
+    desc: 'VoD FMCW·DBSCAN — 레이더 인계·위험 예측',
+  },
+  {
+    n: '4',
+    name: '드론 EO/IR',
+    desc: '근접 정찰·데모 영상·파이프라인 4단계',
+  },
+  {
+    n: '5',
+    name: '통합',
+    desc: '지도·시뮬·이벤트·전술 — 웹 C2',
+  },
 ] as const
 
 /**
@@ -18,7 +39,7 @@ export function ScenarioFlowOverview({ onStart }: Props) {
       <header className="scenario-flow-overview__head">
         <h2 className="scenario-flow-overview__title">다층 감시 흐름</h2>
         <p className="muted scenario-flow-overview__lead">
-          광역 → 추적 → 정밀 식별 → <strong>통합 상황판</strong>
+          <strong>광역 SAR → UAV → FMCW → 드론 EO/IR → 통합 상황판</strong> 순으로 시나리오를 진행합니다.
         </p>
       </header>
 

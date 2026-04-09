@@ -1,11 +1,11 @@
 /**
- * Nest(3308)·Vite(5173) 개발 포트를 점유 중인 프로세스를 종료합니다.
- * 이전에 종료되지 않은 node(백엔드/프론트) 잔존 시 EADDRINUSE 방지용.
+ * Nest(3308)·Vite(5173)·AI(8001)·radar-service(8090) 개발 포트를 점유 중인 프로세스를 종료합니다.
+ * 이전에 종료되지 않은 프로세스 잔존 시 EADDRINUSE 방지용.
  */
 import { execSync, spawnSync } from 'node:child_process'
 import os from 'node:os'
 
-const PORTS = [3308, 5173]
+const PORTS = [3308, 5173, 8001, 8090]
 
 function killWindows(port) {
   const r = spawnSync('cmd', ['/c', 'netstat', '-ano', '-p', 'tcp'], {

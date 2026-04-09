@@ -3,9 +3,11 @@
  * 아군: 휴전선 이남 / 적: 이북 — 시뮬 남하 침공
  */
 
+import { DRONE_ENEMY_IDENTIFICATION_RANGE_KM } from './battlefield/droneEngagementConfig'
+
 /**
  * 대대(지휘통제실) 기준 거리.
- * 개념 순서: 위성 SAR → UAV SAR(40km 밖) → 전술 권역(40km 이내) → FMCW(15km 이내).
+ * 개념 순서: 위성 SAR → UAV SAR(40km 밖) → 전술 권역(40km 이내) → 드론 EO/IR(설정 km) → FMCW(15km 이내).
  */
 /**
  * 시뮬 진행률(0~1) 폴백 — 주 적 궤적이 남하 관측 권역(파란 사각형)에 진입하는 시점을 못 구할 때만,
@@ -28,8 +30,8 @@ export const SCENARIO_RANGES_KM = {
   /** 군사분계선 인근 전술 권역 — 이보다 멀면 UAV SAR 광역 추적 단계로 표현 */
   TACTICAL_RANGE_KM: 40,
   FMCW_MAX: 15,
-  /** 정찰 드론 출동·현장 EO/IR 촬영 — C2~주 적 거리 기준, FMCW 권과 동일 */
-  DRONE_DISPATCH_MAX_KM: 15,
+  /** 정찰 드론 출동·EO/IR — C2~주 적 거리 기준 (`droneEngagementConfig`와 동일 값) */
+  DRONE_DISPATCH_MAX_KM: DRONE_ENEMY_IDENTIFICATION_RANGE_KM,
 } as const
 
 export const BATTALION_SCENARIO = {

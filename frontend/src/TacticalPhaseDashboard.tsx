@@ -123,11 +123,13 @@ export function TacticalPhaseDashboard({
                 style={{ width: `${linePct}%` }}
               />
             </div>
-            <div className="tactical-dash__node tactical-dash__node--enemy">
+            <div
+              className={`tactical-dash__node tactical-dash__node--enemy${enemy ? '' : ' tactical-dash__node--enemy-suppressed'}`}
+            >
               <span className="tactical-dash__node-dot tactical-dash__node-dot--enemy" />
               <span className="tactical-dash__node-label">적</span>
               <span className="tactical-dash__node-sub">
-                {enemy?.codename ?? '표적'}
+                {enemy ? enemy.codename : '전술 제압 — 표적 제거'}
               </span>
             </div>
           </div>
