@@ -28,7 +28,8 @@ async function main() {
   await prisma.user.createMany({
     data: [
       { email: demoEmails[0], passwordHash: demoHash, name: '모의 지휘관' },
-      { email: demoEmails[1], passwordHash: demoHash, name: '모의 관제' },
+      { email: demoEmails[1], passwordHash:
+         demoHash, name: '모의 관제' },
     ],
   });
 
@@ -149,8 +150,9 @@ async function main() {
     data: [
       {
         codename: '적 제1기갑대대 (북측 집결)',
-        lat: 38.2,
-        lng: 126.92,
+        /** 평양 시청 일대 근사 — 프론트 시뮌·SAR 소실 원과 동일 */
+        lat: 39.0392,
+        lng: 125.7625,
         threatLevel: '높음',
         estimatedCount: 28,
         observedAt: new Date('2026-03-26T10:40:00'),

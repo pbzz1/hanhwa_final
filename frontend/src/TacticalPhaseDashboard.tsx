@@ -1,4 +1,3 @@
-import { FmcwRadarScatter3D } from './FmcwRadarScatter3D'
 import { RadarCharts2D } from './RadarCharts2D'
 import { SCENARIO_RANGES_KM } from './scenarioBattalion'
 
@@ -37,35 +36,29 @@ type RadarChartsPayload = {
 type Props = {
   enemyDistanceKm: number | null
   simProgress: number
-  /** 통합 시뮬(5페이지) 내부: 3=펄스 대기, 4=펄스, 5=FMCW */
+  /** 통합 시뮬 내부: 3=40km 밖, 4=전술 권역, 5=FMCW */
   tacticalSubStep: 3 | 4 | 5
-  pulseInRange: boolean
-  pulseUncertainBand: boolean
   fmcwInRange: boolean
   c2Name: string
   enemy: EnemyBrief | null
   onOpenDroneVideo: () => void
   radarCharts: RadarChartsPayload | null
-  radarCentroid: { rangeM: number; azimuthDeg: number; elevationDeg: number } | null
 }
 
 const GAUGE_MAX_KM = 55
 
 /**
- * 통합 시뮬 — 카카오맵 없이 펄스·FMCW를 스키매틱으로 표현
+ * 통합 시뮬 — 카카오맵 없이 전술·FMCW를 스키매틱으로 표현
  */
 export function TacticalPhaseDashboard({
   enemyDistanceKm,
   simProgress,
   tacticalSubStep,
-  pulseInRange,
-  pulseUncertainBand,
   fmcwInRange,
   c2Name,
   enemy,
   onOpenDroneVideo,
   radarCharts,
-  radarCentroid,
 }: Props) {
   const d = enemyDistanceKm
   const gaugePct =
@@ -89,7 +82,7 @@ export function TacticalPhaseDashboard({
               />
               <span
                 className="tactical-dash__gauge-tick tactical-dash__gauge-tick--40"
-                style={{ left: `${(SCENARIO_RANGES_KM.PULSE_MAX / GAUGE_MAX_KM) * 100}%` }}
+                style={{ left: `${(SCENARIO_RANGES_KM.TACTICAL_RANGE_KM / GAUGE_MAX_KM) * 100}%` }}
                 title="40km"
               />
               <span
@@ -101,16 +94,16 @@ export function TacticalPhaseDashboard({
             <div className="tactical-dash__gauge-labels">
               <span>0</span>
               <span>15km FMCW</span>
-              <span>40km MDL·펄스</span>
+              <span>40km 전술</span>
               <span>{GAUGE_MAX_KM}km</span>
             </div>
           </div>
           <p className="muted tactical-dash__hint">
-            통합 시뮬 ·{' '}
+            통합 상황 ·{' '}
             {tacticalSubStep === 3
-              ? '펄스 대기(40km 권역 밖/미진입)'
+              ? '전술 권역 밖(40km 미진입)'
               : tacticalSubStep === 4
-                ? '펄스(≤40km)'
+                ? '전술 권역(≤40km)'
                 : 'FMCW(≤15km)'}
             {' · '}진행 {Math.round(simProgress * 100)}%
           </p>
@@ -139,23 +132,22 @@ export function TacticalPhaseDashboard({
             </div>
           </div>
           <p className="muted tactical-dash__hint">
-            북에서 남하하는 주 표적과 대대 지휘통제실 간 거리를 수치로만 표시합니다. 지도와 동일한 시뮬 데이터입니다.
+            북에서 남하하는 주 표적과 대대 지휘통제실 간 거리를 수치로 표시합니다. 지도와 동일한 궤적·거리 값을 사용합니다.
           </p>
         </section>
 
         <section className="tactical-dash__card tactical-dash__card--radar">
-          <h3 className="tactical-dash__h">레이더 스캔 (모의)</h3>
-          <div className={`tactical-dash__radar-face${pulseInRange ? ' tactical-dash__radar-face--on' : ''}`}>
-            {pulseInRange && <div className="tactical-dash__radar-sweep" aria-hidden />}
-            {!pulseInRange && (
-              <p className="tactical-dash__radar-idle muted">40km 권역 진입 시 펄스 스캔 활성</p>
+          <h3 className="tactical-dash__h">센서 구간</h3>
+          <div className="tactical-dash__radar-face">
+            {tacticalSubStep < 4 && (
+              <p className="tactical-dash__radar-idle muted">40km 권역 진입 시 전술 뷰가 활성됩니다.</p>
             )}
-            {pulseUncertainBand && (
+            {tacticalSubStep >= 4 && !fmcwInRange && (
               <p className="tactical-dash__radar-caption">
-                펄스 · <strong>미확인 물체 확인</strong> 구간 (15~40km)
+                전술 권역 (≤40km) — 근거리 FMCW는 15km 이내
               </p>
             )}
-            {fmcwInRange && !pulseUncertainBand && (
+            {fmcwInRange && (
               <p className="tactical-dash__radar-caption tactical-dash__radar-caption--fmcw">
                 FMCW 정밀 구간 (≤15km)
               </p>
@@ -179,22 +171,14 @@ export function TacticalPhaseDashboard({
               </>
             )}
           </p>
-          <div className="tactical-dash__fmcw-grid">
+          <div className="tactical-dash__fmcw-grid tactical-dash__fmcw-grid--2d-only">
             <div>
               <p className="tactical-dash__viz-title">2D Range–Azimuth</p>
+              <p className="muted tactical-dash__hint" style={{ marginTop: 0 }}>
+                VoD 경로에서 3D 뷰는 생략합니다.
+              </p>
               <RadarCharts2D detections={radarCharts.detections} />
             </div>
-            {radarCentroid && (
-              <div>
-                <p className="tactical-dash__viz-title">3D 산점도 (탐지 평균)</p>
-                <FmcwRadarScatter3D
-                  rangeM={radarCentroid.rangeM}
-                  azimuthDeg={radarCentroid.azimuthDeg}
-                  elevationDeg={radarCentroid.elevationDeg}
-                  className="tactical-dash__canvas3d"
-                />
-              </div>
-            )}
           </div>
         </section>
       )}

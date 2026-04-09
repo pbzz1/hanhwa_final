@@ -13,8 +13,6 @@ type Props = {
   c2: { lat: number; lng: number }
   enemy: { lat: number; lng: number }
   enemyDistanceKm: number | null
-  pulseInRange: boolean
-  pulseUncertainBand: boolean
   fmcwInRange: boolean
   c2Name: string
   enemyName: string
@@ -49,8 +47,6 @@ export function TacticalSchematicMap({
   c2,
   enemy,
   enemyDistanceKm,
-  pulseInRange,
-  pulseUncertainBand,
   fmcwInRange,
   c2Name,
   enemyName,
@@ -62,7 +58,6 @@ export function TacticalSchematicMap({
 
   const brg = bearingDeg(c2.lat, c2.lng, enemy.lat, enemy.lng)
   const rMax = Math.min(VB_W, VB_H) * 0.42
-  const rPulse = rMax * 0.92
   const rFmcw = rMax * 0.34
 
   const wedge = (r: number, openDeg: number) => {
@@ -122,14 +117,6 @@ export function TacticalSchematicMap({
           휴전선(북위 38° 근사)
         </text>
 
-        {pulseInRange && (
-          <path
-            d={wedge(rPulse, 72)}
-            fill="rgba(167, 139, 250, 0.12)"
-            stroke="rgba(139, 92, 246, 0.45)"
-            strokeWidth="1.2"
-          />
-        )}
         {fmcwInRange && (
           <path
             d={wedge(rFmcw, 48)}
@@ -150,14 +137,7 @@ export function TacticalSchematicMap({
         />
 
         <circle cx={pc.x} cy={pc.y} r="11" fill="#facc15" stroke="#854d0e" strokeWidth="2" />
-        <circle
-          cx={pe.x}
-          cy={pe.y}
-          r={pulseUncertainBand ? 7 : 10}
-          fill={pulseUncertainBand ? '#dc2626' : '#b91c1c'}
-          stroke="#fff"
-          strokeWidth="2"
-        />
+        <circle cx={pe.x} cy={pe.y} r="10" fill="#b91c1c" stroke="#fff" strokeWidth="2" />
 
         <text x={pc.x} y={pc.y + 26} textAnchor="middle" fill="#713f12" fontSize="10" fontWeight="800">
           C2

@@ -52,7 +52,7 @@ type Props = {
 export function SarComparePhase({
   onContinue = () => {},
   embedded = false,
-  embeddedTitle = '전·후 SAR 타일 비교 (데모)',
+  embeddedTitle = '전·후 SAR 타일 비교',
   showContinueButton = true,
 }: Props) {
   const beforeRef = useRef<HTMLDivElement | null>(null)
@@ -173,10 +173,10 @@ export function SarComparePhase({
     <div className={`sar-compare-phase${embedded ? ' sar-compare-phase--embedded' : ''}`}>
       {!embedded && (
         <div className="sar-compare-phase__head">
-          <h2 className="sar-compare-phase__title">1단계 · SAR 변화분석 (북측 전차)</h2>
+          <h2 className="sar-compare-phase__title">1단계 · SAR 변화분석 (평양 인근)</h2>
           <p className="muted sar-compare-phase__lead">
-            좌측은 <strong>관측 전</strong> 정지 SAR, 우측은 <strong>관측 후</strong> 동일 지역에서 전차급 신호가 사라진 구역을{' '}
-            <strong>빨간 박스</strong>로 표시합니다.
+            좌측은 <strong>관측 전</strong> 정지 SAR, 우측은 <strong>관측 후</strong> 평양 인근 동일 지역에서 전차급 신호가
+            사라진 구역을 <strong>빨간 박스</strong>로 표시합니다.
           </p>
         </div>
       )}

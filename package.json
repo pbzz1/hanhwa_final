@@ -3,8 +3,11 @@
   "private": true,
   "description": "루트에서 백엔드·프론트(·AI) 개발 서버를 한 번에 실행",
   "scripts": {
-    "dev": "node scripts/ensure-dev-ports.mjs && concurrently -k -n backend,frontend -c cyan,magenta \"npm run start:dev --prefix backend\" \"npm run dev --prefix frontend\"",
-    "dev:all": "node scripts/ensure-dev-ports.mjs && concurrently -k -n backend,frontend,ai -c cyan,magenta,yellow \"npm run start:dev --prefix backend\" \"npm run dev --prefix frontend\" \"node scripts/run-ai-server.mjs\"",
+    "free:dev-ports": "node scripts/free-dev-ports.mjs",
+    "dev": "node scripts/free-dev-ports.mjs && concurrently -k -n backend,frontend -c cyan,magenta \"npm run start:dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev:fw": "node scripts/ensure-dev-ports.mjs && npm run dev",
+    "dev:all": "node scripts/free-dev-ports.mjs && concurrently -k -n backend,frontend,ai -c cyan,magenta,yellow \"npm run start:dev --prefix backend\" \"npm run dev --prefix frontend\" \"node scripts/run-ai-server.mjs\"",
+    "dev:all:fw": "node scripts/ensure-dev-ports.mjs && npm run dev:all",
     "install:all": "npm install --prefix backend && npm install --prefix frontend"
   },
   "devDependencies": {

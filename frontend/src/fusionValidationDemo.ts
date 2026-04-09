@@ -40,7 +40,7 @@ export const DEMO_MODEL_META = {
 } as const
 
 export const DEMO_LIDAR_VALIDATION = {
-  /** 레이더 1차 탐지와 독립 LiDAR 처리 파이프라인 결과 (데모 수치) */
+  /** 레이더 1차 탐지와 독립 LiDAR 처리 파이프라인 결과 */
   clusterRangeM: 8395,
   clusterAzimuthDeg: 9.0,
   clusterElevationDeg: 2.05,

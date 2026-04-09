@@ -1,5 +1,5 @@
 /**
- * 데모용 이중 레이더 스냅샷 — 펄스(광역·점 표시) + FMCW(근거리·위상·방향·예측 궤적)
+ * 데모용 FMCW 레이더 스냅샷 — 근거리·위상·방향·예측 궤적
  */
 
 export type RadarSiteDto = {
@@ -11,13 +11,6 @@ export type RadarSiteDto = {
   fovDeg: number;
   headingDeg: number;
   elevationBeamDeg: number;
-};
-
-/** 펄스 레이더 탐지 — 지도에는 점만 */
-export type PulseDetectionDto = {
-  id: string;
-  lat: number;
-  lng: number;
 };
 
 export type RadarDetectionDto = {
@@ -157,10 +150,6 @@ export type RadarInsightsDto = {
 };
 
 export type RadarSnapshotDto = {
-  pulse: {
-    radar: RadarSiteDto;
-    detections: PulseDetectionDto[];
-  };
   fmcw: {
     radar: RadarSiteDto;
     meta: {

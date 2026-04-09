@@ -167,11 +167,11 @@ export function AlertZonePage() {
 
   return (
     <section className="page alert-zone-page">
-      <h1>경보 구역 (강서구) — 데모</h1>
+      <h1>경보 구역 (강서구)</h1>
       <p className="muted">
         전차·대규모 차량 이동 또는 뚜렷한 이동 흔적이 탐지되면 해당 권역을 <strong>경보 구역</strong>으로 설정하고
         지도에 연한 적색으로 강조합니다. 이벤트 로그가 생성되고 후속 감시 자산 투입이 가능하도록 큐에 올리는 흐름을
-        가정한 화면입니다. (실데이터 연동 전 웹 프로토타입)
+        위험 권역·경로 표시.
       </p>
 
       <div className="alert-zone-layout">

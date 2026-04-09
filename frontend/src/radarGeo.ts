@@ -71,7 +71,7 @@ export type RadarTargetMetrics = {
   offBoresightDeg: number
 }
 
-/** 모의: 고도·도플러는 데모용(실장비면 추적 필터 값) */
+/** 고도·도플러는 시뮬레이션용 단순화 값 */
 export function computeRadarTargetMetrics(
   enemyLat: number,
   enemyLng: number,

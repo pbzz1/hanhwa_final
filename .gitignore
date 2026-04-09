@@ -50,6 +50,8 @@ vod-devkit/vod-received/label_2/**
 !vod-devkit/vod-received/label_2/.gitkeep
 vod-devkit/vod-received/label_2_with_track_ids/**
 !vod-devkit/vod-received/label_2_with_track_ids/.gitkeep
+# VoD 공식 메타 JSON(nuScenes 계열) — 용량·갱신 빈도상 로컬 전용
+vod-devkit/vod-received/vod_official/**
 
 # VoD devkit: 노트북·스크립트 실행 산출물(재생성 가능, 웹 파이프라인과 무관)
 vod-devkit/_radar_camera_run_output/

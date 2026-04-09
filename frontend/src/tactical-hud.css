@@ -1,0 +1,79 @@
+/* 전술 HUD 보강: 맵 프레임, 주요 패널 글로우, 코너 브래킷 */
+
+.maplibre-container {
+  box-shadow:
+    0 0 0 1px var(--hud-border-strong),
+    var(--hud-glow),
+    inset 0 0 60px rgba(74, 222, 128, 0.04);
+}
+
+.map-overview-stack {
+  box-shadow:
+    0 0 0 1px var(--hud-border),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* HUD 코너 마크 (광역 맵 스택 래퍼) */
+.map-overview-stack {
+  position: relative;
+}
+
+.map-overview-stack::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 18px;
+  height: 18px;
+  border-top: 2px solid var(--hud-accent);
+  border-left: 2px solid var(--hud-accent);
+  border-radius: 2px 0 0 0;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.35);
+}
+
+.map-overview-stack::after {
+  content: '';
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  border-bottom: 2px solid var(--hud-accent);
+  border-right: 2px solid var(--hud-accent);
+  border-radius: 0 0 2px 0;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.35);
+}
+
+.map-inset-stack {
+  box-shadow: 0 0 0 1px var(--hud-border), var(--hud-glow);
+}
+
+.topbar strong {
+  letter-spacing: 0.02em;
+  font-weight: 800;
+}
+
+.topbar strong::after {
+  content: '';
+  display: block;
+  margin-top: 6px;
+  height: 2px;
+  width: 48px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--hud-accent), transparent);
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+}
+
+.dataset-table thead tr {
+  background: linear-gradient(180deg, rgba(22, 101, 52, 0.55) 0%, rgba(15, 45, 30, 0.9) 100%) !important;
+  box-shadow: inset 0 -1px 0 var(--hud-border);
+}
+
+.dataset-table thead th {
+  color: var(--hud-accent-bright) !important;
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.25);
+}

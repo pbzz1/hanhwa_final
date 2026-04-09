@@ -1,7 +1,23 @@
 import 'dotenv/config';
+import * as os from 'node:os';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+
+function devHttpUrlsForPort(port: number): string[] {
+  const uniq = new Set<string>();
+  uniq.add(`http://127.0.0.1:${port}`);
+  uniq.add(`http://localhost:${port}`);
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    if (!addrs) continue;
+    for (const a of addrs) {
+      if (a.family === 'IPv4' && !a.internal) {
+        uniq.add(`http://${a.address}:${port}`);
+      }
+    }
+  }
+  return [...uniq];
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +37,29 @@ async function bootstrap() {
   );
   const port = Number(process.env.PORT) || 3308;
   const host = process.env.HOST?.trim() || '0.0.0.0';
-  await app.listen(port, host);
+  try {
+    await app.listen(port, host);
+    const log = new Logger('Bootstrap');
+    log.log(`Nest API (백엔드) — 바인딩 ${host}:${port}`);
+    for (const u of devHttpUrlsForPort(port)) {
+      log.log(`  · ${u}`);
+    }
+    log.log(
+      '같은 망 다른 기기: 브라우저에서 위 LAN 주소로 API를 직접 호출할 수 있습니다. 프론트는 해당 IP로 Vite에 접속하면 자동으로 같은 IP의 API를 씁니다.',
+    );
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === 'object' && 'code' in err
+        ? String((err as NodeJS.ErrnoException).code)
+        : '';
+    if (code === 'EADDRINUSE') {
+      Logger.error(
+        `포트 ${port}이(가) 이미 사용 중입니다. 다른 터미널의 백엔드를 종료하거나 작업 관리자에서 해당 node 프로세스를 끄고, 필요하면 backend/.env 의 PORT를 다른 값(예: 3309)으로 바꾸세요.`,
+        undefined,
+        'Bootstrap',
+      );
+    }
+    throw err;
+  }
 }
 void bootstrap();

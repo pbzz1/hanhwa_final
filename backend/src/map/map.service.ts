@@ -13,8 +13,7 @@ import {
   buildVodLiveEnrichment,
 } from './vod-label-enrichment';
 
-/** 펄스: 약 40km / FMCW: 약 10~15km (데모 고정값) */
-const PULSE_RANGE_MAX_M = 40_000;
+/** FMCW: 약 10~15km (데모 고정값) */
 const FMCW_RANGE_MAX_M = 12_500;
 
 const TACTIC_PROFILE_TABLE = 'tactical_recommendation_profiles';
@@ -438,7 +437,7 @@ function buildInsightsFromAi(ai: Record<string, unknown>): RadarInsightsDto {
   }
 
   const syncedViewNote = primaryRadar
-    ? `카메라 이미지와 3D 레이더 산점도는 동일 프레임(${frameId ?? '—'})입니다. 3D 뷰는 차량(ego) 후방·소고도에서 전방 주시(레이더 1위 방위 약 ${Number(primaryRadar.azimuthDeg)}°, 고도 약 ${Number(primaryRadar.elevationDeg)}°)를 바라보도록 배치하여, 2D 검출이 담는 전방 시야와 같은 관측 축에 맞춥니다.`
+    ? `카메라 이미지와 레이더 탐지(동일 프레임 ${frameId ?? '—'})입니다. 웹 UI는 Range–Azimuth 등 2D 시각화만 제공하며, 3D 포인트 클라우드 뷰는 사용하지 않습니다. 1위 탐지 방위 약 ${Number(primaryRadar.azimuthDeg)}°, 고도 약 ${Number(primaryRadar.elevationDeg)}°.`
     : `카메라와 레이더 시각화는 동일 VoD 프레임(${frameId ?? '—'})에서 얻은 결과를 병치한 것입니다.`;
 
   return {
@@ -609,7 +608,7 @@ export class MapService {
   }
 
   /**
-   * 펄스(광역·점) + FMCW(근거리·위상·예측 궤적) 합성 스냅샷
+   * FMCW(근거리·위상·예측 궤적) 스냅샷
    * @param options.live true면 VoD 동기 프레임으로 Python DBSCAN(+YOLO/LiDAR) 실행 후 FMCW 탐지를 덮어씀
    */
   async getRadarSnapshot(options?: {
@@ -762,7 +761,7 @@ export class MapService {
           if (enrich.vodMatchedTarget?.className) {
             mergedInsights.conclusionBullets = [
               ...(mergedInsights.conclusionBullets ?? []),
-              `3D 라벨 정합: "${enrich.vodMatchedTarget.className}" · 박스 헤딩(ego XY) 약 ${enrich.vodMatchedTarget.headingDegEgoXY ?? '—'}°`,
+              `BEV 라벨 정합: "${enrich.vodMatchedTarget.className}" · 박스 헤딩(ego XY) 약 ${enrich.vodMatchedTarget.headingDegEgoXY ?? '—'}°`,
             ];
           }
         } catch {
@@ -818,23 +817,7 @@ export class MapService {
       if (headingDeg < 0) headingDeg += 360;
     }
 
-    const pulseFovDeg = 105;
     const fmcwFovDeg = 92;
-
-    const pulseRangesM = [
-      16_000, 19_500, 23_000, 27_000, 31_000, 34_000, 37_500, 22_000, 29_000,
-      33_000,
-    ];
-    const pulseAzOff = [-38, -25, -12, 0, 12, 22, 35, 8, -5, 18];
-    const pulseDetections = pulseRangesM.map((rangeM, i) => {
-      const azimuthDeg = headingDeg + (pulseAzOff[i] ?? 0);
-      const { lat, lng } = polarToLatLng(radarLat, radarLng, rangeM, azimuthDeg);
-      return {
-        id: `pulse-${i + 1}`,
-        lat,
-        lng,
-      };
-    });
 
     const fmcwSeeds: Array<{
       rangeM: number;
@@ -902,23 +885,10 @@ export class MapService {
       trainingNote:
         '공개 데이터(View-of-Delft 등)에서 RD 맵 또는 3+1D 포인트와 라벨(거리·방위·도플러/반사 강도)을 쌍으로 구성합니다. RD 기반이면 U-Net/ResNet류로 피크·경계 회귀, 포인트 기반이면 PointNet/센서 특화 네트워크로 분할·회귀를 학습하고, 손실은 거리·각·도플러 오차에 추적 연속성 보조 항을 더하는 식으로 설계할 수 있습니다.',
       demoImplementationNote:
-        '스냅샷은 UX 시연용으로, 펄스(약 40km)는 광역 다점을 점으로만 표시하고, FMCW(약 10~15km)는 위상·방위·예측 경로를 합성합니다. `?source=live` 시에만 Nest가 AI 서버를 호출해 VoD 프레임 기반 탐지로 FMCW 목록을 교체합니다.',
+        '스냅샷은 UX 시연용으로, FMCW(약 10~15km)는 위상·방위·예측 경로를 합성합니다. `?source=live` 시에만 Nest가 AI 서버를 호출해 VoD 프레임 기반 탐지로 FMCW 목록을 교체합니다.',
     };
 
     return {
-      pulse: {
-        radar: {
-          id: 'pulse-demo-1',
-          label: '펄스 탐지 레이더 (광역)',
-          lat: radarLat,
-          lng: radarLng,
-          rangeMaxM: PULSE_RANGE_MAX_M,
-          fovDeg: pulseFovDeg,
-          headingDeg: Math.round(headingDeg * 10) / 10,
-          elevationBeamDeg: 8,
-        },
-        detections: pulseDetections,
-      },
       fmcw: {
         radar: {
           id: 'fmcw-demo-1',

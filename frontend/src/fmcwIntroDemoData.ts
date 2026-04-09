@@ -1,6 +1,6 @@
 import type { RadarDetectionPoint } from './RadarCharts2D'
 
-/** FMCW 인트로 페이지용 고정 탐지 샘플 (API 없이 차트 시연) */
+/** FMCW 인트로 페이지용 기본 탐지 데이터 */
 export const FMCW_INTRO_DETECTIONS: RadarDetectionPoint[] = [
   {
     id: 'intro-1',

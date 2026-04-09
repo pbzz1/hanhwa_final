@@ -6,7 +6,6 @@ type Props = {
   rangeKm: number | null
   /** 표시 최대 거리(km) — 링 스케일 */
   maxRangeKm: number
-  pulseInRange: boolean
   fmcwInRange: boolean
   /** 레이더 주시 방위(북 기준) */
   radarHeadingDeg: number
@@ -33,7 +32,6 @@ export function TacticalRadarCanvas({
   bearingToEnemyDeg,
   rangeKm,
   maxRangeKm,
-  pulseInRange,
   fmcwInRange,
   radarHeadingDeg,
   radarFovDeg,
@@ -97,21 +95,10 @@ export function TacticalRadarCanvas({
         ctx.strokeStyle = 'rgba(34, 211, 238, 0.45)'
         ctx.lineWidth = 1.2
         ctx.stroke()
-      }
-
-      if (pulseInRange) {
-        const r40 = R * Math.min(40 / maxRangeKm, 1)
-        ctx.strokeStyle = 'rgba(167, 139, 250, 0.45)'
-        ctx.lineWidth = 1.2
-        ctx.setLineDash([6, 5])
-        ctx.beginPath()
-        ctx.arc(CX, CY, r40, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.setLineDash([])
 
         const swOuter = polarToCanvas(sweep, R * 1.02)
         const grad = ctx.createLinearGradient(CX, CY, swOuter.x, swOuter.y)
-        grad.addColorStop(0, 'rgba(125, 211, 252, 0.4)')
+        grad.addColorStop(0, 'rgba(125, 211, 252, 0.35)')
         grad.addColorStop(1, 'rgba(125, 211, 252, 0)')
         ctx.fillStyle = grad
         ctx.beginPath()
@@ -146,7 +133,7 @@ export function TacticalRadarCanvas({
 
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [bearingToEnemyDeg, rangeKm, maxRangeKm, pulseInRange, fmcwInRange, radarHeadingDeg, radarFovDeg])
+  }, [bearingToEnemyDeg, rangeKm, maxRangeKm, fmcwInRange, radarHeadingDeg, radarFovDeg])
 
   return (
     <div className="tactical-radar-canvas-wrap">
@@ -158,7 +145,7 @@ export function TacticalRadarCanvas({
         aria-label="Canvas PPI 스코프"
       />
       <p className="muted tactical-radar-canvas__note">
-        HTML Canvas 2D — 타일 지도 없이 방위·거리 링만 표시합니다. 카카오맵과 동일한 시뮬 수치를 사용합니다.
+        HTML Canvas 2D — 타일 지도 없이 방위·거리 링만 표시합니다. 카카오맵과 동일한 표적·거리 값을 사용합니다.
       </p>
     </div>
   )

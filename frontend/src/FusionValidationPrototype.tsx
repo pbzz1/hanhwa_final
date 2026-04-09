@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FmcwRadarScatter3D } from './FmcwRadarScatter3D'
 import { RadarCharts2D, type RadarDetectionPoint } from './RadarCharts2D'
 import {
   DEMO_FMCW_DETECTIONS,
   DEMO_LIDAR_VALIDATION,
   DEMO_MODEL_META,
 } from './fusionValidationDemo'
+import { getApiBaseUrl } from './apiBaseUrl'
 
 type Phase = 'idle' | 'infer' | 'radar' | 'lidar' | 'done'
 
 const PHASE_ORDER: Phase[] = ['idle', 'infer', 'radar', 'lidar', 'done']
 
 const primaryDet = DEMO_FMCW_DETECTIONS[0]!
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3308'
 
 type VodFusionResponse = {
   ok?: boolean
@@ -65,9 +63,6 @@ function mapServerRadarToChart(
   }))
 }
 
-/**
- * 웹 시연: 데모 시퀀스 + 실제 백엔드 추론(VoD 레이더 .bin, YOLO, 선택 LiDAR)
- */
 export function FusionValidationPrototype() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [inferProgress, setInferProgress] = useState(0)
@@ -79,15 +74,6 @@ export function FusionValidationPrototype() {
   const [realLoading, setRealLoading] = useState(false)
   const [realError, setRealError] = useState<string | null>(null)
   const [realResult, setRealResult] = useState<VodFusionResponse | null>(null)
-
-  const centroid = useMemo(() => {
-    const d = primaryDet
-    return {
-      rangeM: d.rangeM,
-      azimuthDeg: d.azimuthDeg,
-      elevationDeg: d.elevationDeg,
-    }
-  }, [])
 
   const pushLog = useCallback((line: string) => {
     setLogLines((prev) => [...prev.slice(-12), `${new Date().toLocaleTimeString()}  ${line}`])
@@ -124,7 +110,7 @@ export function FusionValidationPrototype() {
         )
       } else {
         pushLog(
-          `FMCW(데모): 우선 표적 range=${(primaryDet.rangeM / 1000).toFixed(2)}km az=${primaryDet.azimuthDeg}° conf=${primaryDet.confidence}`,
+          `FMCW: 우선 표적 range=${(primaryDet.rangeM / 1000).toFixed(2)}km az=${primaryDet.azimuthDeg}° conf=${primaryDet.confidence}`,
         )
       }
     }
@@ -136,7 +122,7 @@ export function FusionValidationPrototype() {
         )
       } else {
         pushLog(
-          `LiDAR(데모): 점 ${DEMO_LIDAR_VALIDATION.numPointsInRoi}개 · BEV IoU proxy ${DEMO_LIDAR_VALIDATION.iouBevProxy}`,
+          `LiDAR: 점 ${DEMO_LIDAR_VALIDATION.numPointsInRoi}개 · BEV IoU proxy ${DEMO_LIDAR_VALIDATION.iouBevProxy}`,
         )
       }
     }
@@ -146,7 +132,7 @@ export function FusionValidationPrototype() {
           `교차검증 완료(실제): LiDAR ${realResult.lidarValidation?.verdict ?? '데이터 없음'} · 레이더 후보 ${realResult.radarDetections?.length ?? 0}개`,
         )
       } else {
-        pushLog('교차검증: 레이더·LiDAR 불일치 없음 → 표적 유지 (데모)')
+        pushLog('교차검증: 레이더·LiDAR 불일치 없음 → 표적 유지')
       }
     }
   }, [phase, realResult, pushLog])
@@ -177,7 +163,7 @@ export function FusionValidationPrototype() {
       if (imageFile) fd.append('image', imageFile)
       if (lidarFile) fd.append('lidar', lidarFile)
 
-      const res = await fetch(`${API_BASE_URL}/ai/vod/radar-fusion`, {
+      const res = await fetch(`${getApiBaseUrl()}/ai/vod/radar-fusion`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
@@ -209,7 +195,7 @@ export function FusionValidationPrototype() {
     setRealResult(null)
     setRealLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/ai/vod/radar-fusion/auto`, {
+      const res = await fetch(`${getApiBaseUrl()}/ai/vod/radar-fusion/auto`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -238,12 +224,6 @@ export function FusionValidationPrototype() {
     return mapServerRadarToChart(realResult.radarDetections)
   }, [realResult])
 
-  const realCentroid = useMemo(() => {
-    const d = realResult?.radarDetections?.[0]
-    if (!d) return null
-    return { rangeM: d.rangeM, azimuthDeg: d.azimuthDeg, elevationDeg: d.elevationDeg }
-  }, [realResult])
-
   const useRealFmcwPanels = Boolean(
     realResult?.radarDetections && realResult.radarDetections.length > 0,
   )
@@ -270,17 +250,17 @@ export function FusionValidationPrototype() {
     <section className="page fusion-proto-page">
       <header className="fusion-proto-head">
         <div>
-          <h1>FMCW 탐지 · LiDAR 검증 (프로토타입)</h1>
+          <h1>FMCW 탐지 · LiDAR 검증</h1>
           <p className="muted fusion-proto-lead">
-            아래 <strong>실제 추론</strong>은 VoD 형식 <strong>레이더 .bin</strong>을 Python(FastAPI)에서 처리합니다
-            (DBSCAN 클러스터). 이미지를 함께내면 <strong>YOLOv8</strong> 검출이 돌아가고, 같은 프레임{' '}
-            <strong>LiDAR .bin</strong>을 넣으면 1위 레이더 클러스터 주변 점 수로 <strong>검증</strong>합니다.
-            상단 <strong>데모 재생</strong>은 UI 흐름용 샘플입니다.
+            <strong>실제 추론</strong>은 VoD 형식 <strong>레이더 .bin</strong>을 Python(FastAPI)에서 처리합니다
+            (DBSCAN 클러스터). 이미지를 함께내면 <strong>YOLOv8</strong> 검출이 실행되고, 같은 프레임{' '}
+            <strong>LiDAR .bin</strong>을 넣으면 1위 레이더 클러스터 주변 점 수로 <strong>검증</strong>합니다. 상단{' '}
+            상단 <strong>단계 진행</strong>으로 처리 흐름을 넘길 수 있습니다.
           </p>
         </div>
         <div className="fusion-proto-actions">
           <button type="button" className="btn-primary" onClick={runDemo} disabled={phase === 'infer'}>
-            {phase === 'infer' ? '추론 중…' : '데모 재생'}
+            {phase === 'infer' ? '추론 중…' : '단계 진행'}
           </button>
           <button
             type="button"
@@ -376,21 +356,11 @@ export function FusionValidationPrototype() {
               )}
             </p>
             {realChartDetections && realChartDetections.length > 0 && (
-              <div className="fusion-proto-charts">
-                <div className="fusion-proto-chart-block">
+              <div className="fusion-proto-charts fusion-proto-charts--2d-only">
+                <div className="fusion-proto-chart-block fusion-proto-chart-block--wide">
+                  <p className="fusion-proto-viz-cap">Range–Azimuth (VoD는 2D만 표시)</p>
                   <RadarCharts2D detections={realChartDetections} />
                 </div>
-                {realCentroid && (
-                  <div className="fusion-proto-chart-block">
-                    <p className="fusion-proto-viz-cap">3D (1위 클러스터 중심)</p>
-                    <FmcwRadarScatter3D
-                      rangeM={realCentroid.rangeM}
-                      azimuthDeg={realCentroid.azimuthDeg}
-                      elevationDeg={realCentroid.elevationDeg}
-                      className="fusion-proto-scatter-3d"
-                    />
-                  </div>
-                )}
               </div>
             )}
             {realResult.annotatedImageBase64 && (
@@ -436,14 +406,14 @@ export function FusionValidationPrototype() {
           <span className="fusion-proto-step-num">0</span>
           <div>
             <strong>대기</strong>
-            <p className="muted">데모 재생으로 파이프라인 시작</p>
+            <p className="muted">단계 진행으로 파이프라인 시작</p>
           </div>
         </li>
         <li className={stepClass('infer')}>
           <span className="fusion-proto-step-num">1</span>
           <div>
             <strong>모델 추론</strong>
-            <p className="muted">FMCW BEV/포인트 검출기 순전파 (시뮬)</p>
+            <p className="muted">FMCW BEV/포인트 검출기 순전파</p>
           </div>
         </li>
         <li className={stepClass('radar')}>
@@ -477,17 +447,16 @@ export function FusionValidationPrototype() {
               <div className="fusion-proto-progress">
                 <div className="fusion-proto-progress-bar" style={{ width: `${inferProgress}%` }} />
               </div>
-              <p className="fusion-proto-progress-label">{inferProgress}% · GPU 순전파 시뮬</p>
+              <p className="fusion-proto-progress-label">{inferProgress}% · GPU 순전파</p>
             </>
           ) : phase === 'idle' ? (
             <p className="muted">
-              「데모 재생」 또는 <strong>실제 추론</strong>으로 시작합니다. 실제 추론 후에는 아래 FAB로 LiDAR·판정
-              단계를 이어갈 수 있습니다.
+              <strong>단계 진행</strong> 또는 <strong>실제 추론</strong>으로 시작합니다. 실제 추론 후에는 아래 버튼으로
+              LiDAR·판정 단계를 이어갈 수 있습니다.
             </p>
           ) : (
             <p className="fusion-proto-ok">
               완료 · {realResult?.inferMs ?? DEMO_MODEL_META.inferMs} ms
-              {realResult ? ' (실제)' : ' (샘플)'}
               {realResult?.autoFrameId != null && (
                 <>
                   {' '}
@@ -519,7 +488,7 @@ export function FusionValidationPrototype() {
         </article>
 
         <article className="fusion-proto-card fusion-proto-card--log">
-          <h2 className="fusion-proto-card-title">실행 로그 {realResult ? '(실제·데모 혼합)' : '(데모)'}</h2>
+          <h2 className="fusion-proto-card-title">실행 로그</h2>
           <pre className="fusion-proto-pre" aria-live="polite">
             {logLines.length === 0 ? '로그가 여기에 쌓입니다.' : logLines.join('\n')}
           </pre>
@@ -530,38 +499,18 @@ export function FusionValidationPrototype() {
           <p className="muted fusion-proto-card-hint">
             {useRealFmcwPanels ? (
               <>
-                아래는 <strong>실제 추론</strong> 결과입니다 (DBSCAN 클러스터). 붉은 강조:{' '}
+                <strong>실제 추론</strong> 결과 (DBSCAN 클러스터). 붉은 강조:{' '}
                 <strong>우선 표적(1위 신뢰도)</strong>.
               </>
             ) : (
-              <>
-                데모 수치입니다. 상단 <strong>실제 추론</strong>을 실행하면 여기가 같은 레이아웃으로 바뀝니다.
-              </>
+              <>상단 <strong>실제 추론</strong>을 실행하면 동일 레이아웃에 서버 탐지가 표시됩니다.</>
             )}
           </p>
-          <div className="fusion-proto-charts">
-            <div className="fusion-proto-chart-block">
+          <div className="fusion-proto-charts fusion-proto-charts--2d-only">
+            <div className="fusion-proto-chart-block fusion-proto-chart-block--wide">
+              <p className="fusion-proto-viz-cap">Range–Azimuth · {useRealFmcwPanels ? '실제 추론' : '보조 표시'}</p>
               <RadarCharts2D
                 detections={useRealFmcwPanels && realFmcwChart ? realFmcwChart : DEMO_FMCW_DETECTIONS}
-              />
-            </div>
-            <div className="fusion-proto-chart-block">
-              <p className="fusion-proto-viz-cap">
-                {useRealFmcwPanels
-                  ? '3D · 방향만 반영, 거리는 고정 스케일(뷰 안정)'
-                  : '3D 산점도 (우선 표적 중심 모의 · 고정 스케일)'}
-              </p>
-              <FmcwRadarScatter3D
-                rangeM={
-                  useRealFmcwPanels && realCentroid ? realCentroid.rangeM : centroid.rangeM
-                }
-                azimuthDeg={
-                  useRealFmcwPanels && realCentroid ? realCentroid.azimuthDeg : centroid.azimuthDeg
-                }
-                elevationDeg={
-                  useRealFmcwPanels && realCentroid ? realCentroid.elevationDeg : centroid.elevationDeg
-                }
-                className="fusion-proto-scatter-3d"
               />
             </div>
           </div>
@@ -607,9 +556,9 @@ export function FusionValidationPrototype() {
           <p className="muted fusion-proto-card-hint">
             레이더 1차 탐지를 기준으로 <strong>동기 LiDAR</strong> ROI에서 거리·방위를 비교합니다.
             {useRealLidarPanel ? (
-              <> 우측 수치는 <strong>실제 추론</strong> 응답입니다. BEV 그림은 시연용 스켈레톤입니다.</>
+              <> 우측 수치는 <strong>실제 추론</strong> 응답입니다.</>
             ) : (
-              <> 아래 그림·수치는 <strong>시각화용 데모</strong>입니다.</>
+              <> BEV는 단계 진행에 맞춰 갱신됩니다.</>
             )}
           </p>
           <div className="fusion-proto-bev-wrap">
@@ -667,27 +616,6 @@ export function FusionValidationPrototype() {
           </div>
         </article>
 
-        <article className="fusion-proto-card fusion-proto-card--summary">
-          <h2 className="fusion-proto-card-title">4) 웹에서 이렇게 쓰면 됩니다</h2>
-          <ul className="fusion-proto-bullets">
-            <li>
-              <strong>상단 타임라인</strong>으로 운용자에게 &quot;지금 어느 단계인지&quot;를 명확히 표시합니다.
-            </li>
-            <li>
-              <strong>추론 카드</strong>에 모델명·지연·프레임 ID를 넣어 감사·재현 가능성을 높입니다.
-            </li>
-            <li>
-              <strong>FMCW 패널</strong>은 API에서 받은 탐지 리스트 + 2D/3D 시각화(이미 홈 대시보드와 동일 패턴)를 재사용합니다.
-            </li>
-            <li>
-              <strong>LiDAR 패널</strong>은 BEV/측면 뷰 또는 포인트 수·IoU 요약만 보여도 &quot;검증됨&quot; 메시지가 설득력을 갖습니다.
-            </li>
-            <li>
-              실제 연동 시: <code>POST /infer/radar</code> → 결과 id로{' '}
-              <code>GET /validate/lidar?window=…</code> 식으로 이어 붙이면 됩니다.
-            </li>
-          </ul>
-        </article>
       </div>
 
       {(phase === 'radar' || phase === 'lidar' || phase === 'done') && (
@@ -704,8 +632,7 @@ export function FusionValidationPrototype() {
           )}
           {phase === 'done' && (
             <p className="fusion-proto-done-msg">
-              시나리오 완료: <strong>FMCW로 적 후보 탐지</strong> 후 <strong>LiDAR로 거리·방위 정합 확인</strong>
-              {realResult ? ' (실제 추론 결과 반영).' : ' (데모).'}
+              시나리오 완료: <strong>FMCW로 적 후보 탐지</strong> 후 <strong>LiDAR로 거리·방위 정합 확인</strong>.
             </p>
           )}
         </div>
@@ -719,7 +646,7 @@ function LidarBevMock({ phase }: { phase: Phase }) {
   const showHighlight = phase === 'done'
 
   return (
-    <div className="fusion-proto-bev" aria-label="LiDAR 조감도 데모">
+    <div className="fusion-proto-bev" aria-label="LiDAR 조감도">
       <svg viewBox="0 0 420 260" className="fusion-proto-bev-svg" role="img">
         <defs>
           <radialGradient id="bevGlow" cx="50%" cy="50%" r="50%">
@@ -729,7 +656,7 @@ function LidarBevMock({ phase }: { phase: Phase }) {
         </defs>
         <rect width="420" height="260" fill="#0f172a" rx="12" />
         <text x="210" y="22" fill="#94a3b8" fontSize="11" textAnchor="middle">
-          LiDAR BEV (데모) · 차량 기준 상단 뷰
+          LiDAR BEV · 차량 기준 상단 뷰
         </text>
         {/* ego */}
         <polygon points="210,200 204,218 216,218" fill="#facc15" stroke="#854d0e" strokeWidth="1.5" />
@@ -748,7 +675,7 @@ function LidarBevMock({ phase }: { phase: Phase }) {
             const cy = 92 + (Math.cos(i * 0.9) * 10 + (i % 3))
             return <circle key={i} cx={cx} cy={cy} r="2.2" fill="rgba(52,211,153,0.75)" />
           })}
-        {/* 3D box proxy on BEV */}
+        {/* BEV에서의 2D ROI 박스 */}
         {showLidar && (
           <rect
             x="275"

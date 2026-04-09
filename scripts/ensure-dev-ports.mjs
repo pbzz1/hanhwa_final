@@ -12,6 +12,12 @@ const PORTS = [
 ]
 
 function main() {
+  console.log(
+    '[ensure-dev-ports] 로컬(본인 PC) 접속은 이 스크립트와 무관합니다. 브라우저: http://localhost:5173 · API: http://localhost:3308 (기본)',
+  )
+  console.log(
+    '[ensure-dev-ports] 아래 netsh는 Windows 방화벽에 인바운드 규칙을 넣어 "같은 공유기의 다른 기기"에서 접속할 때만 필요합니다. 관리자 권한이 없으면 실패해도 localhost 개발은 정상입니다.',
+  )
   if (os.platform() !== 'win32') {
     console.log(
       '[ensure-dev-ports] Windows가 아닙니다. 방화벽 규칙은 건너뜁니다. (Nest/Vite/uvicorn은 0.0.0.0 바인딩)',
@@ -47,7 +53,7 @@ function main() {
     } else {
       const err = (r.stderr || r.stdout || '').trim()
       console.warn(
-        `[ensure-dev-ports] TCP ${port} 규칙 추가 실패 — 터미널을 관리자 권한으로 연 뒤 npm run dev:all 을 다시 실행하거나, 방화벽에서 TCP ${port} 인바운드를 수동 허용하세요.`,
+        `[ensure-dev-ports] TCP ${port} 규칙 추가 실패 — 터미널을 관리자 권한으로 연 뒤 npm run dev:fw 또는 npm run dev:all:fw 를 실행하거나, 방화벽에서 TCP ${port} 인바운드를 수동 허용하세요.`,
       )
       if (err) console.warn(err.slice(0, 300))
     }
