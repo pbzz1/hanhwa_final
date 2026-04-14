@@ -188,7 +188,7 @@ export function TacticalPhaseDashboard({
       {tacticalSubStep >= 5 && enemy && (
         <div className="tactical-dash__drone">
           <button type="button" className="btn-primary tactical-dash__drone-btn" onClick={onOpenDroneVideo}>
-            드론 정찰 영상 재생
+            집결 영상 · UAV
           </button>
           <span className="muted tactical-dash__drone-note">
             {enemy.codename} · {enemy.enemyBranch}

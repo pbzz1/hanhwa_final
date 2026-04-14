@@ -20,7 +20,7 @@ export function renderFmcwRiskPopupHtml(bundle: FmcwMvpBundle): string {
         <div class="service-asset-popup__row"><dt>탐지 거리</dt><dd>${bundle.detectionRangeKm.toFixed(1)} km</dd></div>
         <div class="service-asset-popup__row"><dt>접근 속도</dt><dd>${bundle.approachSpeedMps.toFixed(1)} m/s</dd></div>
         <div class="service-asset-popup__row"><dt>진입 경로</dt><dd>${escapeHtml(bundle.ingressSummary)}</dd></div>
-        <div class="service-asset-popup__row"><dt>아군 타격</dt><dd>가능 <strong>${strikeOk}</strong> / 불가 <strong>${strikeNo}</strong> (더미 규칙)</dd></div>
+        <div class="service-asset-popup__row"><dt>아군 타격</dt><dd>가능 <strong>${strikeOk}</strong> / 불가 <strong>${strikeNo}</strong></dd></div>
       </dl>
       <p class="muted fmcw-risk-popup__foot">우측 패널에 부대별 상세가 표시됩니다.</p>
     </div>

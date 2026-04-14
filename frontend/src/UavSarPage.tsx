@@ -58,8 +58,8 @@ export function UavSarPage({ onContinue }: Props) {
           </p>
         </>
       }
-      demoTitle="데모 EO/IR · 추적 시야"
-      demoLead="통합 시나리오와 동일 계열 샘플 영상(드론 시점)."
+      demoTitle="EO/IR · 추적 시야"
+      demoLead="통합 시나리오와 동일 계열 정찰 영상(드론 시점)."
       demoWrapClassName="sensor-drone-stage drone-eoir-stage"
       demo={
         <>

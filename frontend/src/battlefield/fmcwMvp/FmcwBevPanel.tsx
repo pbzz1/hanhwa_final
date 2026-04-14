@@ -5,7 +5,7 @@ type Props = {
   bearingDeg: number
 }
 
-/** 근거리 레이더 BEV(탑뷰) mock — 자산·격자는 스타일만 */
+/** 근거리 레이더 BEV(탑뷰) 시각화 — 자산·격자는 스타일만 */
 export function FmcwBevPanel({ tracks, bearingDeg }: Props) {
   const blips = tracks.map((t, i) => {
     const angle = ((t.bearingDeg - bearingDeg + 180) % 360) - 180
@@ -17,10 +17,10 @@ export function FmcwBevPanel({ tracks, bearingDeg }: Props) {
   })
 
   return (
-    <div className="fmcw-bev-panel" aria-label="FMCW BEV mock">
+    <div className="fmcw-bev-panel" aria-label="FMCW BEV 시각화">
       <div className="fmcw-bev-panel__chrome">
         <span className="fmcw-bev-panel__tag">BEV</span>
-        <span className="fmcw-bev-panel__sub">Range–Azimuth (mock)</span>
+        <span className="fmcw-bev-panel__sub">Range–Azimuth</span>
       </div>
       <svg className="fmcw-bev-panel__svg" viewBox="0 0 200 200" role="img" aria-hidden>
         <defs>

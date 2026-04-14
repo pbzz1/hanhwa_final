@@ -11,7 +11,7 @@ export function FmcwServiceDock({ bundle }: Props) {
       <header className="service-fmcw-dock__head">
         <h2 className="service-fmcw-dock__title">FMCW · Radar report &amp; tracks</h2>
         <p className="service-fmcw-dock__lead muted">
-          드론 근접 이후 저거리 위상·속도 추정(mock). BEV는 탑뷰 스캐폴드이며 실제 BEV 파이프라인 데이터는 없습니다.
+          드론 근접 이후 저거리 위상·속도 추정. BEV는 탑뷰 시각화 스캐폴드입니다.
         </p>
       </header>
       <div className="service-fmcw-dock__grid">

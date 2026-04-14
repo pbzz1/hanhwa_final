@@ -85,7 +85,7 @@ export function parseMovementRouteTooltipProps(
   }
 }
 
-/** GRD 검출 지점과 SAR/UAV 거점이 이 거리(km) 이내일 때만 UAV/드론 출동 버튼 활성화(더미) */
+/** GRD 검출 지점과 SAR/UAV 거점이 이 거리(km) 이내일 때만 UAV/드론 출동 버튼 활성화 */
 export const GRD_DISPATCH_RANGE_KM = 220
 
 export const GRD_FALLBACK_SAR_UAV_ORIGIN = { lat: 37.67, lng: 126.95 } as const
@@ -103,10 +103,10 @@ function grdMotionBlobRing(cx: number, cy: number): [number, number][] {
 
 const GRD_DETECTION_SPEC = [
   { id: 'grd-mot-1', cx: 125.88, cy: 38.88, classLabel: '전차', probPercent: 95 },
-  { id: 'grd-mot-2', cx: 126.52, cy: 40.08, classLabel: '장갑차', probPercent: 78 },
+  { id: 'grd-mot-2', cx: 126.52, cy: 40.08, classLabel: '전차', probPercent: 78 },
   { id: 'grd-mot-3', cx: 129.12, cy: 40.62, classLabel: '전차', probPercent: 88 },
-  { id: 'grd-mot-4', cx: 126.32, cy: 39.42, classLabel: '전차', probPercent: 92 },
-  { id: 'grd-mot-5', cx: 127.38, cy: 39.5, classLabel: '차량', probPercent: 71 },
+  { id: 'grd-mot-4', cx: 126.32, cy: 39.42, classLabel: '일반차량', probPercent: 92 },
+  { id: 'grd-mot-5', cx: 127.38, cy: 39.5, classLabel: '일반차량', probPercent: 71 },
 ] as const
 
 export const GRD_MOTION_DETECTIONS_GEOJSON = {
@@ -142,3 +142,73 @@ export const GRD_MOTION_META: Record<
     },
   ]),
 )
+
+/** GeoJSON 링 [lng,lat][] — 외곽 링 기준 ray casting (구멍 미처리, MVP 폴리곤 전제) */
+export function pointInLngLatRing(lng: number, lat: number, ring: [number, number][]): boolean {
+  if (ring.length < 3) return false
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i]![0]
+    const yi = ring[i]![1]
+    const xj = ring[j]![0]
+    const yj = ring[j]![1]
+    const crossesMeridian = yi > lat !== yj > lat
+    if (!crossesMeridian) continue
+    const xInt = ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    if (lng < xInt) inside = !inside
+  }
+  return inside
+}
+
+/** WGS84 점이 GRD(이동 검출) 폴리곤 안에 들어가는 motionId 목록 */
+export function findGrdMotionIdsContainingPoint(lat: number, lng: number): string[] {
+  const hits: string[] = []
+  for (const f of GRD_MOTION_DETECTIONS_GEOJSON.features) {
+    if (f.geometry.type !== 'Polygon') continue
+    const outer = f.geometry.coordinates[0] as [number, number][]
+    if (!outer?.length) continue
+    if (pointInLngLatRing(lng, lat, outer)) {
+      const id = String(f.properties.motionId ?? f.id ?? '')
+      if (id) hits.push(id)
+    }
+  }
+  return hits
+}
+
+/** 모든 GRD 클러스터(이동 픽셀 후보) 폴리곤을 포함하도록 지도 fitBounds 할 때 사용 */
+export function computeGrdMotionDetectionsBounds(): {
+  west: number
+  south: number
+  east: number
+  north: number
+} {
+  let west = Infinity
+  let south = Infinity
+  let east = -Infinity
+  let north = -Infinity
+  for (const f of GRD_MOTION_DETECTIONS_GEOJSON.features) {
+    if (f.geometry.type !== 'Polygon') continue
+    for (const ring of f.geometry.coordinates) {
+      for (const coord of ring) {
+        const lng = coord[0]
+        const lat = coord[1]
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue
+        west = Math.min(west, lng)
+        east = Math.max(east, lng)
+        south = Math.min(south, lat)
+        north = Math.max(north, lat)
+      }
+    }
+  }
+  if (!Number.isFinite(west)) {
+    return { west: 125.5, south: 38.5, east: 129.5, north: 41.0 }
+  }
+  const padLng = 0.42
+  const padLat = 0.32
+  return {
+    west: west - padLng,
+    south: south - padLat,
+    east: east + padLng,
+    north: north + padLat,
+  }
+}

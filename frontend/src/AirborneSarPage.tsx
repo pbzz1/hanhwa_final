@@ -50,7 +50,7 @@ export function AirborneSarPage({ onContinue }: Props) {
         </>
       }
       demoTitle="전·후 SAR 타일 비교 (지도)"
-      demoLead="관측 전 기준 vs 관측 후 변화(전차 신호 소실 구역) 시연."
+      demoLead="관측 전 기준과 관측 후 변화(전차 신호 소실 구역) 비교."
       demoWrapClassName="sensor-stage-demo-shell sensor-stage-demo-shell--flush"
       demo={<SarComparePhase embedded showContinueButton={false} onContinue={() => {}} />}
       belowDemo={

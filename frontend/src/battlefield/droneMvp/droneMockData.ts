@@ -27,18 +27,18 @@ export type DroneMvpSnapshot = {
   distanceToNearestEnemyKm: number | null
   /** `DRONE_ENEMY_IDENTIFICATION_RANGE_KM` 등 정책 한계 */
   identificationRangeKm: number
-  /** 거리 한계 이내일 때만 EO/IR로 종류·위협 판별(시연) */
+  /** 거리 한계 이내일 때만 EO/IR로 종류·위협 판별 */
   enemyIdentified: boolean
 }
 
 export const DRONE_MVP_PLATFORM = {
   droneId: 'R-12 · Hornet-Q',
   afterUavContextLine:
-    'UAV-07 광역 EO/IR 확인 후 동일 표적에 대한 저고도·근거리 EO 스트립(더미) — APC/MBT 윤곽·열특성 근접 샘플링',
+    'UAV-07 광역 EO/IR 확인 후 동일 표적에 대한 저고도·근거리 EO 스트립 — APC/MBT 윤곽·열특성 근접 관측',
   mediaKind: 'video' as const,
   mediaUrl: '/media/yolo-tank-3.mp4',
-  mediaCaption: '근접 정찰 샘플(저고도 · 좁은 시야)',
-  targetClass: 'MBT 유사(전차) · APC 혼재 구역 배제(더미)',
+  mediaCaption: '근접 정찰(저고도 · 좁은 시야)',
+  targetClass: 'MBT 유사(전차) · APC 혼재 구역 배제',
   threatLevel: '중간' as DroneThreatLevel,
 }
 

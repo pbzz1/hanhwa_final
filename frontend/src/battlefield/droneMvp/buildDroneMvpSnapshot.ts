@@ -15,6 +15,8 @@ export function buildDroneMvpSnapshot(input: {
   phaseAtLeastDrone: boolean
   distanceToNearestEnemyKm: number | null
   identificationRangeKm: number
+  /** 근접 임무 중 드론 클릭 시 EO/IR·표적 검출 영상·식별 UI 강제 */
+  forceEoIrFeed?: boolean
 }): DroneMvpSnapshot {
   const missionStatus = deriveDroneMissionStatus(
     input.pathLength,
@@ -29,24 +31,32 @@ export function buildDroneMvpSnapshot(input: {
 
   const dist = input.distanceToNearestEnemyKm
   const range = input.identificationRangeKm
-  const enemyIdentified = dist != null && dist <= range
+  let enemyIdentified = dist != null && dist <= range
 
   const distHint =
     dist != null
       ? `최근접 적 MBT 약 ${dist.toFixed(0)} km · 식별 한계 ${range} km`
       : `적 MBT 좌표 없음 · 식별 한계 ${range} km`
 
-  return {
+  if (input.forceEoIrFeed) {
+    enemyIdentified = true
+  }
+
+  const snap: DroneMvpSnapshot = {
     droneId: DRONE_MVP_PLATFORM.droneId,
     missionStatus,
     afterUavContextLine: enemyIdentified
-      ? DRONE_MVP_PLATFORM.afterUavContextLine
+      ? input.forceEoIrFeed
+        ? '지정 적 표적을 향해 저고도 근접 중 — EO/IR·표적 검출 스트림.'
+        : DRONE_MVP_PLATFORM.afterUavContextLine
       : `거리 게이트: 드론–적 MBT ≤ ${range} km 일 때만 EO/IR 표적 판별. (${distHint})`,
     mediaKind: DRONE_MVP_PLATFORM.mediaKind,
     mediaUrl: enemyIdentified ? DRONE_MVP_PLATFORM.mediaUrl : '',
     mediaCaption: enemyIdentified
-      ? DRONE_MVP_PLATFORM.mediaCaption
-      : `EO/IR 영상·분류는 거리 ≤ ${range} km 일 때만 표시(시연 규칙).`,
+      ? input.forceEoIrFeed
+        ? '표적 검출 영상'
+        : DRONE_MVP_PLATFORM.mediaCaption
+      : `EO/IR 영상·분류는 거리 ≤ ${range} km 일 때만 표시.`,
     targetClass: enemyIdentified ? DRONE_MVP_PLATFORM.targetClass : `미식별 (${distHint})`,
     headingDegEst,
     speedKphEst,
@@ -59,4 +69,5 @@ export function buildDroneMvpSnapshot(input: {
     identificationRangeKm: range,
     enemyIdentified,
   }
+  return snap
 }

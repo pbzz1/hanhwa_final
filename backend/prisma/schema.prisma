@@ -95,8 +95,8 @@ model Unit {
   branch             String
   lat                Float
   lng                Float
-  /// 단대오(편성) 정보
-  formation          String                  @default("단대오-기본")
+  /// 전술대형(종대·횡대·쐐기대형 등)
+  formation          String                  @default("종대")
   /// 표고(m)
   elevationM         Float                   @default(0)
   /// MGRS 좌표(데모 저장용)

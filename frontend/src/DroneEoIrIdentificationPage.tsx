@@ -55,12 +55,12 @@ export function DroneEoIrIdentificationPanel({
           </ul>
           <p className="muted drone-eoir-footnote">
             <strong>3.1 전차 EO/IR 시뮬레이션</strong> — Arma 3 무인기 시점, 공항·주거·산악 지형별 EO/IR, 전차·차량
-            클래스당 환경×모드 조합 <strong>250</strong>샘플 수준으로 구축하는 전략과 맞춥니다.
+            클래스당 환경×모드 조합별 약 <strong>250</strong>건 수준으로 구축하는 전략과 맞춥니다.
           </p>
-          <div className="drone-eoir-spec-table-wrap" role="region" aria-label="시뮬 샘플 수 요약">
+          <div className="drone-eoir-spec-table-wrap" role="region" aria-label="시뮬레이션 데이터량 요약">
             <table className="drone-eoir-spec-table">
               <caption className="visually-hidden">
-                지형·모드별 시뮬레이션 샘플 수
+                지형·모드별 데이터량(건)
               </caption>
               <thead>
                 <tr>
@@ -101,8 +101,8 @@ export function DroneEoIrIdentificationPanel({
           </p>
         </>
       }
-      demoTitle="데모 EO/IR 클립"
-      demoLead="통합 상황에서 모달로 재생하는 정찰 영상과 동일 계열 데모입니다."
+      demoTitle="EO/IR 정찰 클립"
+      demoLead="통합 상황에서 모달로 재생하는 정찰 영상과 동일 계열입니다."
       demoWrapClassName="sensor-drone-stage drone-eoir-stage"
       demo={
         <>

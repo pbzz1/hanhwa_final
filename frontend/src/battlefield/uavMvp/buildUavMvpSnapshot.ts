@@ -12,6 +12,11 @@ export function buildUavMvpSnapshot(input: {
   pathIndex: number
   running: boolean
   phaseAtLeastUav: boolean
+  /** 시뮬에서 목표(적·GRD) 방향으로 덮어쓸 때 */
+  headingDegEst?: number
+  platformOverride?: Partial<
+    Pick<UavMvpSnapshot, 'callSign' | 'platformId' | 'eoIrNote' | 'sarFollowupLine'>
+  >
 }): UavMvpSnapshot {
   const opsStatus = deriveUavOperationalStatus(
     input.pathLength,
@@ -22,15 +27,17 @@ export function buildUavMvpSnapshot(input: {
 
   const jitter = (input.pathIndex % 5) * 0.4
   const speedKphEst = 115 + jitter
-  const headingDegEst = 202 + (input.pathIndex % 3) * 2
+  const headingDegEst =
+    input.headingDegEst ?? 202 + (input.pathIndex % 3) * 2
 
   return {
-    callSign: UAV_MVP_PLATFORM.callSign,
-    platformId: UAV_MVP_PLATFORM.platformId,
+    callSign: input.platformOverride?.callSign ?? UAV_MVP_PLATFORM.callSign,
+    platformId: input.platformOverride?.platformId ?? UAV_MVP_PLATFORM.platformId,
     opsStatus,
     hasEoIr: true,
-    eoIrNote: UAV_MVP_PLATFORM.eoIrNote,
-    sarFollowupLine: UAV_MVP_PLATFORM.sarFollowupLine,
+    eoIrNote: input.platformOverride?.eoIrNote ?? UAV_MVP_PLATFORM.eoIrNote,
+    sarFollowupLine:
+      input.platformOverride?.sarFollowupLine ?? UAV_MVP_PLATFORM.sarFollowupLine,
     mediaKind: UAV_MVP_PLATFORM.mediaKind,
     mediaUrl: UAV_MVP_PLATFORM.mediaUrl,
     mediaCaption: UAV_MVP_PLATFORM.mediaCaption,

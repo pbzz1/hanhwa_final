@@ -26,11 +26,11 @@ export type FmcwMvpBundle = {
   radarReportLines: string[]
 }
 
-export const FMCW_DETECTION_RANGE_KM = 18.5
+export const FMCW_DETECTION_RANGE_KM = 80
 
 export const FMCW_APPROACH_SPEED_MPS = 12.4
 
-/** mock 트랙 리스트 (원시 데이터 없음) */
+/** 추정 트랙 리스트 */
 export const FMCW_MOCK_TRACKS: FmcwMockTrack[] = [
   {
     trackId: 'FMCW-T01',
@@ -38,7 +38,7 @@ export const FMCW_MOCK_TRACKS: FmcwMockTrack[] = [
     rangeM: 4200,
     speedMps: 13.1,
     bearingDeg: 38,
-    threatNote: '다중 경로 일치(더미)',
+    threatNote: '다중 경로 일치',
   },
   {
     trackId: 'FMCW-T02',
@@ -46,7 +46,7 @@ export const FMCW_MOCK_TRACKS: FmcwMockTrack[] = [
     rangeM: 6100,
     speedMps: 11.8,
     bearingDeg: 42,
-    threatNote: '드론 EO와 동일 축(더미)',
+    threatNote: '드론 EO와 동일 축',
   },
   {
     trackId: 'FMCW-T03',
@@ -54,6 +54,6 @@ export const FMCW_MOCK_TRACKS: FmcwMockTrack[] = [
     rangeM: 7800,
     speedMps: 10.2,
     bearingDeg: 35,
-    threatNote: '저RCS · 보조 트랙(더미)',
+    threatNote: '저RCS · 보조 트랙',
   },
 ]

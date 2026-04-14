@@ -1,9 +1,10 @@
 import {
   BattlefieldScenarioPhase,
   type BattlefieldScenarioPhase as Phase,
+  type BattlefieldSensorId,
 } from './battlefieldScenarioPhase'
 
-/** 우측 패널 — 단계별 고정 카피(더미) */
+/** 우측 패널 — 단계별 고정 카피 */
 export type BattlefieldPhasePanelCopy = {
   title: string
   description: string
@@ -26,46 +27,48 @@ export const BATTLEFIELD_PHASE_PANEL: Record<Phase, BattlefieldPhasePanelCopy> =
     description:
       '함흥 축선 등 동부 관심 구역으로 시야를 맞춘 뒤 SAR 전개를 시작하세요. SAR 버튼 또는 적 마커 클릭으로 스캔 단계로 들어갈 수 있습니다.',
     recommendedSensor: 'SAR 광역 관측',
-    recommendDetail: '위성 링크 이상 시 SAR-2 예비 광역 채널로 전환하는 시뮬레이션입니다.',
+    recommendDetail: '위성 링크 이상 시 SAR-2 예비 광역 채널로 전환합니다.',
     mapHint: '「SAR 전개」 버튼 또는 지도의 적 표적을 클릭해 SAR_SCAN으로 진입합니다.',
   },
   [BattlefieldScenarioPhase.SAR_SCAN]: {
     title: 'SAR 광역 스캔',
     description:
-      '붉은 IW/SAR-2 관측 구역에서 이동 표적 후보를 수집합니다. 한반도 가로 폭의 SAR GRD(샘플) 직사각형 오버레이로 남하 예상 광역을 표시합니다. 구역 클릭 시 Spotlight·확률 패널이 뜹니다.',
+      '붉은 IW/SAR-2 관측 구역에서 이동 표적 후보를 수집합니다. 한반도 가로 폭의 SAR GRD 직사각형 오버레이로 남하 예상 광역을 표시합니다. 구역 클릭 시 Spotlight·확률 패널이 뜹니다.',
     recommendedSensor: 'SAR-2 광역',
     recommendDetail: '후보 확정 후 UAV로 EO/IR 확인 단계로 넘깁니다.',
     mapHint:
-      '파란 면은 GRD 변화(이동) 검출 픽셀(더미)입니다. 호버 시 분류·신뢰도·거리를 보여 주며, SAR/UAV 거점이 가까우면 UAV·드론 버튼이 켜집니다.',
+      '파란 면은 GRD 변화(이동) 검출 픽셀입니다. 호버 시 분류·신뢰도·거리를 보여 주며, SAR/UAV 거점이 가까우면 UAV·드론 버튼이 켜집니다.',
   },
   [BattlefieldScenarioPhase.UAV_DISPATCHED]: {
     title: 'UAV 출동 · EO/IR 확인',
     description:
-      'SAR 후보 좌표로 UAV 경로가 활성화됩니다(더미). 표적 확인 후 드론 근접 정찰로 이어집니다.',
+      'SAR 후보 좌표로 UAV 경로가 활성화됩니다. 표적 확인 후 드론 근접 정찰로 이어집니다.',
     recommendedSensor: 'UAV (EO/IR)',
-    recommendDetail: '영상 트랙·식별 결과는 샘플 데이터로 시뮬레이션됩니다.',
-    mapHint: '드론 버튼을 눌러 근접 정찰 단계로 전환하세요.',
+    recommendDetail: '영상 트랙·식별 결과는 시뮬레이션 데이터로 표시됩니다.',
+    mapHint:
+      '지도에서 적 표적을 클릭한 뒤 드론 근접을 누르면, 아군 드론이 해당 표적을 향해 이동합니다. 이동 중 드론을 클릭하면 EO/IR·표적 검출 영상을 볼 수 있습니다.',
   },
   [BattlefieldScenarioPhase.DRONE_RECON]: {
     title: '드론 근접 정찰',
     description:
-      '근거리 센서로 MBT/APC 구분·위협도를 재평가합니다(더미). 이후 FMCW로 접근·위험구역을 분석합니다.',
+      '근거리 센서로 MBT/APC 구분·위협도를 재평가합니다. 이후 FMCW로 접근·위험구역을 분석합니다.',
     recommendedSensor: '근접 EO',
     recommendDetail: '드론은 UAV보다 좁은 반경·고해상도 가정을 UI에 반영합니다.',
-    mapHint: 'FMCW 레이더 버튼으로 위험분석 단계로 이동합니다.',
+    mapHint:
+      '이동 중 보라색 드론 마커를 클릭하면 EO/IR·표적 검출 영상이 재생됩니다. 이후 FMCW 버튼으로 넘어가세요.',
   },
   [BattlefieldScenarioPhase.FMCW_ANALYSIS]: {
     title: 'FMCW 위험 분석',
     description:
-      '접근 속도·예상 진입축·타격 가능성을 BEV/보고서 형태로 요약합니다(더미). 완료 시 결과 패널을 띄웁니다.',
+      '접근 속도·예상 진입축·타격 가능성을 BEV/보고서 형태로 요약합니다. 완료 시 결과 패널을 띄웁니다.',
     recommendedSensor: 'FMCW 레이더',
-    recommendDetail: '아군 화력·차단선과의 관계는 점수 기반 더미입니다.',
+    recommendDetail: '아군 화력·차단선과의 관계는 점수 기반으로 요약됩니다.',
     mapHint: '「시나리오 완료」로 전체 흐름을 마감합니다.',
   },
   [BattlefieldScenarioPhase.SCENARIO_COMPLETE]: {
     title: '시나리오 완료',
     description:
-      '탐지(SAR) → 확인(UAV) → 근접(드론) → 위험분석(FMCW) 흐름이 종료되었습니다. 아래는 더미 요약입니다.',
+      '탐지(SAR) → 확인(UAV) → 근접(드론) → 위험분석(FMCW) 흐름이 종료되었습니다. 아래는 통합 요약입니다.',
     recommendedSensor: '통합 상황판',
     recommendDetail: '실제 AI 연동 시 단계별 로그·신뢰도가 치환됩니다.',
   },
@@ -78,7 +81,7 @@ export const BATTLEFIELD_PHASE_MAP_FLAGS: Record<
     sar2Zone: boolean
     enemyRoute: boolean
     showFmcwRiskFootprint: boolean
-    /** 한반도 가로 폭 SAR GRD(샘플 이미지) 직사각형 오버레이 */
+    /** 한반도 가로 폭 SAR GRD 직사각형 오버레이 */
     showSarGrdPeninsulaOverlay: boolean
   }
 > = {
@@ -136,18 +139,49 @@ export {
 export const BATTLEFIELD_SCENARIO_NOTICES = {
   regionSelected: '작전 구역이 선택되었습니다. SAR 전개를 진행하세요.',
   enterSarScan: '함흥 방향 SAR 위성 링크 이상 감지. SAR-2 광역 관측으로 전환합니다.',
-  uavDispatched: 'UAV-07이 SAR 후보 격자로 출동했습니다. (더미)',
-  droneRecon: '드론 R-12가 근접 호버링을 시작했습니다. (더미)',
-  fmcwAnalysis: 'FMCW 위험 윤곽 스캔을 수행 중입니다. (더미)',
+  uavDispatched:
+    'UAV-07이 GRD 후보 방향으로 출동했습니다. 경로상 적 전차가 탐지되면 동일 표적을 추적합니다.',
+  droneRecon: '드론 R-12가 근접 호버링을 시작했습니다.',
+  fmcwAnalysis: 'FMCW 위험 윤곽 스캔을 수행 중입니다.',
   scenarioComplete: '시나리오 단계가 모두 완료되었습니다.',
 } as const
 
-/** 시나리오 완료 시 패널용 더미 요약 줄 */
+/** 좌측 센서 버튼 — 시뮬레이션 설명 모달용 */
+export const SERVICE_SENSOR_SIMULATION_HELP: Record<
+  BattlefieldSensorId,
+  { title: string; description: string }
+> = {
+  sar: {
+    title: 'SAR 광역 관측 시뮬레이션',
+    description:
+      '위성·광역 SAR 채널을 가정합니다. 붉은 관측 구역·남하 경로·GRD(이동 검출) 오버레이가 켜지고, 적 전차 표적이 항주 방향으로 이동하는 시뮬레이션이 재생됩니다.',
+  },
+  uav: {
+    title: 'UAV (EO/IR) 추적 시뮬레이션',
+    description:
+      'SAR 후보 격자를 따라 저고도 UAV가 이동하는 경로를 지도에 표시합니다. GRD 영역을 가리키고 SAR/UAV 거점이 허용 거리 안에 있을 때만 다음 단계로 진행됩니다. EO/IR 패널·팝업은 영상·텍스트로 구성되어 있습니다.',
+  },
+  drone: {
+    title: '드론 근접 정찰 시뮬레이션',
+    description:
+      '지도에서 선택한 적 표적을 향해 근접 드론 마커가 이동하고, 거리 게이트 안에서 EO/IR·표적 검출 영상을 띄우는 흐름입니다. 표적 미선택 시에는 진행할 수 없습니다.',
+  },
+  fmcw: {
+    title: 'FMCW 레이더 위험 분석 시뮬레이션',
+    description:
+      '드론 근접 이후 전술 거리에서 FMCW 윤곽·접근 벡터·타격 적합도를 지도와 패널에 표시합니다.',
+  },
+}
+
+export const SERVICE_SENSOR_SIMULATION_FOOTNOTE =
+  '단계(SAR→UAV→드론→FMCW)는 지도에서 한반도 작전 구역을 확정한 뒤, 좌측 센서 버튼으로 진행합니다. 지도·자산 조작만으로는 단계가 넘어가지 않습니다.'
+
+/** 시나리오 완료 시 패널용 요약 줄 */
 export const BATTLEFIELD_SCENARIO_SUMMARY_BULLETS: readonly string[] = [
-  'SAR-2: 이동 표적 후보 4건, 고신뢰 2건 (더미)',
-  'UAV: EO/IR 전차 유사 3건 확인 (더미)',
-  '드론: MBT 2 / 의심 APC 1, 위협도 재평가 완료 (더미)',
-  'FMCW: 위험구역 반경 4.2km, 아군 타격 적합 71% (더미)',
+  'SAR-2: 이동 표적 후보 4건, 고신뢰 2건',
+  'UAV: EO/IR 전차 유사 3건 확인',
+  '드론: MBT 2 / 의심 APC 1, 위협도 재평가 완료',
+  'FMCW: 위험구역 반경 4.2km, 아군 타격 적합 71%',
 ]
 
 /** 팝업·상세에 붙이는 단계 문맥(소속별) */
@@ -168,27 +202,27 @@ export function getEntityPhasePopupNote(
     },
     SAR_SCAN: {
       ENEMY: '[단계: SAR] 광역 IW 내 이동 에너지 후보로 추적 중.',
-      ALLY: '[단계: SAR] 아군 필터 적용(더미).',
-      NEUTRAL: '[단계: SAR] 배경 클러터 억제 적용(더미).',
+      ALLY: '[단계: SAR] 아군 필터 적용.',
+      NEUTRAL: '[단계: SAR] 배경 클러터 억제 적용.',
     },
     UAV_DISPATCHED: {
       ENEMY: '[단계: UAV] EO/IR 클로즈업 식별 큐 대기.',
-      ALLY: '[단계: UAV] 공역 분리·회피 권고(더미).',
-      NEUTRAL: '[단계: UAV] 민간 항로와의 분리 확인(더미).',
+      ALLY: '[단계: UAV] 공역 분리·회피 권고.',
+      NEUTRAL: '[단계: UAV] 민간 항로와의 분리 확인.',
     },
     DRONE_RECON: {
       ENEMY: '[단계: 드론] 근접 스펙 추정·위협도 갱신.',
-      ALLY: '[단계: 드론] 근접 비행 제한 구역(더미).',
-      NEUTRAL: '[단계: 드론] 민간 근접 회피(더미).',
+      ALLY: '[단계: 드론] 근접 비행 제한 구역.',
+      NEUTRAL: '[단계: 드론] 민간 근접 회피.',
     },
     FMCW_ANALYSIS: {
       ENEMY: '[단계: FMCW] 접근 속도·진입축 위험도 산출.',
-      ALLY: '[단계: FMCW] 타격 판단 보조(더미).',
-      NEUTRAL: '[단계: FMCW] 비교전 참고(더미).',
+      ALLY: '[단계: FMCW] 타격 판단 보조.',
+      NEUTRAL: '[단계: FMCW] 비교전 참고.',
     },
     SCENARIO_COMPLETE: {
       ENEMY: '[단계: 완료] 시나리오 로그에 편입됨.',
-      ALLY: '[단계: 완료] 보고서 첨부 완료(더미).',
+      ALLY: '[단계: 완료] 보고서 첨부 완료.',
       NEUTRAL: '[단계: 완료] 민간 구분 유지.',
     },
   }
@@ -199,11 +233,11 @@ export function getFriendlyAssetPhaseNote(phase: Phase, category: string): strin
   const base = `[단계: ${phase}] `
   if (phase === BattlefieldScenarioPhase.IDLE) return `${base}일반 표시.`
   if (phase === BattlefieldScenarioPhase.REGION_SELECTED) return `${base}작전 구역 내 아군 자산.`
-  if (phase === BattlefieldScenarioPhase.SAR_SCAN) return `${base}SAR 스캔 시 전자적 노출 최소화(더미).`
-  if (phase === BattlefieldScenarioPhase.UAV_DISPATCHED) return `${base}UAV와 데이터링크 동기화(더미).`
-  if (phase === BattlefieldScenarioPhase.DRONE_RECON) return `${base}드론 호출 가능 거리 내 배치(더미).`
+  if (phase === BattlefieldScenarioPhase.SAR_SCAN) return `${base}SAR 스캔 시 전자적 노출 최소화.`
+  if (phase === BattlefieldScenarioPhase.UAV_DISPATCHED) return `${base}UAV와 데이터링크 동기화.`
+  if (phase === BattlefieldScenarioPhase.DRONE_RECON) return `${base}드론 호출 가능 거리 내 배치.`
   if (phase === BattlefieldScenarioPhase.FMCW_ANALYSIS) {
-    return `${base}FMCW 커버리지·화력 연동 점검(더미) · 분류 ${category}.`
+    return `${base}FMCW 커버리지·화력 연동 점검 · 분류 ${category}.`
   }
   return `${base}임무 종료 보고 대기.`
 }

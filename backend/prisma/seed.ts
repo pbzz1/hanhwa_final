@@ -19,12 +19,13 @@ const PARALLEL_38_N = 38;
  */
 const FRIENDLY_MAX_LAT_SOUTH_OF_MDL = 37.79;
 
+/** 전술대형(교범·훈련소 요강 등 공개 자료 용어): 종대·횡대·쐐기·분산·방어 */
 const FORMATION_PRESETS = [
-  '단대오-종대',
-  '단대오-횡대',
-  '단대오-쐐기형',
-  '단대오-분산대형',
-  '단대오-방어대형',
+  '종대',
+  '횡대',
+  '쐐기대형',
+  '분산대형',
+  '방어대형',
 ] as const;
 
 function buildPseudoMgrs(lat: number, lng: number, idx: number): string {
@@ -62,11 +63,11 @@ async function main() {
    */
   await prisma.unit.createMany({
     data: [
-      // SAR (5)
+      // SAR (5) — 병과: 정보·감시, 합성개구레이더(SAR) 운용 소대
       {
-        name: 'SAR 자산-01',
+        name: '합성개구레이더 운용 1소대',
         level: '소대',
-        branch: 'SAR',
+        branch: '정보(합성개구레이더ㆍSAR)',
         lat: 37.765,
         lng: 126.715,
         personnel: 16,
@@ -79,9 +80,9 @@ async function main() {
         situationVideoUrl: demoVideoUrl,
       },
       {
-        name: 'SAR 자산-02',
+        name: '합성개구레이더 운용 2소대',
         level: '소대',
-        branch: 'SAR',
+        branch: '정보(합성개구레이더ㆍSAR)',
         lat: 37.748,
         lng: 126.842,
         personnel: 18,
@@ -94,9 +95,9 @@ async function main() {
         situationVideoUrl: demoVideoUrl,
       },
       {
-        name: 'SAR 자산-03',
+        name: '합성개구레이더 운용 3소대',
         level: '소대',
-        branch: 'SAR',
+        branch: '정보(합성개구레이더ㆍSAR)',
         lat: 37.736,
         lng: 126.964,
         personnel: 14,
@@ -109,9 +110,9 @@ async function main() {
         situationVideoUrl: demoVideoUrl,
       },
       {
-        name: 'SAR 자산-04',
+        name: '합성개구레이더 운용 4소대',
         level: '소대',
-        branch: 'SAR',
+        branch: '정보(합성개구레이더ㆍSAR)',
         lat: 37.724,
         lng: 127.092,
         personnel: 17,
@@ -124,9 +125,9 @@ async function main() {
         situationVideoUrl: demoVideoUrl,
       },
       {
-        name: 'SAR 자산-05',
+        name: '합성개구레이더 운용 5소대',
         level: '소대',
-        branch: 'SAR',
+        branch: '정보(합성개구레이더ㆍSAR)',
         lat: 37.712,
         lng: 127.228,
         personnel: 15,
@@ -139,11 +140,11 @@ async function main() {
         situationVideoUrl: demoVideoUrl,
       },
 
-      // UAV(EO/IR) (5)
+      // UAV(EO/IR) (5) — 정찰: 무인항공기(EO/IR)
       {
-        name: 'UAV EO/IR-01',
+        name: '무인항공기(EO/IR) 정찰 1소대',
         level: '소대',
-        branch: 'UAV(EO/IR)',
+        branch: '정찰(무인항공기ㆍEOIR)',
         lat: 37.703,
         lng: 126.676,
         personnel: 22,
@@ -156,9 +157,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: 'UAV EO/IR-02',
+        name: '무인항공기(EO/IR) 정찰 2소대',
         level: '소대',
-        branch: 'UAV(EO/IR)',
+        branch: '정찰(무인항공기ㆍEOIR)',
         lat: 37.691,
         lng: 126.804,
         personnel: 20,
@@ -171,9 +172,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: 'UAV EO/IR-03',
+        name: '무인항공기(EO/IR) 정찰 3소대',
         level: '소대',
-        branch: 'UAV(EO/IR)',
+        branch: '정찰(무인항공기ㆍEOIR)',
         lat: 37.678,
         lng: 126.936,
         personnel: 21,
@@ -186,9 +187,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: 'UAV EO/IR-04',
+        name: '무인항공기(EO/IR) 정찰 4소대',
         level: '소대',
-        branch: 'UAV(EO/IR)',
+        branch: '정찰(무인항공기ㆍEOIR)',
         lat: 37.666,
         lng: 127.062,
         personnel: 19,
@@ -201,9 +202,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: 'UAV EO/IR-05',
+        name: '무인항공기(EO/IR) 정찰 5소대',
         level: '소대',
-        branch: 'UAV(EO/IR)',
+        branch: '정찰(무인항공기ㆍEOIR)',
         lat: 37.654,
         lng: 127.195,
         personnel: 20,
@@ -216,11 +217,11 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
 
-      // 드론 (5)
+      // 드론 (5) — 소형 무인기 정찰 소대
       {
-        name: '드론 정찰-01',
+        name: '소형무인정찰 1소대',
         level: '소대',
-        branch: '드론',
+        branch: '정찰(소형무인기)',
         lat: 37.642,
         lng: 126.692,
         personnel: 12,
@@ -233,9 +234,9 @@ async function main() {
         situationVideoUrl: yoloTankInfiltrationVideoUrl,
       },
       {
-        name: '드론 정찰-02',
+        name: '소형무인정찰 2소대',
         level: '소대',
-        branch: '드론',
+        branch: '정찰(소형무인기)',
         lat: 37.631,
         lng: 126.823,
         personnel: 11,
@@ -248,9 +249,9 @@ async function main() {
         situationVideoUrl: yoloTankInfiltrationVideoUrl,
       },
       {
-        name: '드론 정찰-03',
+        name: '소형무인정찰 3소대',
         level: '소대',
-        branch: '드론',
+        branch: '정찰(소형무인기)',
         lat: 37.619,
         lng: 126.952,
         personnel: 10,
@@ -263,9 +264,9 @@ async function main() {
         situationVideoUrl: yoloTankInfiltrationVideoUrl,
       },
       {
-        name: '드론 정찰-04',
+        name: '소형무인정찰 4소대',
         level: '소대',
-        branch: '드론',
+        branch: '정찰(소형무인기)',
         lat: 37.607,
         lng: 127.078,
         personnel: 12,
@@ -278,9 +279,9 @@ async function main() {
         situationVideoUrl: yoloTankInfiltrationVideoUrl,
       },
       {
-        name: '드론 정찰-05',
+        name: '소형무인정찰 5소대',
         level: '소대',
-        branch: '드론',
+        branch: '정찰(소형무인기)',
         lat: 37.594,
         lng: 127.206,
         personnel: 11,
@@ -293,11 +294,11 @@ async function main() {
         situationVideoUrl: yoloTankInfiltrationVideoUrl,
       },
 
-      // 대대 (5)
+      // 대대급 TPC(전술지휘소) — 편제상 대대 본부
       {
-        name: '대대 지휘소-01',
+        name: '제1기갑대대 TPC',
         level: '대대',
-        branch: '대대',
+        branch: '기갑·대대지휘소',
         lat: 37.682,
         lng: 126.732,
         personnel: 148,
@@ -310,9 +311,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '대대 지휘소-02',
+        name: '제3보병대대 TPC',
         level: '대대',
-        branch: '대대',
+        branch: '보병·대대지휘소',
         lat: 37.669,
         lng: 126.868,
         personnel: 140,
@@ -325,9 +326,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '대대 지휘소-03',
+        name: '제7기계화보병대대 TPC',
         level: '대대',
-        branch: '대대',
+        branch: '기계화보병·대대지휘소',
         lat: 37.656,
         lng: 126.998,
         personnel: 136,
@@ -340,9 +341,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '감시부대 대대',
+        name: '제11포병연대 관측대대',
         level: '대대',
-        branch: '대대',
+        branch: '포병·관측대대',
         lat: 37.644,
         lng: 127.123,
         personnel: 142,
@@ -355,9 +356,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '대대 지휘소-05',
+        name: '제9보병대대 TPC',
         level: '대대',
-        branch: '대대',
+        branch: '보병·대대지휘소',
         lat: 37.632,
         lng: 127.246,
         personnel: 139,
@@ -370,11 +371,11 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
 
-      // 상위대대 (5)
+      // 연대 전방지휘소(상급 통제 노드) — 시드 상 level 필드는 대대로 유지, 실제는 연대급 전방 C2
       {
-        name: '상위대대 지휘소-01',
+        name: '제11기계화보병연대 전방지휘소-1',
         level: '대대',
-        branch: '상위대대',
+        branch: '기계화보병연대·전방지휘소',
         lat: 37.612,
         lng: 126.742,
         personnel: 182,
@@ -387,9 +388,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '상위대대 지휘소-02',
+        name: '제11기계화보병연대 전방지휘소-2',
         level: '대대',
-        branch: '상위대대',
+        branch: '기계화보병연대·전방지휘소',
         lat: 37.601,
         lng: 126.881,
         personnel: 176,
@@ -402,9 +403,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '상위대대 지휘소-03',
+        name: '제11기계화보병연대 전방지휘소-3',
         level: '대대',
-        branch: '상위대대',
+        branch: '기계화보병연대·전방지휘소',
         lat: 37.589,
         lng: 127.01,
         personnel: 188,
@@ -417,9 +418,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '상위대대 지휘소-04',
+        name: '제11기계화보병연대 전방지휘소-4',
         level: '대대',
-        branch: '상위대대',
+        branch: '기계화보병연대·전방지휘소',
         lat: 37.578,
         lng: 127.136,
         personnel: 181,
@@ -432,9 +433,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '상위대대 지휘소-05',
+        name: '제11기계화보병연대 전방지휘소-5',
         level: '대대',
-        branch: '상위대대',
+        branch: '기계화보병연대·전방지휘소',
         lat: 37.566,
         lng: 127.263,
         personnel: 179,
@@ -447,11 +448,11 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
 
-      // 포병부대 위치 (5)
+      // 포병 중대
       {
-        name: '포병부대 위치-01',
+        name: '제37포병대대 1포전(자주포)',
         level: '중대',
-        branch: '포병부대',
+        branch: '포병(자주포중대)',
         lat: 37.553,
         lng: 126.812,
         personnel: 92,
@@ -464,9 +465,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '포병부대 위치-02',
+        name: '제37포병대대 2포전(견인포)',
         level: '중대',
-        branch: '포병부대',
+        branch: '포병(견인포중대)',
         lat: 37.547,
         lng: 126.934,
         personnel: 88,
@@ -479,9 +480,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '포병부대 위치-03',
+        name: '제42포병대대 다연장포전',
         level: '중대',
-        branch: '포병부대',
+        branch: '포병(다연장로켓중대)',
         lat: 37.541,
         lng: 127.051,
         personnel: 96,
@@ -494,9 +495,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '포병부대 위치-04',
+        name: '제37포병대대 3포전(자주포)',
         level: '중대',
-        branch: '포병부대',
+        branch: '포병(자주포중대)',
         lat: 37.535,
         lng: 127.167,
         personnel: 90,
@@ -509,9 +510,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '포병부대 위치-05',
+        name: '제55포병대대 장사정포전',
         level: '중대',
-        branch: '포병부대',
+        branch: '포병(장사정포중대)',
         lat: 37.529,
         lng: 127.284,
         personnel: 94,
@@ -524,11 +525,11 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
 
-      // 전차부대 위치 (5)
+      // 기갑(전차) 중대
       {
-        name: '전차부대 위치-01',
+        name: '제1기갑대대 1전차중대',
         level: '중대',
-        branch: '전차부대',
+        branch: '기갑(전차중대)',
         lat: 37.561,
         lng: 126.776,
         personnel: 76,
@@ -541,9 +542,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '전차부대 위치-02',
+        name: '제1기갑대대 2전차중대',
         level: '중대',
-        branch: '전차부대',
+        branch: '기갑(전차중대)',
         lat: 37.556,
         lng: 126.902,
         personnel: 72,
@@ -556,9 +557,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '전차부대 위치-03',
+        name: '제5기갑대대 1전차중대',
         level: '중대',
-        branch: '전차부대',
+        branch: '기갑(전차중대)',
         lat: 37.55,
         lng: 127.023,
         personnel: 74,
@@ -571,9 +572,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '전차부대 위치-04',
+        name: '제5기갑대대 2전차중대',
         level: '중대',
-        branch: '전차부대',
+        branch: '기갑(전차중대)',
         lat: 37.544,
         lng: 127.144,
         personnel: 71,
@@ -586,9 +587,9 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
       {
-        name: '전차부대 위치-05',
+        name: '제8기갑대대 1전차중대',
         level: '중대',
-        branch: '전차부대',
+        branch: '기갑(전차중대)',
         lat: 37.538,
         lng: 127.268,
         personnel: 73,
@@ -606,30 +607,30 @@ async function main() {
   await prisma.infiltrationPoint.createMany({
     data: [
       {
-        codename: '적 제1기갑대대 (북측 집결)',
-        /** 평양 시청 일대 근사 — 프론트 시뮌·SAR 소실 원과 동일 */
+        codename: '적 제105기갑사단 예하 제1기갑대대 (북측 집결)',
+        /** 평양 시청 일대 근사 — 프론트 시뮬·SAR 소실 원과 동일 */
         lat: 39.0392,
         lng: 125.7625,
-        threatLevel: '높음',
+        threatLevel: '중간',
         estimatedCount: 28,
         observedAt: new Date('2026-03-26T10:40:00'),
         riskRadiusMeter: 3800,
         droneVideoUrl: yoloTankInfiltrationVideoUrl,
         enemySymbol: 'ENEMY_UNIT',
-        enemyBranch: '기갑 대대 (군사분계선 이북)',
+        enemyBranch: '기갑(전차대대·분계 이북)',
       },
       {
-        codename: '적 제2기갑여단 (함흥 집결)',
-        /** 함흥시 도심권 근사 */
+        codename: '적 제4기갑사단 예하 제2기갑여단 (함흥 집결)',
+        /** 함흥시 도심권 근사 — 침공 주축(함흥→평양→서울) 시뮬 우선 표적 */
         lat: 39.8417,
         lng: 127.7264,
-        threatLevel: '중간',
+        threatLevel: '높음',
         estimatedCount: 21,
         observedAt: new Date('2026-03-26T11:15:00'),
         riskRadiusMeter: 3200,
         droneVideoUrl: yoloTankInfiltrationVideoUrl,
         enemySymbol: 'ENEMY_UNIT',
-        enemyBranch: '기갑 여단 (동부 축선)',
+        enemyBranch: '기갑(기갑여단·동부 축선)',
       },
     ],
   });
@@ -655,7 +656,7 @@ async function main() {
     console.log('  위치 정리:', `분계선 이북(또는 상한 초과) 아군 ${removedNorthFriendlies.count}건 삭제`);
   }
 
-  // 추가 메타(단대오/표고/MGRS) 저장
+  // 추가 메타(전술대형·표고·MGRS) 저장
   const allUnits = await prisma.unit.findMany({ orderBy: { id: 'asc' } });
   await Promise.all(
     allUnits.map((unit, idx) => {

@@ -163,7 +163,7 @@ export function FmcwRadarIntroPage({ onContinue }: Props) {
           )}
           {vodStatus === 'error' && (
             <p className="muted fmcw-intro-vod__status" style={{ padding: '12px 16px' }}>
-              백엔드에 연결할 수 없습니다. 차트는 데모 데이터입니다.
+              백엔드에 연결할 수 없습니다. 차트는 로컬 데이터로 표시됩니다.
             </p>
           )}
           {vodStatus === 'ok' && vodSnap && liveRun?.ok ? (
@@ -201,7 +201,7 @@ export function FmcwRadarIntroPage({ onContinue }: Props) {
           운용 파이프라인(레이더 단독)
         </h3>
         <p className="muted fmcw-pipeline-flow__ref">
-          구현은 저장소 <code>radar-service/app/</code> 모듈로 분리되어 있으며, 노트북은 데모용 얇은 실행만
+          구현은 저장소 <code>radar-service/app/</code> 모듈로 분리되어 있으며, 노트북은 검증용 경량 실행만
           담당합니다.
         </p>
         <ol className="fmcw-pipeline-flow__list">
@@ -231,7 +231,7 @@ export function FmcwRadarIntroPage({ onContinue }: Props) {
         )}
         {vodStatus === 'error' && (
           <p className="muted fmcw-intro-vod__status">
-            백엔드에 연결할 수 없습니다. 상단 데모 차트는 로컬 데이터로 동작합니다. 서버를 켠 뒤 새로고침하거나 통합
+            백엔드에 연결할 수 없습니다. 상단 차트는 로컬 데이터로 동작합니다. 서버를 켠 뒤 새로고침하거나 통합
             상황으로 진행하세요.
           </p>
         )}

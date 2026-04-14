@@ -1,6 +1,6 @@
 /**
- * 시나리오 종료 요약 — SAR→UAV→드론→FMCW 파이프라인 더미 리포트
- * (일부 수치는 런타임 FMCW·적 엔티티 수와 맞춰 자연스럽게 이어짐)
+ * 시나리오 종료 요약 — SAR→UAV→드론→FMCW 파이프라인 통합 리포트
+ * (일부 수치는 런타임 FMCW·적 엔티티 수와 맞춰 이어짐)
  */
 
 export type PhaseDetectionResult = {
@@ -59,7 +59,7 @@ export function buildScenarioSummaryReport(input: {
       stepLabel: 'SAR-2 광역',
       headline: '이동 에너지 후보 4건 · 고신뢰 2건',
       detail:
-        '함흥 남하 축 GRD 변화 셀과 SAR-2 붉은 관측 지역이 교차한 격자를 우선 큐로 올렸습니다. (더미 파이프라인)',
+        '함흥 남하 축 GRD 변화 셀과 SAR-2 붉은 관측 지역이 교차한 격자를 우선 큐로 올렸습니다.',
     },
     {
       stepLabel: 'UAV EO/IR',
@@ -75,7 +75,7 @@ export function buildScenarioSummaryReport(input: {
     },
     {
       stepLabel: 'FMCW',
-      headline: `위험 윤곽 스캔 · 아군 타격 적합도 ${strikeSuitabilityPct}% (더미)`,
+      headline: `위험 윤곽 스캔 · 아군 타격 적합도 ${strikeSuitabilityPct}%`,
       detail: `탐지 거리 ${input.fmcwDetectionRangeKm.toFixed(1)} km 가정, 진입축과 트랙 T01–T03을 융합했습니다.`,
     },
   ]
@@ -89,12 +89,12 @@ export function buildScenarioSummaryReport(input: {
     {
       name: '기갑 예비대 기동',
       score: 76,
-      rationale: '남하 예측 축과 교차하는 기갑 거점이 28km 이내(더미)에 존재.',
+      rationale: '남하 예측 축과 교차하는 기갑 거점이 28km 이내에 존재.',
     },
     {
       name: '전자전·억제 패키지',
       score: 64,
-      rationale: 'UAV·드론이 확보한 데이터링크 시간창에 맞춘 소프트킬 옵션(더미).',
+      rationale: 'UAV·드론이 확보한 데이터링크 시간창에 맞춘 소프트킬 옵션.',
     },
   ]
 
@@ -127,7 +127,7 @@ export function buildScenarioSummaryReport(input: {
       label: 'C2 통합',
       category: 'C2',
       contributionPct: 7,
-      note: '자산 스케줄·보고서 편성(더미)',
+      note: '자산 스케줄·보고서 편성',
     },
   ]
 
@@ -136,7 +136,7 @@ export function buildScenarioSummaryReport(input: {
     subtitle: '탐지(SAR) → 확인(UAV) → 근접(드론) → 위험분석(FMCW) 파이프라인이 완료되었습니다.',
     phaseResults,
     finalEnemyMbtCount: mbt,
-    finalEnemyMbtDetail: `적 전차(MBT) 군집 ${mbt}개가 파이프라인 전 구간에서 동일 축으로 추적되었습니다. 최종 확정 전차 표적 수(더미): ${mbt}개 군집 기준.`,
+    finalEnemyMbtDetail: `적 전차(MBT) 군집 ${mbt}개가 파이프라인 전 구간에서 동일 축으로 추적되었습니다. 최종 확정 전차 표적 수: ${mbt}개 군집 기준.`,
     movementPathTitle: '예상 이동 경로',
     movementPathSteps: [
       '평양·함흥 집결축 → 함흥 남하(동부)',
@@ -144,7 +144,7 @@ export function buildScenarioSummaryReport(input: {
       'FMCW 예상 진입축(주황 점선)이 위험 폴리곤 코어로 수렴',
     ],
     movementPathNote:
-      '지도의 적 이동 경로 레이어·FMCW 진입축과 동일한 내러티브로 생성된 더미 요약입니다.',
+      '지도의 적 이동 경로 레이어·FMCW 진입축과 정합된 요약입니다.',
     dangerZoneTitle: '위험 지역',
     dangerZoneDetail:
       '함흥 남쪽 FMCW 위험 윤곽(주황 면) 내에서 접근 속도·다중 트랙이 중첩된 구간을 핵심 위험코어로 표시했습니다.',

@@ -20,16 +20,30 @@ export const SAR_WIDE_SCAN_PAUSE_PROGRESS = 0.14
 /** 통합 시뮬 광역 지도: 평양 SAR 소실 표시 후 이 시간(ms) 뒤 남하 경로 관측 권역 표시 */
 export const BATTALION_ROUTE_CORRIDOR_REVEAL_MS = 4000
 
-/** 주 적 남하 시뮬 출발지 — 평양 시청 일대 근사(WGS84), SAR 소실 원과 동일 중심 */
+/** 침공 축 경유지 — 평양 시청 일대(WGS84), SAR 소실 원·1단계 시연과 동일 */
 export const BATTALION_PYONGYANG_INVASION_ORIGIN = {
   lat: 39.0392,
   lng: 125.7625,
 } as const
 
+/** 침공 축 출발지 — 함흥시 도심권 근사(동부 축선, seed 적 부대와 동일) */
+export const BATTALION_HAMHUNG_INVASION_ORIGIN = {
+  lat: 39.8417,
+  lng: 127.7264,
+} as const
+
+/** 전차 도로 부대 기동(시연) — 실제 MBT 도로 속도대(대략 35~45km/h) 중간값 */
+export const TANK_ROAD_MARCH_SPEED_KMH = 38
+
+/**
+ * 이 거리(km) 이상인 적 궤적은 침공 축으로 보고, 속도 표시를 기동 속도로 고정(짧은 재생 시간 대비).
+ */
+export const TANK_INVASION_PATH_LENGTH_THRESHOLD_KM = 160
+
 export const SCENARIO_RANGES_KM = {
   /** 군사분계선 인근 전술 권역 — 이보다 멀면 UAV SAR 광역 추적 단계로 표현 */
   TACTICAL_RANGE_KM: 40,
-  FMCW_MAX: 15,
+  FMCW_MAX: 45,
   /** 정찰 드론 출동·EO/IR — C2~주 적 거리 기준 (`droneEngagementConfig`와 동일 값) */
   DRONE_DISPATCH_MAX_KM: DRONE_ENEMY_IDENTIFICATION_RANGE_KM,
 } as const
@@ -45,23 +59,23 @@ export const BATTALION_SCENARIO = {
   },
 
   /**
-   * 주 적 남하 침투 예상 축 — 광역 지도 파란 네모(남하 경로 관측 권역). 위치는 기존 시뮬 축 유지.
+   * 주 적 남하 침투 예상 축 — 함흥·평양·서울 방향 도로 궤적이 지나가는 광역(파란 네모).
    */
   expectedEnemyRouteBounds: {
-    sw: { lat: 38.72351, lng: 125.76433 },
-    ne: { lat: 38.01209, lng: 127.3786 },
+    sw: { lat: 36.85, lng: 125.45 },
+    ne: { lat: 40.05, lng: 127.92 },
   },
 
-  /** 광역 뷰 — 평양 SAR·남하 축·C2 포함 */
+  /** 광역 뷰 — 함흥·평양·서울 축·C2 포함 */
   overviewBounds: {
-    sw: { lat: 36.95, lng: 124.82 },
-    ne: { lat: 39.52, lng: 127.68 },
+    sw: { lat: 36.85, lng: 124.75 },
+    ne: { lat: 40.05, lng: 127.92 },
   },
   /** 카카오맵: 레벨이 클수록 도면이 더 상세(1=광역 ~ 14=최대 확대) — 낮출수록 더 광역 */
   overviewMapLevel: 7,
 
-  /** 적 침공 시뮬 종료 지점(남한 측, DMZ 인근 가상) — OSRM 실패 시 직선 보간 */
-  invasionTarget: { lat: 37.792, lng: 126.982 },
+  /** 적 침공 시뮬 종료 지점 — 서울 도심(시청 인근), OSRM·폴백 궤적 공통 */
+  invasionTarget: { lat: 37.5665, lng: 126.978 },
 
   /**
    * 전술 대치 — 침투·C2 축을 확대(서해~동측 전방 부대까지 포함)

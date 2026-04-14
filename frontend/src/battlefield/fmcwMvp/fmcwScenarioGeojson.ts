@@ -1,52 +1,52 @@
 import type { GeoJSONSource } from 'maplibre-gl'
 
-/** 함흥 권역 위험 윤곽 + 예상 진입축 + mock 트랙 점 (단일 소스) */
+/** 함흥 권역 위험 윤곽 + 예상 진입축 + 추정 트랙 점 (단일 소스) — 동해상이 아닌 내륙·평야 쪽에 배치 */
 const FMCW_SCENARIO_GEOJSON_DATA = {
   type: 'FeatureCollection',
   features: [
     {
       type: 'Feature',
-      properties: { kind: 'risk', name: 'FMCW 위험 윤곽(더미)' },
+      properties: { kind: 'risk', name: 'FMCW 위험 윤곽' },
       geometry: {
         type: 'Polygon',
         coordinates: [
           [
-            [127.58, 39.78],
-            [127.88, 39.78],
-            [127.88, 39.62],
-            [127.58, 39.62],
-            [127.58, 39.78],
+            [127.34, 39.79],
+            [127.52, 39.79],
+            [127.52, 39.62],
+            [127.34, 39.62],
+            [127.34, 39.79],
           ],
         ],
       },
     },
     {
       type: 'Feature',
-      properties: { kind: 'ingress', name: '예상 진입 축선(더미)' },
+      properties: { kind: 'ingress', name: '예상 진입 축선' },
       geometry: {
         type: 'LineString',
         coordinates: [
-          [127.52, 39.58],
-          [127.62, 39.64],
-          [127.72, 39.7],
-          [127.8, 39.74],
+          [127.30, 39.56],
+          [127.38, 39.62],
+          [127.44, 39.68],
+          [127.48, 39.74],
         ],
       },
     },
     {
       type: 'Feature',
       properties: { kind: 'track', trackId: 'FMCW-T01', label: '고속 접근체' },
-      geometry: { type: 'Point', coordinates: [127.66, 39.66] },
+      geometry: { type: 'Point', coordinates: [127.41, 39.67] },
     },
     {
       type: 'Feature',
       properties: { kind: 'track', trackId: 'FMCW-T02', label: 'MBT 유사' },
-      geometry: { type: 'Point', coordinates: [127.74, 39.71] },
+      geometry: { type: 'Point', coordinates: [127.47, 39.71] },
     },
     {
       type: 'Feature',
       properties: { kind: 'track', trackId: 'FMCW-T03', label: 'APC 후보' },
-      geometry: { type: 'Point', coordinates: [127.6, 39.73] },
+      geometry: { type: 'Point', coordinates: [127.38, 39.73] },
     },
   ],
 }
