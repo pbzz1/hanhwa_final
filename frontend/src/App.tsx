@@ -1158,9 +1158,10 @@ const SERVICE_ASSETS_CLUSTER_LAYER_ID = 'service-assets-cluster-layer'
 const SERVICE_ASSETS_CLUSTER_COUNT_LAYER_ID = 'service-assets-cluster-count-layer'
 const SERVICE_ASSETS_LAYER_ID = 'service-assets-layer'
 const SERVICE_ASSETS_LABEL_LAYER_ID = 'service-assets-label-layer'
+const SERVICE_ASSETS_SYMBOL_SOURCE_ID = 'service-assets-symbol-source'
 const SERVICE_ASSETS_SYMBOL_LAYER_ID = 'service-assets-symbol-layer'
-/** 초기 한반도 줌에서도 아군 자산 식별번호가 바로 보이도록 클러스터 임계 줌을 낮춘다. */
-const SERVICE_ASSETS_CLUSTER_MAX_ZOOM = 4
+const SERVICE_ASSETS_CLUSTER_MAX_ZOOM = 10
+const SERVICE_ASSETS_CLUSTER_RADIUS = 56
 const SERVICE_MOVERS_SOURCE_ID = 'service-movers-source'
 const SERVICE_MOVERS_LAYER_ID = 'service-movers-layer'
 const SERVICE_MOVERS_LABEL_LAYER_ID = 'service-movers-label-layer'
@@ -1233,6 +1234,8 @@ const SERVICE_ASSET_SYMBOL_IMAGE_ID: Record<ServiceAssetCategory, string> = {
 
 const SERVICE_ASSET_SYMBOL_SIZE = 56
 const SERVICE_ASSET_SYMBOL_ICON_SIZE = 1.42
+const SERVICE_FRIENDLY_SYMBOL_ICON_SIZE = SERVICE_ASSET_SYMBOL_ICON_SIZE
+const SERVICE_FRIENDLY_SYMBOL_ICON_OFFSET: [number, number] = [0, -1.28]
 
 function drawServiceSymbolFrame(ctx: CanvasRenderingContext2D, size: number, accentColor: string) {
   const frameX = 10
@@ -7740,6 +7743,12 @@ function branchToServiceCategory(branch: string): ServiceAssetCategory | null {
     .replaceAll('·', '')
     .replaceAll('ㆍ', '')
     .toUpperCase()
+  if (normalized === '상위대대' || (normalized.includes('상위') && normalized.includes('대대'))) {
+    return 'UPPER_COMMAND'
+  }
+  if (normalized === '대대') {
+    return 'DIVISION'
+  }
   if (
     normalized.includes('상급지휘소') ||
     normalized.includes('전방지휘소') ||
@@ -8551,99 +8560,119 @@ function BattlefieldServicePage() {
 
   useEffect(() => {
     let cancelled = false
-    setAssetLoading(true)
-    setAssetError(null)
+    let retryTimer: number | null = null
+    const MAX_RETRY = 25
+    const RETRY_DELAY_MS = 900
 
-    void requestJson<FriendlyUnit[]>(`${getApiBaseUrl()}/map/units`)
-      .then((units) => {
-        if (cancelled) return
-        const next = units
-          .map((unit) => {
-            const category = branchToServiceCategory(unit.branch)
-            if (!category) return null
-            return {
-              id: unit.id,
-              name: unit.name,
-              lat: unit.lat,
-              lng: unit.lng,
-              unitCode: effectiveUnitIdentificationCode(category, unit.id, unit.unitCode),
-              category,
-              level: unit.level,
-              formation: unit.formation ?? '대형 미지정',
-              elevationM: unit.elevationM ?? 0,
-              mgrs: unit.mgrs ?? 'MGRS-미지정',
-              readiness: unit.readiness,
-              mission: unit.mission,
-              situationVideoUrl: unit.situationVideoUrl ?? null,
-            } satisfies ServiceAssetPoint
-          })
-          .filter((row): row is ServiceAssetPoint => row != null)
-        const redistributedNext = redistributeCommandAssetsAcrossSouthKorea(next)
-        const commandEnsuredNext = ensureCommandAssetsPresence(redistributedNext)
-        const nextWithGroundRadar = normalizeServiceAssetPoints([
-          ...commandEnsuredNext,
-          ...buildGroundRadarServiceAssets(),
-        ])
-        const nextUavDispatchAssets = units
-          .filter((unit) => branchToServiceCategory(unit.branch) === 'UAV')
-          .map(
-            (unit) =>
-              ({
+    const loadAssets = (attempt: number) => {
+      if (cancelled) return
+      if (attempt === 1) {
+        setAssetLoading(true)
+        setAssetError(null)
+      }
+
+      void requestJson<FriendlyUnit[]>(`${getApiBaseUrl()}/map/units`)
+        .then((units) => {
+          if (cancelled) return
+          const next = units
+            .map((unit) => {
+              const category = branchToServiceCategory(unit.branch)
+              if (!category) return null
+              return {
                 id: unit.id,
                 name: unit.name,
                 lat: unit.lat,
                 lng: unit.lng,
-                mgrs: unit.mgrs ?? latLngToMgrsSafe(unit.lat, unit.lng),
+                unitCode: effectiveUnitIdentificationCode(category, unit.id, unit.unitCode),
+                category,
+                level: unit.level,
+                formation: unit.formation ?? '대형 미지정',
+                elevationM: unit.elevationM ?? 0,
+                mgrs: unit.mgrs ?? 'MGRS-미지정',
                 readiness: unit.readiness,
                 mission: unit.mission,
-                equipment: unit.equipment,
-                personnel: unit.personnel,
-                formation: unit.formation ?? null,
-              }) satisfies UavDispatchAsset,
-          )
-        const nextDroneDispatchAssets = units
-          .filter((unit) => branchToServiceCategory(unit.branch) === 'DRONE')
-          .map(
-            (unit) =>
-              ({
-                id: unit.id,
-                name: unit.name,
-                lat: unit.lat,
-                lng: unit.lng,
-                mgrs: unit.mgrs ?? latLngToMgrsSafe(unit.lat, unit.lng),
-                readiness: unit.readiness,
-                mission: unit.mission,
-                equipment: unit.equipment,
-                personnel: unit.personnel,
-                formation: unit.formation ?? null,
-              }) satisfies UavDispatchAsset,
-          )
-        for (const asset of nextUavDispatchAssets) {
-          if (!uavHomeByIdRef.current[asset.id]) {
-            uavHomeByIdRef.current[asset.id] = { lat: asset.lat, lng: asset.lng }
+                situationVideoUrl: unit.situationVideoUrl ?? null,
+              } satisfies ServiceAssetPoint
+            })
+            .filter((row): row is ServiceAssetPoint => row != null)
+          const redistributedNext = redistributeCommandAssetsAcrossSouthKorea(next)
+          const commandEnsuredNext = ensureCommandAssetsPresence(redistributedNext)
+          const nextWithGroundRadar = normalizeServiceAssetPoints([
+            ...commandEnsuredNext,
+            ...buildGroundRadarServiceAssets(),
+          ])
+          const nextUavDispatchAssets = units
+            .filter((unit) => branchToServiceCategory(unit.branch) === 'UAV')
+            .map(
+              (unit) =>
+                ({
+                  id: unit.id,
+                  name: unit.name,
+                  lat: unit.lat,
+                  lng: unit.lng,
+                  mgrs: unit.mgrs ?? latLngToMgrsSafe(unit.lat, unit.lng),
+                  readiness: unit.readiness,
+                  mission: unit.mission,
+                  equipment: unit.equipment,
+                  personnel: unit.personnel,
+                  formation: unit.formation ?? null,
+                }) satisfies UavDispatchAsset,
+            )
+          const nextDroneDispatchAssets = units
+            .filter((unit) => branchToServiceCategory(unit.branch) === 'DRONE')
+            .map(
+              (unit) =>
+                ({
+                  id: unit.id,
+                  name: unit.name,
+                  lat: unit.lat,
+                  lng: unit.lng,
+                  mgrs: unit.mgrs ?? latLngToMgrsSafe(unit.lat, unit.lng),
+                  readiness: unit.readiness,
+                  mission: unit.mission,
+                  equipment: unit.equipment,
+                  personnel: unit.personnel,
+                  formation: unit.formation ?? null,
+                }) satisfies UavDispatchAsset,
+            )
+          for (const asset of nextUavDispatchAssets) {
+            if (!uavHomeByIdRef.current[asset.id]) {
+              uavHomeByIdRef.current[asset.id] = { lat: asset.lat, lng: asset.lng }
+            }
           }
-        }
-        for (const asset of nextDroneDispatchAssets) {
-          if (!droneHomeByIdRef.current[asset.id]) {
-            droneHomeByIdRef.current[asset.id] = { lat: asset.lat, lng: asset.lng }
+          for (const asset of nextDroneDispatchAssets) {
+            if (!droneHomeByIdRef.current[asset.id]) {
+              droneHomeByIdRef.current[asset.id] = { lat: asset.lat, lng: asset.lng }
+            }
           }
-        }
-        setAssets(nextWithGroundRadar)
-        setUavDispatchAssets(nextUavDispatchAssets)
-        setDroneDispatchAssets(nextDroneDispatchAssets)
-      })
-      .catch((error) => {
-        if (cancelled) return
-        setUavDispatchAssets([])
-        setDroneDispatchAssets([])
-        setAssetError(error instanceof Error ? error.message : '자산 위치를 불러오지 못했습니다.')
-      })
-      .finally(() => {
-        if (!cancelled) setAssetLoading(false)
-      })
+          setAssets(nextWithGroundRadar)
+          setUavDispatchAssets(nextUavDispatchAssets)
+          setDroneDispatchAssets(nextDroneDispatchAssets)
+          setAssetError(null)
+          setAssetLoading(false)
+        })
+        .catch((error) => {
+          if (cancelled) return
+          const message = error instanceof Error ? error.message : '자산 위치를 불러오지 못했습니다.'
+          if (attempt < MAX_RETRY) {
+            setAssetError(`자산 위치 연결 대기중... (${attempt}/${MAX_RETRY})`)
+            retryTimer = window.setTimeout(() => loadAssets(attempt + 1), RETRY_DELAY_MS)
+            return
+          }
+          setUavDispatchAssets([])
+          setDroneDispatchAssets([])
+          setAssetError(message)
+          setAssetLoading(false)
+        })
+    }
+
+    loadAssets(1)
 
     return () => {
       cancelled = true
+      if (retryTimer != null) {
+        window.clearTimeout(retryTimer)
+      }
     }
   }, [])
 
@@ -10030,10 +10059,20 @@ function BattlefieldServicePage() {
       if (!map.getSource(SERVICE_ASSETS_SOURCE_ID)) {
         map.addSource(SERVICE_ASSETS_SOURCE_ID, {
           type: 'geojson',
-          data: toMapSourceData([]),
+          data: toMapSourceData(assetsRef.current),
           cluster: true,
           clusterMaxZoom: SERVICE_ASSETS_CLUSTER_MAX_ZOOM,
-          clusterRadius: 56,
+          clusterRadius: SERVICE_ASSETS_CLUSTER_RADIUS,
+        })
+      }
+      if (!map.getSource(SERVICE_ASSETS_SYMBOL_SOURCE_ID)) {
+        map.addSource(SERVICE_ASSETS_SYMBOL_SOURCE_ID, {
+          type: 'geojson',
+          data: toMapSourceData(assetsRef.current),
+          // 심볼도 동일 기준으로 묶어 겹침 구간은 클러스터(개수)로 표기
+          cluster: true,
+          clusterMaxZoom: SERVICE_ASSETS_CLUSTER_MAX_ZOOM,
+          clusterRadius: SERVICE_ASSETS_CLUSTER_RADIUS,
         })
       }
       ensureServiceAssetSymbolImages(map)
@@ -10117,7 +10156,7 @@ function BattlefieldServicePage() {
         map.addLayer({
           id: SERVICE_ASSETS_SYMBOL_LAYER_ID,
           type: 'symbol',
-          source: SERVICE_ASSETS_SOURCE_ID,
+          source: SERVICE_ASSETS_SYMBOL_SOURCE_ID,
           filter: ['!', ['has', 'point_count']],
           layout: {
             'icon-image': [
@@ -10141,8 +10180,8 @@ function BattlefieldServicePage() {
               SERVICE_ASSET_SYMBOL_IMAGE_ID.ARMOR,
               SERVICE_ASSET_SYMBOL_IMAGE_ID.DIVISION,
             ],
-            'icon-size': SERVICE_ASSET_SYMBOL_ICON_SIZE,
-            'icon-offset': [0, -1.28],
+            'icon-size': SERVICE_FRIENDLY_SYMBOL_ICON_SIZE,
+            'icon-offset': SERVICE_FRIENDLY_SYMBOL_ICON_OFFSET,
             'icon-allow-overlap': true,
             'icon-ignore-placement': true,
           },
@@ -10152,7 +10191,12 @@ function BattlefieldServicePage() {
         map.setLayoutProperty(
           SERVICE_ASSETS_SYMBOL_LAYER_ID,
           'icon-size',
-          SERVICE_ASSET_SYMBOL_ICON_SIZE,
+          SERVICE_FRIENDLY_SYMBOL_ICON_SIZE,
+        )
+        map.setLayoutProperty(
+          SERVICE_ASSETS_SYMBOL_LAYER_ID,
+          'icon-offset',
+          SERVICE_FRIENDLY_SYMBOL_ICON_OFFSET,
         )
       }
       if (!map.getLayer(SERVICE_ASSETS_LABEL_LAYER_ID)) {
@@ -11994,6 +12038,10 @@ function BattlefieldServicePage() {
     const source = map.getSource(SERVICE_ASSETS_SOURCE_ID)
     if (source && 'setData' in source) {
       ;(source as GeoJSONSource).setData(toMapSourceData(assetsForBattlefieldMap))
+    }
+    const symbolSource = map.getSource(SERVICE_ASSETS_SYMBOL_SOURCE_ID)
+    if (symbolSource && 'setData' in symbolSource) {
+      ;(symbolSource as GeoJSONSource).setData(toMapSourceData(assetsForBattlefieldMap))
     }
   }, [assetsForBattlefieldMap])
 
