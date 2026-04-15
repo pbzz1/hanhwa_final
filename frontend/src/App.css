@@ -4120,24 +4120,26 @@ button:disabled {
   color: #99afbe;
 }
 
-.auth-page--glass .form input {
-  /* 테두리: 로그인 버튼(.auth-page--glass .btn-primary)과 동일 */
-  border-color: rgba(96, 205, 226, 0.52);
+/* index.css 전역 input:not(...) 특이도(0,4,1)보다 높이려 동일 :not 체인 유지 */
+.auth-page--glass .form input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']) {
+  /* 회원가입 버튼(.auth-page--glass .auth-signup-btn)과 동일 테두리색 */
+  border: 1px solid rgba(96, 127, 145, 0.4);
   background: linear-gradient(180deg, rgba(12, 22, 40, 0.84) 0%, rgba(10, 18, 34, 0.78) 100%);
   color: #e8f4fb;
-  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.16);
+  box-shadow: none;
 }
 
-.auth-page--glass .form input::placeholder {
+.auth-page--glass .form input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])::placeholder {
   color: #6d8698;
 }
 
-.auth-page--glass .form input:focus {
-  border-color: rgba(152, 232, 246, 0.76);
+.auth-page--glass .form input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):focus,
+.auth-page--glass .form input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):focus-visible {
+  border-color: rgba(56, 189, 248, 0.82);
   outline: none;
   box-shadow:
-    0 0 0 3px rgba(22, 163, 196, 0.2),
-    inset 0 0 0 1px rgba(125, 211, 252, 0.16);
+    0 0 0 3px rgba(14, 165, 233, 0.22),
+    inset 0 0 0 1px rgba(125, 211, 252, 0.2);
 }
 
 .auth-page--glass .btn-primary {
@@ -8219,6 +8221,35 @@ button:disabled {
   background: rgba(56, 189, 248, 0.24);
 }
 
+.service-uav-dispatch-modal__mode-toggle {
+  display: inline-flex;
+  gap: 8px;
+  padding: 0 20px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.service-uav-dispatch-modal__mode-btn {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.service-uav-dispatch-modal__mode-btn--active {
+  border-color: rgba(34, 197, 94, 0.65);
+  background: rgba(5, 46, 22, 0.85);
+  color: #dcfce7;
+}
+
+.service-uav-dispatch-modal__mode-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .service-uav-dispatch-modal__body {
   display: flex;
   flex-direction: column;
@@ -8367,6 +8398,38 @@ button:disabled {
 }
 
 .service-uav-dispatch-modal__candidate-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.service-uav-dispatch-modal__tactic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.service-uav-dispatch-modal__tactic {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.66);
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.service-uav-dispatch-modal__tactic--selected {
+  border-color: rgba(34, 197, 94, 0.62);
+  background: rgba(6, 78, 59, 0.52);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.16);
+}
+
+.service-uav-dispatch-modal__tactic input {
+  margin-top: 3px;
+}
+
+.service-uav-dispatch-modal__tactic-body {
   flex: 1;
   min-width: 0;
 }
@@ -8635,6 +8698,69 @@ button:disabled {
   border-radius: 10px;
   padding: 10px;
   background: rgba(2, 6, 23, 0.55);
+}
+
+/* 지도 위 — 마우스 좌표(우하단) 바로 위에 선택 객체 상세 HUD (우측 정렬·콤팩트 폭) */
+.service-selected-object-panel.service-selected-object-panel--map-overlay {
+  position: absolute;
+  right: 12px;
+  /* readout: bottom 12px + 약 2.6rem 높이 + 간격 */
+  bottom: calc(12px + 2.65rem + 10px);
+  z-index: 6;
+  width: min(248px, calc(100% - 24px));
+  max-width: min(248px, calc(100% - 24px));
+  max-height: min(520px, calc(100% - 100px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px 10px 10px;
+  pointer-events: auto;
+  border: 1px solid rgba(45, 212, 191, 0.42);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.97) 0%, rgba(15, 23, 42, 0.94) 100%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  text-align: right;
+}
+
+.service-selected-object-panel--map-overlay h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #f8fafc;
+  text-align: right;
+}
+
+.service-selected-object-panel--map-overlay .service-detail-dl > div {
+  grid-template-columns: auto 1fr;
+  column-gap: 6px;
+  justify-items: stretch;
+}
+
+.service-selected-object-panel--map-overlay .service-detail-dl dt {
+  text-align: right;
+  justify-self: end;
+}
+
+.service-selected-object-panel--map-overlay .service-detail-dl dd {
+  text-align: right;
+  justify-self: stretch;
+}
+
+.service-selected-object-panel--map-overlay .service-uav-mvp-detail__title,
+.service-selected-object-panel--map-overlay .service-drone-mvp-detail__title {
+  text-align: right;
+}
+
+.service-selected-object-panel--map-overlay .service-uav-mvp-detail__sar,
+.service-selected-object-panel--map-overlay .service-drone-mvp-detail__ctx {
+  text-align: right;
+}
+
+.service-selected-object-panel--map-overlay .service-uav-mvp-inline-media p,
+.service-selected-object-panel--map-overlay .service-drone-mvp-inline-media p {
+  text-align: right;
 }
 
 .service-start-scenario-btn {
@@ -9777,10 +9903,242 @@ button:disabled {
   line-height: 1.4;
 }
 
+.service-asset-popup__controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.service-asset-popup__action-btn {
+  border: 1px solid rgba(56, 189, 248, 0.62);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(12, 74, 110, 0.72) 0%, rgba(8, 47, 73, 0.86) 100%);
+  color: #e0f2fe;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.service-asset-popup__action-btn:hover {
+  border-color: rgba(125, 211, 252, 0.88);
+}
+
+.service-asset-popup__tactic-title {
+  margin: 0 0 6px;
+  color: #cbd5e1;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.service-asset-popup__tactic-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.service-asset-popup__tactic-btn {
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.84);
+  color: #e2e8f0;
+  padding: 6px 9px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.service-asset-popup__tactic-btn:hover {
+  border-color: rgba(59, 130, 246, 0.78);
+}
+
+.service-asset-popup__tactic-btn--selected {
+  border-color: rgba(34, 197, 94, 0.84);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25) inset;
+  background: rgba(20, 83, 45, 0.38);
+  color: #dcfce7;
+}
+
 .auth-checking-page {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.risk-mode-switch-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.risk-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.risk-mode-grid label,
+.risk-mode-debug label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.risk-mode-grid select,
+.risk-mode-debug select {
+  min-height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.65);
+  color: #e2e8f0;
+  padding: 4px 8px;
+}
+
+.risk-mode-toggle-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+}
+
+.risk-mode-toggle-grid label,
+.risk-mode-debug > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.risk-mode-debug {
+  margin-top: 10px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.3);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.risk-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.risk-summary-grid article {
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.risk-summary-grid p {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: #93c5fd;
+}
+
+.risk-summary-grid strong {
+  font-size: 13px;
+}
+
+.risk-summary-note {
+  margin-top: 7px;
+  font-size: 11px;
+}
+
+.risk-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.risk-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.risk-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(248, 250, 252, 0.32);
+}
+
+.risk-top-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.risk-top-list__item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(15, 23, 42, 0.66);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.risk-top-list__item p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.risk-top-list__item--active {
+  border-color: rgba(14, 165, 233, 0.86);
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.55);
+}
+
+.risk-top-list__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.risk-detail-dl {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.risk-detail-dl div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.risk-detail-dl dt {
+  margin: 0;
+  color: #7dd3fc;
+}
+
+.risk-detail-dl dd {
+  margin: 0;
+  color: #e2e8f0;
+}
+
+.risk-pipeline-note p {
+  margin: 6px 0 0;
+  font-size: 12px;
 }
 
 @media (max-width: 1100px) {
@@ -9795,5 +10153,11 @@ button:disabled {
 
   .service-drone-split-panel {
     min-height: 520px;
+  }
+
+  .risk-mode-grid,
+  .risk-mode-toggle-grid,
+  .risk-summary-grid {
+    grid-template-columns: 1fr;
   }
 }

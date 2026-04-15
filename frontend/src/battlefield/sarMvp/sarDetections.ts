@@ -102,11 +102,13 @@ function grdMotionBlobRing(cx: number, cy: number): [number, number][] {
 }
 
 const GRD_DETECTION_SPEC = [
-  { id: 'grd-mot-1', cx: 125.88, cy: 38.88, classLabel: '전차', probPercent: 95 },
-  { id: 'grd-mot-2', cx: 126.52, cy: 40.08, classLabel: '전차', probPercent: 78 },
-  { id: 'grd-mot-3', cx: 129.12, cy: 40.62, classLabel: '전차', probPercent: 88 },
-  { id: 'grd-mot-4', cx: 126.32, cy: 39.42, classLabel: '일반차량', probPercent: 92 },
-  { id: 'grd-mot-5', cx: 127.38, cy: 39.5, classLabel: '일반차량', probPercent: 71 },
+  // 전차(적색) 2개는 요청대로 주요 적 부대 위치(제1기갑대대·제2기갑여단 예하 부대)에 정렬
+  { id: 'grd-mot-1', cx: 125.7625, cy: 39.0392, classLabel: '전차', probPercent: 95 }, // Track 49001 근처
+  { id: 'grd-mot-2', cx: 127.485, cy: 39.723, classLabel: '전차', probPercent: 88 }, // E49003 근처
+  { id: 'grd-mot-3', cx: 127.535, cy: 39.8417, classLabel: '전차', probPercent: 78 }, // 함흥 축선 보조 전차 후보
+  // 일반차량(청색)은 적 주력 2축과 겹치지 않게 분리 배치
+  { id: 'grd-mot-4', cx: 126.96, cy: 38.98, classLabel: '일반차량', probPercent: 92 },
+  { id: 'grd-mot-5', cx: 126.34, cy: 39.46, classLabel: '일반차량', probPercent: 71 },
 ] as const
 
 export const GRD_MOTION_DETECTIONS_GEOJSON = {
