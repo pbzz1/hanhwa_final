@@ -66,8 +66,9 @@ npm install
 npm run install:all    # backend + frontend
 
 # 환경 변수 복사 후 값 채우기 (아래 "환경 변수" 참고)
-copy frontend\.env.example frontend\.env
-copy backend\.env.example backend\.env
+cp frontend/.env.example frontend/.env
+cp backend/.env.example backend/.env
+# Windows CMD: copy frontend\.env.example frontend\.env
 
 # DB 마이그레이션 및 시드 (백엔드 디렉터리에서)
 cd backend
