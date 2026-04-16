@@ -43,7 +43,8 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     // ngrok 무료 URL(speak-xxx.ngrok-free.dev 등) — Host 헤더 허용
-    allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app', '.ngrok.io'],
+    // allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app', '.ngrok.io','pretty-chicken-move.loca.lt'],
+    allowedHosts: true,
     proxy: nestApiProxy,
   },
   preview: {

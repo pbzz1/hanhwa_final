@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { PrismaService } from './prisma/prisma.service';
 
 function devHttpUrlsForPort(port: number): string[] {
   const uniq = new Set<string>();
@@ -47,6 +48,19 @@ async function bootstrap() {
     log.log(
       '같은 망 다른 기기: 브라우저에서 위 LAN 주소로 API를 직접 호출할 수 있습니다. 프론트는 해당 IP로 Vite에 접속하면 자동으로 같은 IP의 API를 씁니다.',
     );
+    if (!isProd) {
+      try {
+        const prisma = app.get(PrismaService);
+        const infiltrationN = await prisma.infiltrationPoint.count();
+        if (infiltrationN < 10) {
+          log.warn(
+            `InfiltrationPoint가 DB에 ${infiltrationN}건뿐입니다. 표적 일람표(적)는 이 테이블을 그대로 씁니다. 데모는 시드 후 15건이 일반적이므로, backend에서 \`npm run prisma:seed\` 또는 \`npx prisma db seed\`로 시드를 반영한 뒤 서버를 다시 띄우세요.`,
+          );
+        }
+      } catch {
+        /* Prisma 미기동 등은 무시 */
+      }
+    }
   } catch (err: unknown) {
     const code =
       err && typeof err === 'object' && 'code' in err

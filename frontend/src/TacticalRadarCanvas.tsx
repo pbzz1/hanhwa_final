@@ -114,7 +114,7 @@ export function TacticalRadarCanvas({
         const clamped = Math.min(Math.max(rangeKm, 0), maxRangeKm)
         const rPx = (clamped / maxRangeKm) * R
         const blip = polarToCanvas(bearingToEnemyDeg, rPx)
-        ctx.fillStyle = '#f87171'
+        ctx.fillStyle = '#eab308'
         ctx.beginPath()
         ctx.arc(blip.x, blip.y, fmcwInRange ? 7 : 5, 0, Math.PI * 2)
         ctx.fill()

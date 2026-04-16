@@ -116,7 +116,7 @@ export function TacticalSchematicMap({
           fontSize="11"
           fontWeight="700"
         >
-          휴전선(북위 38° 근사)
+          군사분계선(MDL·근사)
         </text>
 
         {fmcwInRange && hasEnemy && (
@@ -142,14 +142,14 @@ export function TacticalSchematicMap({
 
         <circle cx={pc.x} cy={pc.y} r="11" fill="#facc15" stroke="#854d0e" strokeWidth="2" />
         {hasEnemy && (
-          <circle cx={pe.x} cy={pe.y} r="10" fill="#b91c1c" stroke="#fff" strokeWidth="2" />
+          <circle cx={pe.x} cy={pe.y} r="10" fill="#eab308" stroke="#fff" strokeWidth="2" />
         )}
 
         <text x={pc.x} y={pc.y + 26} textAnchor="middle" fill="#713f12" fontSize="10" fontWeight="800">
           C2
         </text>
         {hasEnemy ? (
-          <text x={pe.x} y={pe.y - 16} textAnchor="middle" fill="#7f1d1d" fontSize="10" fontWeight="800">
+          <text x={pe.x} y={pe.y - 16} textAnchor="middle" fill="#713f12" fontSize="10" fontWeight="800">
             적
           </text>
         ) : (

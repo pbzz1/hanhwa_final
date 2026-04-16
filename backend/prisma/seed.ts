@@ -280,8 +280,8 @@ async function main() {
       },
       {
         name: '소형무인정찰 5소대',
-        level: '소대',
-        branch: '정찰(소형무인기)',
+        level: '특수임무부대',
+        branch: '정찰(특수임무부대·소형무인기)',
         lat: 37.594,
         lng: 127.206,
         personnel: 11,
@@ -371,10 +371,10 @@ async function main() {
         situationVideoUrl: yoloTankSituationVideoUrl,
       },
 
-      // 연대 전방지휘소(상급 통제 노드) — 시드 상 level 필드는 대대로 유지, 실제는 연대급 전방 C2
+      // 연대 전방지휘소(상급 통제 노드)
       {
         name: '제11기계화보병연대 전방지휘소-1',
-        level: '대대',
+        level: '연대',
         branch: '기계화보병연대·전방지휘소',
         lat: 37.612,
         lng: 126.742,
@@ -389,7 +389,7 @@ async function main() {
       },
       {
         name: '제11기계화보병연대 전방지휘소-2',
-        level: '대대',
+        level: '연대',
         branch: '기계화보병연대·전방지휘소',
         lat: 37.601,
         lng: 126.881,
@@ -404,7 +404,7 @@ async function main() {
       },
       {
         name: '제11기계화보병연대 전방지휘소-3',
-        level: '대대',
+        level: '연대',
         branch: '기계화보병연대·전방지휘소',
         lat: 37.589,
         lng: 127.01,
@@ -419,7 +419,7 @@ async function main() {
       },
       {
         name: '제11기계화보병연대 전방지휘소-4',
-        level: '대대',
+        level: '사단',
         branch: '기계화보병연대·전방지휘소',
         lat: 37.578,
         lng: 127.136,
@@ -434,7 +434,7 @@ async function main() {
       },
       {
         name: '제11기계화보병연대 전방지휘소-5',
-        level: '대대',
+        level: '군단',
         branch: '기계화보병연대·전방지휘소',
         lat: 37.566,
         lng: 127.263,
