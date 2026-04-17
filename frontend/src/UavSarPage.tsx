@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { SensorStagePipelineFrame } from './SensorStagePipelineFrame'
 
-const DEMO_UAV_VIDEO = '/media/yolo-tank-1.mp4'
+const DEMO_UAV_VIDEO = '/media/uav/yolo-tank-1.mp4'
 
 type Props = {
   onContinue: () => void

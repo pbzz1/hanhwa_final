@@ -1,6 +1,6 @@
 /**
  * 대대(지휘통제실) 압축 시나리오 — 큰 지도(SAR)·작은 지도(대치) 공통 상수
- * 아군: 휴전선 이남 / 적: 이북 — 시뮬 남하 침공
+ * 아군: 군사분계선(MDL·휴전선) 이남 / 적: 이북 — 시뮬 남하 침공
  */
 
 import { DRONE_ENEMY_IDENTIFICATION_RANGE_KM } from './battlefield/droneEngagementConfig'
@@ -28,8 +28,8 @@ export const BATTALION_PYONGYANG_INVASION_ORIGIN = {
 
 /** 침공 축 출발지 — 함흥시 도심권 근사(동부 축선, seed 적 부대와 동일) */
 export const BATTALION_HAMHUNG_INVASION_ORIGIN = {
-  lat: 39.8417,
-  lng: 127.7264,
+  lat: 39.7017,
+  lng: 127.5064,
 } as const
 
 /** 전차 도로 부대 기동(시연) — 실제 MBT 도로 속도대(대략 35~45km/h) 중간값 */
@@ -103,19 +103,61 @@ export const BATTALION_SCENARIO = {
   ],
 } as const
 
-/** 휴전선(북위 38°) — 적 시뮬 위도와 비교 */
+/**
+ * 군사분계선(MDL·휴전선) 일대를 다룬 공개 보도 — 실제 지형선은 위도 한 줄과 다름을 설명할 때 참고.
+ * @see https://daily.hankooki.com/news/articleView.html?idxno=603048
+ */
+export const MDL_REFERENCE_ARTICLE_URL =
+  'https://daily.hankooki.com/news/articleView.html?idxno=603048' as const
+
+/**
+ * 시뮬 근사선의 기준 위도(북위 38° 직선) — 실제 MDL은 지형을 따르므로 본 값과 일치하지 않음.
+ * 적 접근 판정·지도 주황 점선은 이 근사에 기반함.
+ */
 export const DMZ_PARALLEL_38_N = 38
 
 /**
- * 적 표적이 북위 38° 부근(약 ±14km)에 있으면 true — 남하 시 ‘38선 접근’ 표시용
+ * Vite `public/` 정적 파일 — OpenStreetMap 관계 13563116 기반 군사분계선(MDL) MultiLineString (ODbL).
+ * 원본은 Overpass(kumi)로 수집 후 `mdl-osm-multilinestring.geojson`으로 변환해 저장함.
+ */
+export const MDL_OSM_GEOJSON_PUBLIC_PATH = '/geojson/mdl-osm-multilinestring.geojson' as const
+
+/**
+ * OSM GeoJSON 로드 실패 시 MapLibre 백업: 북위 38° 직선(휴전선 근사).
+ */
+export const DMZ_MDL_LATITUDE_FALLBACK_GEOJSON = {
+  type: 'FeatureCollection' as const,
+  features: [
+    {
+      type: 'Feature' as const,
+      properties: {
+        label: '군사분계선(MDL) 직선 백업' as const,
+        referenceUrl: MDL_REFERENCE_ARTICLE_URL,
+      },
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: [
+          [124.55, DMZ_PARALLEL_38_N],
+          [129.75, DMZ_PARALLEL_38_N],
+        ],
+      },
+    },
+  ],
+}
+
+/**
+ * 적 표적이 MDL 근사선(북위 38° 부근, 약 ±14km)에 있으면 true — 남하 시 군사분계선(MDL) 인접 표시용
  */
 export function isEnemyNearDmz38(lat: number): boolean {
   const delta = Math.abs(lat - DMZ_PARALLEL_38_N)
   return delta <= 0.125
 }
 
+/** 시드 `FriendlyUnit.name` 및 전장 지도 「아군 부대 위치」 버튼과 동일해야 함 */
+export const BATTALION_HQ_USER_ANCHOR_NAME = '대대 지휘소-01'
+
 export function isBattalionC2Unit(unit: { name: string }): boolean {
-  return unit.name.includes('지휘통제실')
+  return unit.name === BATTALION_HQ_USER_ANCHOR_NAME || unit.name.includes('지휘통제실')
 }
 
 /** 적–지휘통제실 거리 표시용 (첫 번째 접촉 표적 우선) */

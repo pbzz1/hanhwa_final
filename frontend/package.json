@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@types/maplibre-gl": "^1.13.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "maplibre-gl": "^5.20.0",
     "mgrs": "^2.1.0",
     "react": "^19.2.0",

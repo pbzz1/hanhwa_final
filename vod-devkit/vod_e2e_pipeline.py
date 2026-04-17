@@ -35,6 +35,7 @@ RULE_SCORE_LIKE = frozenset(
     }
 )
 HONEST_SPLITS = ("group_frame", "time", "contiguous_block")
+ALL_EXPERIMENT_SPLITS = ("random",) + HONEST_SPLITS
 
 
 def suppress_candidates(cluster_df_raw: pd.DataFrame, *, mode: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -179,7 +180,12 @@ def build_splits(df: pd.DataFrame, test_size: float, seed: int) -> dict[str, tup
     blk = s3.contiguous_block_ids(df["frame_order"], n_blocks=4)
     tr_b = np.where(blk <= 2)[0]
     te_b = np.where(blk == 3)[0]
-    return {"group_frame": (tr_g, te_g), "time": (tr_t, te_t), "contiguous_block": (tr_b, te_b)}
+    rng = np.random.RandomState(int(seed))
+    perm = rng.permutation(len(df))
+    n_te = max(1, int(round(len(df) * test_size)))
+    te_r = perm[:n_te]
+    tr_r = perm[n_te:]
+    return {"random": (tr_r, te_r), "group_frame": (tr_g, te_g), "time": (tr_t, te_t), "contiguous_block": (tr_b, te_b)}
 
 
 def _build_cls_models(opt: dict[str, bool], seed: int) -> dict[str, Any]:
@@ -230,7 +236,7 @@ def run_ml_experiments(
             continue
         X = df[cols].fillna(0).to_numpy(dtype=np.float64)
         for split_name, (tr, te) in split_dict.items():
-            if split_name not in HONEST_SPLITS:
+            if split_name not in ALL_EXPERIMENT_SPLITS:
                 continue
             Xtr, Xte = X[tr], X[te]
             ytr, yte = y_cls[tr], y_cls[te]
@@ -302,6 +308,19 @@ def select_honest_best(experiment_results_df: pd.DataFrame) -> pd.Series:
     ].copy()
     if sub.empty:
         raise RuntimeError("No honest anti-leakage classification results; check data / splits.")
+    sub["score"] = sub["macro_f1"] * 0.45 + sub["high_recall"] * 0.35 + sub["ranking_ap"].fillna(0) * 0.20
+    return sub.sort_values(["score", "macro_f1"], ascending=False).iloc[0]
+
+
+def select_overall_best(experiment_results_df: pd.DataFrame) -> pd.Series:
+    """Anti-leakage feature sets only, but any split (including random) allowed for diagnostic 'overall' pick."""
+    sub = experiment_results_df[
+        (experiment_results_df["task"] == "classification")
+        & (experiment_results_df["feature_set"].isin(["A_strict_anti_leakage", "B_moderate_anti_leakage"]))
+        & (experiment_results_df["macro_f1"].notna())
+    ].copy()
+    if sub.empty:
+        return pd.Series(dtype=float)
     sub["score"] = sub["macro_f1"] * 0.45 + sub["high_recall"] * 0.35 + sub["ranking_ap"].fillna(0) * 0.20
     return sub.sort_values(["score", "macro_f1"], ascending=False).iloc[0]
 
@@ -406,7 +425,8 @@ def compare_and_select_calibration(
                     ranking_ok = False
             if sat["sat_gt_0.99"] > 0.35:
                 ranking_ok = False
-            improves = (b <= b0 + 1e-4) and (e <= e0 + 1e-4) and ranking_ok
+            # Reject calibration if Brier or ECE is worse than raw (no slack vs raw).
+            improves = (b <= b0 + 1e-12) and (e <= e0 + 1e-12) and ranking_ok
             if improves:
                 best_name, best_p, best_b, best_e = name, p, b, e
                 best_rk_ap, best_p10 = ap, p10
@@ -486,6 +506,7 @@ class BranchResult:
     honest_feature_set: str = ""
     honest_model_obj: Any = None
     honest_feature_cols: list[str] = field(default_factory=list)
+    overall_best_row: pd.Series = field(default_factory=pd.Series)
     calibration_bundle: dict[str, Any] = field(default_factory=dict)
     cluster_df_calibrated: pd.DataFrame = field(default_factory=pd.DataFrame)
     cluster_df_final: pd.DataFrame = field(default_factory=pd.DataFrame)
@@ -609,6 +630,7 @@ def run_branch(
     res.split_summary_df = pd.DataFrame(split_rows)
 
     res.experiment_results_df = run_ml_experiments(res.cluster_df_rule, res.feature_set_dict, res.split_dict, opt, seed)
+    res.overall_best_row = select_overall_best(res.experiment_results_df)
     hrow = select_honest_best(res.experiment_results_df)
     res.honest_best_row = hrow
     res.honest_model_name = str(hrow["model"])

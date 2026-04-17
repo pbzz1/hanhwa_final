@@ -6,11 +6,11 @@ export type MarchPoint = { lat: number; lng: number }
 
 /** 시나리오 엔티티 id → 남하 목표(도로 라우팅 종점). 북한·동해안 일대에서 남쪽으로 잡음 */
 export const BATTLEFIELD_MBT_MARCH_GOALS: Record<number, MarchPoint> = {
-  // 38선(위도 약 38도) 부근까지 남하하도록 종점을 조정
+  // 군사분계선(MDL) 근사(위도 약 38°) 부근까지 남하하도록 종점을 조정
   9001: { lat: 37.99, lng: 126.42 },
-  9002: { lat: 38.02, lng: 127.44 },
+  9002: { lat: 37.88, lng: 127.22 },
   // 요청 반영: 제2기갑여단 예하 부대는 최종 남하를 소폭 줄여 레이더 범위 내에서 종료
-  9003: { lat: 38.18, lng: 127.36 },
+  9003: { lat: 38.04, lng: 127.14 },
   // 서부 축도 해상(황해) 쪽으로 빠지지 않도록 내륙 쪽 목표로 고정
   9050: { lat: 37.98, lng: 126.34 },
 }
@@ -86,7 +86,30 @@ export function positionAlongPolylineM(
   }
 }
 
+/**
+ * 현재 위치에 가장 가까운 폴리라인 꼭짓점까지의 누적 거리(미터).
+ * OSRM 점 밀도가 높을 때 드론 등을 궤적 위에 올리는 데 사용.
+ */
+export function alongMForNearestPathVertex(
+  poly: MarchPoint[],
+  cumM: number[],
+  point: MarchPoint,
+): number {
+  if (poly.length === 0 || cumM.length !== poly.length) return 0
+  let bestIdx = 0
+  let bestDKm = Infinity
+  for (let i = 0; i < poly.length; i += 1) {
+    const dKm = haversineKm(point, poly[i]!)
+    if (dKm < bestDKm) {
+      bestDKm = dKm
+      bestIdx = i
+    }
+  }
+  return cumM[bestIdx] ?? 0
+}
+
 const WEST_COAST_LAND_GUARD_LNG = 126.2
+const EAST_COAST_LAND_GUARD_LNG = 128.35
 
 function interpolatePolyline(points: MarchPoint[], steps: number): MarchPoint[] {
   if (points.length <= 1) return points.length === 1 ? [{ ...points[0]! }] : []
@@ -118,8 +141,9 @@ function interpolatePolyline(points: MarchPoint[], steps: number): MarchPoint[] 
 
 /** OSRM 실패 시 육상 우회 경유 경로를 사용해 해상 횡단을 방지 */
 export function fallbackStraightMarchPolyline(from: MarchPoint, to: MarchPoint, steps = 80): MarchPoint[] {
-  const safeFrom: MarchPoint = { lat: from.lat, lng: Math.max(from.lng, WEST_COAST_LAND_GUARD_LNG) }
-  const safeTo: MarchPoint = { lat: to.lat, lng: Math.max(to.lng, WEST_COAST_LAND_GUARD_LNG) }
+  const clampLandLng = (lng: number) => Math.min(EAST_COAST_LAND_GUARD_LNG, Math.max(lng, WEST_COAST_LAND_GUARD_LNG))
+  const safeFrom: MarchPoint = { lat: from.lat, lng: clampLandLng(from.lng) }
+  const safeTo: MarchPoint = { lat: to.lat, lng: clampLandLng(to.lng) }
   const trunkLng = Math.max(safeFrom.lng, safeTo.lng)
   const midLat = (safeFrom.lat + safeTo.lat) / 2
 

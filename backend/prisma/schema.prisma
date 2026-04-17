@@ -56,6 +56,10 @@ enum UnitLevel {
   소대
   중대
   대대
+  연대
+  사단
+  군단
+  특수임무부대
 }
 
 enum Readiness {
@@ -131,6 +135,8 @@ model InfiltrationPoint {
   codename         String
   lat              Float
   lng              Float
+  /// 해발 표고(m) — 데모·시드 값(DEM 비연동)
+  elevationM       Int                 @default(100)
   threatLevel      ThreatLevel
   estimatedCount   Int
   observedAt       DateTime
