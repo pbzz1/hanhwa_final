@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { DispatchMessageBody } from './DispatchMessageBody'
 import type {
   DispatchAttachmentFlags,
   DispatchMessage,
@@ -236,7 +237,7 @@ export function DispatchPanel({
               <strong>{row.title}</strong>
               <span>{`${row.messageType} · ${row.priority}`}</span>
             </div>
-            <p className="dispatch-panel__log-content">{row.content}</p>
+            <DispatchMessageBody message={row} className="dispatch-panel__log-content" />
             <p className="dispatch-panel__log-meta muted">
               {`${row.receiverUnitCode} ${row.receiverUnitName} · ${new Date(row.createdAt).toLocaleString('ko-KR')}`}
             </p>

@@ -33,6 +33,8 @@ export type DispatchAttachmentFlags = {
   sensorAnalysis: boolean
 }
 
+export type DispatchMessageContentFormat = 'plain' | 'html'
+
 export type DispatchMessage = {
   id: string
   receiverUnitId: number
@@ -41,6 +43,8 @@ export type DispatchMessage = {
   title: string
   messageType: DispatchMessageType
   content: string
+  /** html: 앱이 생성한 표 HTML만 넣을 것(dangerouslySetInnerHTML 전용) */
+  contentFormat?: DispatchMessageContentFormat
   priority: DispatchPriority
   attachments: DispatchAttachmentFlags
   relatedEnemyId?: number | null

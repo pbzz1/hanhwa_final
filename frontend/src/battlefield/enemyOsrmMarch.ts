@@ -86,6 +86,28 @@ export function positionAlongPolylineM(
   }
 }
 
+/**
+ * 현재 위치에 가장 가까운 폴리라인 꼭짓점까지의 누적 거리(미터).
+ * OSRM 점 밀도가 높을 때 드론 등을 궤적 위에 올리는 데 사용.
+ */
+export function alongMForNearestPathVertex(
+  poly: MarchPoint[],
+  cumM: number[],
+  point: MarchPoint,
+): number {
+  if (poly.length === 0 || cumM.length !== poly.length) return 0
+  let bestIdx = 0
+  let bestDKm = Infinity
+  for (let i = 0; i < poly.length; i += 1) {
+    const dKm = haversineKm(point, poly[i]!)
+    if (dKm < bestDKm) {
+      bestDKm = dKm
+      bestIdx = i
+    }
+  }
+  return cumM[bestIdx] ?? 0
+}
+
 const WEST_COAST_LAND_GUARD_LNG = 126.2
 const EAST_COAST_LAND_GUARD_LNG = 128.35
 

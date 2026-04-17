@@ -7,8 +7,20 @@ const demoVideoUrl =
   'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 
 /** YOLO 전차 인식 데모 영상 (public/media) */
-const yoloTankInfiltrationVideoUrl = '/media/yolo-tank-1.mp4';
-const yoloTankSituationVideoUrl = '/media/yolo-tank-3.mp4';
+const yoloTankInfiltrationVideoUrl = '/media/uav/yolo-tank-1.mp4';
+const yoloTankSituationVideoUrl = '/media/uav/yolo-tank-3.mp4';
+
+/**
+ * 소형무인정찰 N소대 고정 클립 — `frontend/src/App.tsx`의 `droneFixedMediaVideoPath`와 동일 규칙:
+ * `(N-1) % 3` → china / demo-drone-map / 천마 순환.
+ */
+const DRONE_PLATOON_DEMO_VIDEOS = [
+  '/media/drone/china-type99.mp4',
+  '/media/drone/demo-drone-map.mp4',
+  '/media/drone/north_korea-M2020-천마2호.mp4',
+] as const;
+const droneDemoVideoForPlatoon = (platoonIndex0: number) =>
+  DRONE_PLATOON_DEMO_VIDEOS[platoonIndex0 % DRONE_PLATOON_DEMO_VIDEOS.length]!;
 
 /** 한반도 데모: 북위 38° 기준 — 적 표적 등 */
 const PARALLEL_38_N = 38;
@@ -231,7 +243,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankInfiltrationVideoUrl,
+        situationVideoUrl: droneDemoVideoForPlatoon(0),
       },
       {
         name: '소형무인정찰 2소대',
@@ -246,7 +258,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankInfiltrationVideoUrl,
+        situationVideoUrl: droneDemoVideoForPlatoon(1),
       },
       {
         name: '소형무인정찰 3소대',
@@ -261,7 +273,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankInfiltrationVideoUrl,
+        situationVideoUrl: droneDemoVideoForPlatoon(2),
       },
       {
         name: '소형무인정찰 4소대',
@@ -276,7 +288,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankInfiltrationVideoUrl,
+        situationVideoUrl: droneDemoVideoForPlatoon(3),
       },
       {
         name: '소형무인정찰 5소대',
@@ -291,7 +303,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankInfiltrationVideoUrl,
+        situationVideoUrl: droneDemoVideoForPlatoon(4),
       },
 
       // 대대급 TPC(전술지휘소) — 편제상 대대 본부

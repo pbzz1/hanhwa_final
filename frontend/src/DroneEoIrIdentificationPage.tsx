@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { SensorStagePipelineFrame } from './SensorStagePipelineFrame'
 
-const DEMO_EOIR_VIDEO = '/media/yolo-tank-2.mp4'
+const DEMO_EOIR_VIDEO = '/media/drone/china-type99.mp4'
 
 type PanelProps = {
   /** 통합 시나리오 4단계 안에 넣을 때 여백·제목·중복 링크 축소 */

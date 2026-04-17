@@ -15,20 +15,20 @@ export type BattlefieldPhasePanelCopy = {
 
 export const BATTLEFIELD_PHASE_PANEL: Record<Phase, BattlefieldPhasePanelCopy> = {
   [BattlefieldScenarioPhase.IDLE]: {
-    title: '대기 · 작전 구역 미선택',
+    title: '대기 · 작전권역 미선택',
     description:
-      '지도에서 한반도 작전 구역(대략 한반도 본토) 빈 곳을 클릭하거나, 아래 버튼으로 구역을 확정하세요.',
+      '지도에서 한반도 작전권역(대략 한반도 본토) 빈 곳을 클릭하거나, 아래 버튼으로 권역을 확정하세요.',
     recommendedSensor: '광역 상황 인지',
-    recommendDetail: '우선 작전 구역을 확정한 뒤 SAR 광역 스캔으로 전환합니다.',
+    recommendDetail: '우선 작전권역을 확정한 뒤 SAR 광역 스캔으로 전환합니다.',
     mapHint: '적·아군 마커가 아닌 해상/육상 빈 곳을 클릭하면 구역이 선택됩니다.',
   },
   [BattlefieldScenarioPhase.REGION_SELECTED]: {
-    title: '작전 구역 확정',
+    title: '작전권역 확정',
     description:
-      '함흥 축선 등 동부 관심 구역으로 시야를 맞춘 뒤 SAR 전개를 시작하세요. SAR 버튼 또는 적 마커 클릭으로 스캔 단계로 들어갈 수 있습니다.',
+      '함흥 축선 등 동부 관심 구역으로 시야를 맞춘 뒤 SAR 탐지 전개를 시작하세요. SAR 버튼 또는 적 마커 클릭으로 스캔 단계로 들어갈 수 있습니다.',
     recommendedSensor: 'SAR 광역 관측',
     recommendDetail: '위성 링크 이상 시 SAR-2 예비 광역 채널로 전환합니다.',
-    mapHint: '「SAR 전개」 버튼 또는 지도의 적 표적을 클릭해 SAR_SCAN으로 진입합니다.',
+    mapHint: '「SAR 탐지 전개」 버튼 또는 지도의 적 표적을 클릭해 SAR_SCAN으로 진입합니다.',
   },
   [BattlefieldScenarioPhase.SAR_SCAN]: {
     title: 'SAR 광역 스캔',
@@ -137,7 +137,7 @@ export {
 } from './sarMvp'
 
 export const BATTLEFIELD_SCENARIO_NOTICES = {
-  regionSelected: '작전 구역이 선택되었습니다. SAR 전개를 진행하세요.',
+  regionSelected: '작전권역이 확정되었습니다. SAR 탐지 전개를 진행하세요.',
   enterSarScan: '함흥 방향 SAR 위성 링크 이상 감지. SAR-2 광역 관측으로 전환합니다.',
   uavDispatched:
     'UAV-07이 GRD 후보 방향으로 출동했습니다. 경로상 적 전차가 탐지되면 동일 표적을 추적합니다.',
@@ -174,7 +174,7 @@ export const SERVICE_SENSOR_SIMULATION_HELP: Record<
 }
 
 export const SERVICE_SENSOR_SIMULATION_FOOTNOTE =
-  '단계(SAR→UAV→드론→FMCW)는 지도에서 한반도 작전 구역을 확정한 뒤, 좌측 센서 버튼으로 진행합니다. 지도·자산 조작만으로는 단계가 넘어가지 않습니다.'
+  '단계(SAR→UAV→드론→FMCW)는 지도에서 한반도 작전권역을 확정한 뒤, 좌측 센서 버튼으로 진행합니다. 지도·자산 조작만으로는 단계가 넘어가지 않습니다.'
 
 /** 시나리오 완료 시 패널용 요약 줄 */
 export const BATTLEFIELD_SCENARIO_SUMMARY_BULLETS: readonly string[] = [
@@ -196,9 +196,9 @@ export function getEntityPhasePopupNote(
       NEUTRAL: '[단계: 대기] 중립 이동체로 분류됩니다.',
     },
     REGION_SELECTED: {
-      ENEMY: '[단계: 구역 확정] SAR 전개 우선 표적 후보입니다.',
-      ALLY: '[단계: 구역 확정] 연동 감시 자산입니다.',
-      NEUTRAL: '[단계: 구역 확정] 민간 이동 구분 유지.',
+      ENEMY: '[단계: 권역 확정] SAR 탐지 전개 우선 표적 후보입니다.',
+      ALLY: '[단계: 권역 확정] 연동 감시 자산입니다.',
+      NEUTRAL: '[단계: 권역 확정] 민간 이동 구분 유지.',
     },
     SAR_SCAN: {
       ENEMY: '[단계: SAR] 광역 IW 내 이동 에너지 후보로 추적 중.',
@@ -232,7 +232,7 @@ export function getEntityPhasePopupNote(
 export function getFriendlyAssetPhaseNote(phase: Phase, category: string): string {
   const base = `[단계: ${phase}] `
   if (phase === BattlefieldScenarioPhase.IDLE) return `${base}일반 표시.`
-  if (phase === BattlefieldScenarioPhase.REGION_SELECTED) return `${base}작전 구역 내 아군 자산.`
+  if (phase === BattlefieldScenarioPhase.REGION_SELECTED) return `${base}작전권역 내 아군 자산.`
   if (phase === BattlefieldScenarioPhase.SAR_SCAN) return `${base}SAR 스캔 시 전자적 노출 최소화.`
   if (phase === BattlefieldScenarioPhase.UAV_DISPATCHED) return `${base}UAV와 데이터링크 동기화.`
   if (phase === BattlefieldScenarioPhase.DRONE_RECON) return `${base}드론 호출 가능 거리 내 배치.`

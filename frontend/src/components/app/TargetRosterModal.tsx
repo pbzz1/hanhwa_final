@@ -1,4 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import {
+  targetRosterTableRowToDragRow,
+  type TargetRosterDragRow,
+} from '../../utils/targetRosterMessageHtml'
 
 export type TargetRosterTableRow = {
   rank: number
@@ -85,6 +89,54 @@ export function TargetRosterModal({
     if (!el) return
     el.indeterminate = someEnemySelected
   }, [someEnemySelected, allEnemySelected, tab, open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
+      if (event.key !== 'Enter') return
+      if (tab !== 'enemy') return
+      const selectedCount = selectedEnemyInfiltrationIds.length
+      const canSend =
+        selectedCount > 0 &&
+        sendReceiverOptions.length > 0 &&
+        selectedSendReceiverUnitId != null &&
+        sendReceiverOptions.some((o) => o.id === selectedSendReceiverUnitId)
+      if (!canSend) return
+      const el = event.target
+      if (el instanceof HTMLTextAreaElement) return
+      if (el instanceof HTMLInputElement && (el.type === 'text' || el.type === 'search')) return
+      event.preventDefault()
+      onSendSelectedEnemies()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    open,
+    tab,
+    selectedEnemyInfiltrationIds,
+    sendReceiverOptions,
+    selectedSendReceiverUnitId,
+    onSendSelectedEnemies,
+  ])
+
+  const serializeEnemyDragPayload = useCallback(
+    (row: TargetRosterTableRow): string | null => {
+      const id = row.enemyInfiltrationId
+      if (tab !== 'enemy' || id == null) return null
+      const useBulk = selectedEnemyInfiltrationIds.length > 0 && selectedEnemyInfiltrationIds.includes(id)
+      const ids = useBulk ? [...selectedEnemyInfiltrationIds] : [id]
+      const picked = enemyRows.filter(
+        (r) => r.enemyInfiltrationId != null && ids.includes(r.enemyInfiltrationId),
+      )
+      const dragRows = picked
+        .map((r) => targetRosterTableRowToDragRow(r))
+        .filter((r): r is TargetRosterDragRow => r != null)
+      if (dragRows.length === 0) return null
+      return JSON.stringify({ v: 1, kind: 'target-roster-enemy', rows: dragRows })
+    },
+    [tab, enemyRows, selectedEnemyInfiltrationIds],
+  )
 
   if (!open) return null
 
@@ -218,11 +270,35 @@ export function TargetRosterModal({
                       const rowSelected =
                         infilId != null && selectedEnemyInfiltrationIds.includes(infilId)
 
+                      const draggableEnemy = tab === 'enemy' && infilId != null
+                      const rowClass = [
+                        enemyClickable || assetClickable ? 'target-roster-table__row--clickable' : '',
+                        draggableEnemy ? 'target-roster-table__row--draggable' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')
+
                       return (
                         <tr
                           key={`${tab}-${row.rank}-${row.targetNo}`}
-                          className={
-                            enemyClickable || assetClickable ? 'target-roster-table__row--clickable' : undefined
+                          className={rowClass.length > 0 ? rowClass : undefined}
+                          draggable={draggableEnemy}
+                          onDragStart={
+                            draggableEnemy
+                              ? (e) => {
+                                  const json = serializeEnemyDragPayload(row)
+                                  if (!json) return
+                                  e.dataTransfer.setData('application/json', json)
+                                  e.dataTransfer.effectAllowed = 'copy'
+                                  try {
+                                    const parsed = JSON.parse(json) as { rows?: unknown[] }
+                                    const n = Array.isArray(parsed.rows) ? parsed.rows.length : 1
+                                    e.dataTransfer.setData('text/plain', `표적 ${n}건`)
+                                  } catch {
+                                    e.dataTransfer.setData('text/plain', '표적 일람')
+                                  }
+                                }
+                              : undefined
                           }
                           tabIndex={enemyClickable || assetClickable ? 0 : undefined}
                           onClick={
@@ -338,7 +414,7 @@ export function TargetRosterModal({
                     선택 표적 전송{selectedCount > 0 ? ` (${selectedCount}건)` : ''}
                   </button>
                   <p className="muted target-roster-modal__bulk-hint">
-                    체크한 적 표적을 위에서 선택한 아군 부대로 정보 전달합니다. 전송 후 우측 채팅창에서 확인할 수 있습니다.
+                    체크한 적 표적을 위에서 선택한 아군 부대로 전송하거나, 아군 채팅을 연 뒤 행을 채팅창으로 끌어 넣을 수 있습니다. 전송 내용은 채팅에 표 형태로 표시됩니다.
                   </p>
                 </div>
               )}

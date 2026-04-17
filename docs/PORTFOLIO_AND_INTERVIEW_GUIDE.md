@@ -217,7 +217,7 @@
 |------|------|
 | **사용자 동작** | EO/IR 설명·데모 영상 시청, 다른 페이지로 링크 이동. |
 | **관련 파일** | `frontend/src/DroneEoIrIdentificationPage.tsx` (`DroneEoIrIdentificationPanel`, `DroneEoIrIdentificationPage`), `frontend/src/SensorStagePipelineFrame.tsx` |
-| **핵심** | `DroneEoIrIdentificationPage`는 `<DroneEoIrIdentificationPanel embedded={false} pageClassName="drone-eoir-page" />`. 데모 영상 `DEMO_EOIR_VIDEO = '/media/yolo-tank-2.mp4'`. |
+| **핵심** | `DroneEoIrIdentificationPage`는 `<DroneEoIrIdentificationPanel embedded={false} pageClassName="drone-eoir-page" />`. 데모 영상 `DEMO_EOIR_VIDEO = '/media/drone/china-type99.mp4'`. |
 | **데이터 흐름** | 정적 콘텐츠 + `<NavLink to="/sensor-pipeline?step=drone" />` 등 **클라이언트 내비게이션**. |
 | **포트폴리오 포인트** | “같은 패널을 **시나리오 임베드용(`embedded`)**과 **전용 라우트**로 재사용”. |
 | **잘한 점** | `SensorStagePipelineFrame`으로 **공통 스테이지 UI** 재사용. |

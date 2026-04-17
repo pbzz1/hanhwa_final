@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { DispatchMessage } from '../../types/commandCenter'
+import type { TargetRosterDragRow } from '../../utils/targetRosterMessageHtml'
+import { parseTargetRosterDragPayload } from '../../utils/targetRosterMessageHtml'
+import { DispatchMessageBody } from './DispatchMessageBody'
 
 type TargetRosterChatDockProps = {
   unitId: number
@@ -8,6 +11,8 @@ type TargetRosterChatDockProps = {
   messages: DispatchMessage[]
   onClose: () => void
   onSend: (content: string) => void
+  /** 표적 일람표 적 행을 채팅 영역으로 드롭했을 때 */
+  onDropEnemyRows?: (rows: TargetRosterDragRow[]) => void
 }
 
 function formatChatTime(iso: string): string {
@@ -25,6 +30,7 @@ export function TargetRosterChatDock({
   messages,
   onClose,
   onSend,
+  onDropEnemyRows,
 }: TargetRosterChatDockProps) {
   const titleId = useId()
   const [draft, setDraft] = useState('')
@@ -46,6 +52,8 @@ export function TargetRosterChatDock({
     onSend(text)
     setDraft('')
   }
+
+  const dropEnabled = typeof onDropEnemyRows === 'function'
 
   return (
     <aside
@@ -73,9 +81,38 @@ export function TargetRosterChatDock({
         </button>
       </header>
 
-      <div ref={listRef} className="target-roster-chat-dock__kt-scroll" role="log" aria-live="polite">
+      <div
+        ref={listRef}
+        className={`target-roster-chat-dock__kt-scroll${dropEnabled ? ' target-roster-chat-dock__kt-scroll--droppable' : ''}`}
+        role="log"
+        aria-live="polite"
+        onDragOver={
+          dropEnabled
+            ? (e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'copy'
+              }
+            : undefined
+        }
+        onDrop={
+          dropEnabled
+            ? (e) => {
+                e.preventDefault()
+                const raw = e.dataTransfer.getData('application/json')
+                const parsed = parseTargetRosterDragPayload(raw)
+                if (parsed && onDropEnemyRows) {
+                  onDropEnemyRows(parsed.rows)
+                }
+              }
+            : undefined
+        }
+      >
         {sortedAsc.length === 0 && (
-          <p className="target-roster-chat-dock__kt-empty muted">대화가 없습니다. 메시지를 남겨보세요.</p>
+          <p className="target-roster-chat-dock__kt-empty muted">
+            {dropEnabled
+              ? '대화가 없습니다. 표적 일람표에서 행을 끌어 넣거나 메시지를 입력하세요.'
+              : '대화가 없습니다. 메시지를 남겨보세요.'}
+          </p>
         )}
         {sortedAsc.map((row) => (
           <div key={row.id} className="target-roster-chat-dock__kt-row target-roster-chat-dock__kt-row--out">
@@ -84,7 +121,7 @@ export function TargetRosterChatDock({
                 <span className="target-roster-chat-dock__kt-label">{row.title}</span>
               )}
               <div className="target-roster-chat-dock__kt-bubble">
-                <p className="target-roster-chat-dock__kt-bubble-text">{row.content}</p>
+                <DispatchMessageBody message={row} className="target-roster-chat-dock__kt-bubble-text" />
               </div>
               <time className="target-roster-chat-dock__kt-meta" dateTime={row.createdAt}>
                 {formatChatTime(row.createdAt)} · {row.messageType}

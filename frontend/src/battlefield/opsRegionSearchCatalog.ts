@@ -44,10 +44,22 @@ function scoreMatch(queryNorm: string, aliasNorm: string): number {
 
 const ROWS: CatalogRow[] = [
   {
-    aliases: ['한반도', '대한민국', '남한', '한국', '작전구역', '한반도작전구역', 'korea', 'rok', 'southkorea'],
+    aliases: [
+      '한반도',
+      '대한민국',
+      '남한',
+      '한국',
+      '작전구역',
+      '작전권역',
+      '한반도작전구역',
+      '한반도작전권역',
+      'korea',
+      'rok',
+      'southkorea',
+    ],
     hit: {
       kind: 'fitBounds',
-      label: '한반도 작전 구역',
+      label: '한반도 작전권역',
       west: 124.5,
       south: 33.9,
       east: 131.5,

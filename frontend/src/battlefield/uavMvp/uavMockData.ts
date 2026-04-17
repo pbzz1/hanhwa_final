@@ -32,7 +32,7 @@ export const UAV_MVP_PLATFORM = {
   sarFollowupLine:
     'SAR-2 광역 후보 격자(함흥 남하 축)에 대한 2차 확인 자산 — GRD 변화 셀과 동일 타깃 우선 관측',
   mediaKind: 'video' as const,
-  mediaUrl: '/media/yolo-tank-2.mp4',
+  mediaUrl: '/media/uav/yolo-tank-2.mp4',
   mediaCaption: 'EO/IR 클립(전차 유사 목표 추적)',
   tankIdentification: 'MBT 유사 · T-72 계열',
   identificationConfidence: '신뢰도 0.82 (EO/IR 융합)',

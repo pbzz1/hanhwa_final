@@ -36,7 +36,7 @@ export function AirborneSarPage({ onContinue }: Props) {
           </ul>
           <figure className="sensor-sar-input-figure" style={{ marginTop: 12 }}>
             <img
-              src="/media/sar-grd-example.png"
+              src="/media/sar/sar-grd-example.png"
               alt="GRD 진폭 SAR 예시 — 수역·육상·고반사 표적"
               loading="lazy"
             />
@@ -65,7 +65,7 @@ export function AirborneSarPage({ onContinue }: Props) {
           </p>
           <figure className="sensor-sar-input-figure sensor-sar-aoi-block__figure">
             <img
-              src="/media/sar-aoi-yolo-ships.png"
+              src="/media/sar/sar-aoi-yolo-ships.png"
               alt="집중 감시 구역 SAR 영상에서 선박 두 표적이 빨간 박스와 ship 라벨·신뢰도로 표시된 예시"
               loading="lazy"
             />

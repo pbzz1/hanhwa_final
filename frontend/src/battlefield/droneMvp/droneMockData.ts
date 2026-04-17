@@ -36,7 +36,7 @@ export const DRONE_MVP_PLATFORM = {
   afterUavContextLine:
     'UAV-07 광역 EO/IR 확인 후 동일 표적에 대한 저고도·근거리 EO 스트립 — APC/MBT 윤곽·열특성 근접 관측',
   mediaKind: 'video' as const,
-  mediaUrl: '/media/yolo-tank-3.mp4',
+  mediaUrl: '/media/uav/yolo-tank-3.mp4',
   mediaCaption: '근접 정찰(저고도 · 좁은 시야)',
   targetClass: 'MBT 유사(전차) · APC 혼재 구역 배제',
   threatLevel: '중간' as DroneThreatLevel,
