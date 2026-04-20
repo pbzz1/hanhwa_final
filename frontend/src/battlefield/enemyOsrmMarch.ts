@@ -36,9 +36,46 @@ export function isEnemyMarchLandPoint(point: MarchPoint): boolean {
   )
 }
 
+/** OSRM/보간에서 동해·황해로 튀는 비현실적 점프(해상 횡단) 차단 — 한반도 MBT 궤적 데모용 */
+const ENEMY_MARCH_MAX_SEGMENT_KM = 85
+
 export function isEnemyMarchLandPolyline(polyline: MarchPoint[]): boolean {
   if (!Array.isArray(polyline) || polyline.length < 2) return false
-  return polyline.every((point) => isEnemyMarchLandPoint(point))
+  if (!polyline.every((point) => isEnemyMarchLandPoint(point))) return false
+  for (let i = 1; i < polyline.length; i += 1) {
+    if (haversineKm(polyline[i - 1]!, polyline[i]!) > ENEMY_MARCH_MAX_SEGMENT_KM) return false
+  }
+  return true
+}
+
+/**
+ * MBT 핀이 서해·동해 연안 밖으로 나가는 경우를 줄이기 위한 러프 보정(실제 해안선 미사용).
+ * 함흥~원산 일대에서 동경이 크면 동해상으로 찍히는 TRK 표적 완화.
+ */
+export function snapEnemyMbtPoseToLandCorridor(p: MarchPoint): MarchPoint {
+  let { lat, lng } = p
+  if (lat >= 38.35 && lat <= 41.45 && lng < 126.02) {
+    lng = Math.max(lng, 126.02)
+  }
+  if (lat >= 37.35 && lat <= 38.95 && lng < 125.42) {
+    lng = Math.max(lng, 125.42)
+  }
+  // 북한 동부(함흥·원산 축): 동경이 너무 크면 대부분 동해 면상 → 육지 쪽으로 상한
+  if (lat >= 38.45 && lat <= 41.55 && lng > 127.92) {
+    lng = Math.min(lng, 127.92)
+  }
+  if (lat >= 37.2 && lat < 38.45 && lng > 129.05) {
+    lng = Math.min(lng, 129.05)
+  }
+  if (lng > 129.32) {
+    lng = Math.min(lng, 129.25)
+  }
+  return { lat, lng }
+}
+
+/** OSRM 궤적 정점을 육상 보정(연안 밖 정점 누적 방지) */
+export function snapMarchPolylineVertices(poly: MarchPoint[]): MarchPoint[] {
+  return poly.map((pt) => snapEnemyMbtPoseToLandCorridor(pt))
 }
 
 function haversineKm(a: MarchPoint, b: MarchPoint): number {
@@ -109,7 +146,8 @@ export function alongMForNearestPathVertex(
 }
 
 const WEST_COAST_LAND_GUARD_LNG = 126.2
-const EAST_COAST_LAND_GUARD_LNG = 128.35
+/** 북한 동해안 데모: 128°대는 면상이 많아 남하 보조선 상한을 육지 쪽으로 제한 */
+const EAST_COAST_LAND_GUARD_LNG = 127.92
 
 function interpolatePolyline(points: MarchPoint[], steps: number): MarchPoint[] {
   if (points.length <= 1) return points.length === 1 ? [{ ...points[0]! }] : []
@@ -159,7 +197,7 @@ export function fallbackStraightMarchPolyline(from: MarchPoint, to: MarchPoint, 
     return Math.abs(prev.lat - point.lat) > 1e-8 || Math.abs(prev.lng - point.lng) > 1e-8
   })
 
-  return interpolatePolyline(anchors, steps)
+  return interpolatePolyline(anchors, steps).map((pt) => snapEnemyMbtPoseToLandCorridor(pt))
 }
 
 export function drivingRouteRequestUrl(apiBase: string, from: MarchPoint, to: MarchPoint): string {

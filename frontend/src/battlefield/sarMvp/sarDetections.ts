@@ -6,13 +6,35 @@ import hamhungToReconBnRoute from './hamhungToReconBnRoute.json'
 
 export const SAR_OBSERVATION_ZONE_GEOJSON = {
   type: 'FeatureCollection' as const,
+  /** 광역을 먼저·스팟라이트를 나중에 두어 같은 fill 레이어에서 스팟라이트가 위에 그려지고 히트 테스트도 우선되게 함 */
   features: [
     {
       type: 'Feature' as const,
       properties: {
         id: 'sar2-wide-zone',
-        name: 'SAR-2 광역 관측 지역',
-        note: '함흥 축선 SAR 위성 정보 소실 구간',
+        name: 'ScanSAR 광역 탐지 지역',
+        note: 'Spotlight와 별도의 광역 탐지 보조 영역',
+      },
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [
+          [
+            // 광역 탐지: 중심(126.7, 39.0) 유지 · 이전 대비 가로·세로 약 40% 축소(×0.6)
+            [125.188, 39.864],
+            [128.212, 39.864],
+            [128.212, 38.136],
+            [125.188, 38.136],
+            [125.188, 39.864],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature' as const,
+      properties: {
+        id: 'sar2-spotlight-zone',
+        name: '위성 SAR-spotlight 탐지 지역',
+        note: 'SAR-2 스팟라이트(15×15) 정밀 관측 구역',
       },
       geometry: {
         type: 'Polygon' as const,
@@ -30,10 +52,29 @@ export const SAR_OBSERVATION_ZONE_GEOJSON = {
   ],
 }
 
+/** `sar2-spotlight-zone` 외접 사각형 — 지도 포커스·UI 연동용 */
+export const SAR_SPOTLIGHT_ZONE_BOUNDS = {
+  west: 127.34,
+  south: 39.58,
+  east: 127.68,
+  north: 39.8,
+} as const
+
+/** 겹침 구간에서 광역보다 스팟라이트 히트를 우선(맵 이벤트 features[0]이 광역인 경우 방지) */
+export function pickSarObservationZoneHit<T extends { properties?: Record<string, unknown> | null | undefined }>(
+  features: readonly T[] | undefined | null,
+): T | undefined {
+  if (!features?.length) return undefined
+  const spotlight = features.find((f) => String(f.properties?.id ?? '') === 'sar2-spotlight-zone')
+  if (spotlight) return spotlight
+  return features[0]
+}
+
 /**
  * 함흥 집결 → 감시부대 대대 방면 예상 기동로
  * - 북측: OSRM(Project-OSRM)·OSM 도로 driving (함흥→원산→남단 인근)
  * - 남측: OSRM driving (강릉 인근→대대 지휘소 좌표)
+ * - 동해 면상 횡단 구간은 천내·내륙 축 보간으로 대체(데모)
  * - 군사분계 비연결 구간: 직선 보간(데모)
  */
 export const SAR_ENEMY_MOVEMENT_ROUTE_GEOJSON = hamhungToReconBnRoute as unknown as {
@@ -90,25 +131,41 @@ export const GRD_DISPATCH_RANGE_KM = 220
 
 export const GRD_FALLBACK_SAR_UAV_ORIGIN = { lat: 37.67, lng: 126.95 } as const
 
-function grdMotionBlobRing(cx: number, cy: number): [number, number][] {
+/** 노란색(전차) GRD 링 가시성 강화 — 기존 대비 2배 확대 */
+export const GRD_TANK_MOTION_RING_SCALE = 2.56
+
+export function grdMotionBlobRing(cx: number, cy: number, scale = 1): [number, number][] {
+  // 중심점(cx, cy)을 기준으로 대칭 링을 사용해 마커와 시각 중심이 정확히 겹치도록 유지
+  const rx = 0.038 * scale
+  const ry = 0.03 * scale
   return [
-    [cx - 0.11, cy - 0.05],
-    [cx + 0.07, cy - 0.07],
-    [cx + 0.12, cy + 0.03],
-    [cx + 0.02, cy + 0.08],
-    [cx - 0.09, cy + 0.04],
-    [cx - 0.11, cy - 0.05],
+    [cx - rx, cy],
+    [cx - rx * 0.45, cy - ry],
+    [cx + rx * 0.55, cy - ry * 0.82],
+    [cx + rx, cy + ry * 0.12],
+    [cx + rx * 0.38, cy + ry],
+    [cx - rx * 0.58, cy + ry * 0.86],
+    [cx - rx, cy],
   ]
 }
 
-const GRD_DETECTION_SPEC = [
-  // 전차(적색) 2개는 요청대로 주요 적 부대 위치(제1기갑대대·제2기갑여단 예하 부대)에 정렬
-  { id: 'grd-mot-1', cx: 125.7625, cy: 39.0392, classLabel: '전차', probPercent: 95 }, // Track 49001 근처
-  { id: 'grd-mot-2', cx: 127.265, cy: 39.583, classLabel: '전차', probPercent: 88 }, // E49003 근처
-  { id: 'grd-mot-3', cx: 127.315, cy: 39.7017, classLabel: '전차', probPercent: 78 }, // 함흥 축선 보조 전차 후보
-  // 일반차량(청색)은 적 주력 2축과 겹치지 않게 분리 배치
-  { id: 'grd-mot-4', cx: 126.96, cy: 38.98, classLabel: '일반차량', probPercent: 92 },
-  { id: 'grd-mot-5', cx: 126.34, cy: 39.46, classLabel: '일반차량', probPercent: 71 },
+export const GRD_DETECTION_SPEC = [
+  /**
+   * 요청 반영:
+   * - 사각 범위(2번째 이미지) 내부 적 집결 지역은 모두 노란색 GRD(전차)로 표기
+   * - 파란색 GRD(일반차량)는 범위 외곽으로 분리해 서로 겹치지 않게 배치
+   */
+  // 노란색(전차): 화면에 보이는 적 TRK 표식 중심과 최대한 직접 매핑
+  { id: 'grd-mot-1', cx: 126.06, cy: 39.66, classLabel: '전차', probPercent: 95 }, // TRK49050
+  { id: 'grd-mot-2', cx: 126.03, cy: 39.31, classLabel: '전차', probPercent: 89 }, // TRK58
+  { id: 'grd-mot-3', cx: 126.04, cy: 38.99, classLabel: '전차', probPercent: 84 }, // TRK48
+  { id: 'grd-mot-4', cx: 126.02, cy: 38.72, classLabel: '전차', probPercent: 82 }, // TRK52
+  { id: 'grd-mot-5', cx: 127.21, cy: 39.55, classLabel: '전차', probPercent: 88 }, // TRK49
+  { id: 'grd-mot-6', cx: 127.03, cy: 39.03, classLabel: '전차', probPercent: 81 }, // TRK50
+  // 파란색(일반차량): 박스 하단 바깥으로 완전히 분리 배치
+  { id: 'grd-mot-7', cx: 125.52, cy: 38.58, classLabel: '일반차량', probPercent: 70 },
+  { id: 'grd-mot-8', cx: 126.62, cy: 38.54, classLabel: '일반차량', probPercent: 73 },
+  { id: 'grd-mot-9', cx: 127.56, cy: 38.60, classLabel: '일반차량', probPercent: 76 },
 ] as const
 
 export const GRD_MOTION_DETECTIONS_GEOJSON = {
@@ -125,7 +182,9 @@ export const GRD_MOTION_DETECTIONS_GEOJSON = {
     },
     geometry: {
       type: 'Polygon' as const,
-      coordinates: [grdMotionBlobRing(row.cx, row.cy)],
+      coordinates: [
+        grdMotionBlobRing(row.cx, row.cy, row.classLabel === '전차' ? GRD_TANK_MOTION_RING_SCALE : 1),
+      ],
     },
   })),
 }

@@ -89,6 +89,124 @@
   margin-top: 0;
 }
 
+.sidebar-theory-tabs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sidebar-theory-tab {
+  border: 1px solid var(--hud-border);
+  border-radius: 8px;
+  background: rgba(12, 22, 30, 0.72);
+  color: var(--hud-muted);
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 12px;
+  transition: all 0.18s ease;
+}
+
+.sidebar-theory-tab:hover {
+  color: var(--hud-ink);
+  border-color: var(--hud-border-strong);
+  box-shadow: var(--hud-glow);
+}
+
+.sidebar-theory-tab--active {
+  color: var(--hud-accent-bright);
+  border-color: var(--hud-border-strong);
+  background: rgba(74, 222, 128, 0.12);
+  box-shadow: var(--hud-glow);
+}
+
+.sidebar-theory-panel {
+  margin-top: 8px;
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
+  background: rgba(7, 16, 24, 0.82);
+  padding: 10px;
+}
+
+.sidebar-theory-panel h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.sidebar-theory-panel p {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sidebar-theory-panel ul {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.sidebar-theory-panel li {
+  font-size: 11px;
+  color: var(--hud-muted);
+  line-height: 1.4;
+}
+
+.sidebar-theory-step-viewer {
+  margin-top: 10px;
+  border-top: 1px dashed var(--hud-border);
+  padding-top: 10px;
+}
+
+.sidebar-theory-step-viewer__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.sidebar-theory-step-viewer__image {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--hud-border);
+  background: #03090f;
+}
+
+.sidebar-theory-step-viewer__caption {
+  margin-top: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.sidebar-theory-step-viewer__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.theory-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.theory-page__shell {
+  max-width: 980px;
+}
+
+.theory-page__title {
+  margin: 0 0 10px;
+}
+
+.theory-page__tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .content-area {
   padding: 22px 26px;
 }
@@ -3173,6 +3291,53 @@
   height: 2px;
 }
 
+/**
+ * 표준 단대호 에셜론 부호(프레임 상단).
+ *  소대 •  /  중대 |  /  대대 ||  /  연대 |||  /  사단 ××  /  군단 ×××
+ */
+.tactical-marker__rank {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  width: 100%;
+  height: 10px;
+  line-height: 1;
+  color: #14532d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-shadow:
+    0 0 2px rgba(255, 255, 255, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.7);
+  user-select: none;
+  pointer-events: none;
+}
+
+.tactical-marker__rank--bar {
+  font-size: 12px;
+  letter-spacing: 1.5px;
+}
+
+.tactical-marker__rank--cross {
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.tactical-marker__rank--dot {
+  font-size: 14px;
+  letter-spacing: 0;
+  transform: translateY(1px);
+}
+
+.tactical-marker__rank--special {
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.tactical-marker--enemy .tactical-marker__rank {
+  color: #78350f;
+}
+
 .tactical-marker__ticks--reinforced::before,
 .tactical-marker__ticks--reinforced::after {
   content: '';
@@ -3445,6 +3610,199 @@
   background: #475569;
 }
 
+/* 단대호 매뉴얼 팝업 ================================================= */
+.unit-symbol-manual-modal {
+  max-width: 560px;
+  width: calc(100% - 48px);
+}
+
+.unit-symbol-manual-modal__header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+}
+
+.unit-symbol-manual-modal__headline {
+  flex: 1;
+  min-width: 0;
+}
+
+.unit-symbol-manual-modal__headline .map-video-modal-title {
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.unit-symbol-manual-modal__headline .map-video-modal-sub {
+  margin-top: 6px;
+  line-height: 1.45;
+  max-width: 42ch;
+}
+
+.unit-symbol-manual-modal__close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(51, 65, 85, 0.65);
+  color: #e2e8f0;
+  font-size: 1.65rem;
+  font-weight: 300;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.unit-symbol-manual-modal__close span {
+  display: block;
+  transform: translateY(-1px);
+}
+
+.unit-symbol-manual-modal__close:hover {
+  background: rgba(71, 85, 105, 0.85);
+  border-color: rgba(226, 232, 240, 0.35);
+  color: #f8fafc;
+}
+
+.unit-symbol-manual-modal__close:focus-visible {
+  outline: 2px solid rgba(250, 204, 21, 0.65);
+  outline-offset: 2px;
+}
+
+.unit-symbol-manual-body {
+  padding: 18px 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.unit-symbol-manual-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.unit-symbol-manual-table thead th {
+  background: rgba(30, 41, 59, 0.88);
+  color: #cbd5f5;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.unit-symbol-manual-table thead th:nth-child(1) {
+  width: 40%;
+}
+
+.unit-symbol-manual-table thead th:nth-child(2) {
+  width: 22%;
+  text-align: center;
+}
+
+.unit-symbol-manual-table thead th:nth-child(3) {
+  width: 38%;
+}
+
+.unit-symbol-manual-table tbody tr + tr th,
+.unit-symbol-manual-table tbody tr + tr td {
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.unit-symbol-manual-table tbody th {
+  text-align: left;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #f1f5f9;
+  vertical-align: middle;
+}
+
+.unit-symbol-manual-table tbody td {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+.unit-symbol-manual-table tbody td:nth-child(2) {
+  text-align: center;
+}
+
+.unit-symbol-manual-table tbody td:nth-child(3) {
+  color: #94a3b8;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.unit-symbol-manual-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 800;
+  color: #fde68a;
+  background: rgba(30, 41, 59, 0.92);
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  border-radius: 8px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.unit-symbol-manual-mark--bar {
+  font-size: 18px;
+  letter-spacing: 3px;
+}
+
+.unit-symbol-manual-mark--cross {
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+
+.unit-symbol-manual-mark--dot {
+  font-size: 22px;
+}
+
+/* 특수임무부대: 다른 행과 동일한 앰버 테두리, 내부만 살짝 구분 */
+.unit-symbol-manual-mark--special {
+  font-size: 18px;
+  color: #fef3c7;
+  background: rgba(120, 53, 15, 0.35);
+  border-color: rgba(250, 204, 21, 0.5);
+}
+
+.unit-symbol-manual-footnote {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #94a3b8;
+}
+
 .map-video-modal-body {
   padding: 12px 16px 16px;
   flex: 1;
@@ -3543,6 +3901,29 @@
   flex-direction: column;
   gap: 8px;
   justify-content: center;
+}
+
+.service-asset-stream-modal__band-tabs {
+  display: inline-flex;
+  gap: 8px;
+  align-self: flex-start;
+}
+
+.service-asset-stream-modal__band-tab {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.service-asset-stream-modal__band-tab--active {
+  border-color: rgba(56, 189, 248, 0.75);
+  background: rgba(8, 47, 73, 0.88);
+  color: #e0f2fe;
 }
 
 .service-asset-stream-modal__caption {
@@ -8282,12 +8663,73 @@ button:disabled {
   width: min(980px, 96%);
 }
 
+.service-uav-dispatch-modal--grd-sar {
+  width: min(920px, 96%);
+  max-height: min(92vh, 820px);
+}
+
 .service-uav-dispatch-modal__head {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   padding: 18px 20px 14px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.service-uav-dispatch-modal__head-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.service-uav-dispatch-modal__head-tab-back {
+  margin-top: 2px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(15, 23, 42, 0.75);
+  color: #bae6fd;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.service-uav-dispatch-modal__head-tab-back:hover {
+  border-color: rgba(125, 211, 252, 0.75);
+  color: #e0f2fe;
+}
+
+.service-uav-dispatch-modal__grd-sar-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.service-uav-dispatch-modal__grd-sar-frame {
+  border-radius: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: #0f172a;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.service-uav-dispatch-modal__grd-sar-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(58vh, 520px);
+  object-fit: contain;
+}
+
+.service-uav-dispatch-modal__grd-sar-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #94a3b8;
 }
 
 .service-uav-dispatch-modal__eyebrow {
@@ -8555,9 +8997,10 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   padding: 14px 20px 18px;
   border-top: 1px solid rgba(148, 163, 184, 0.2);
+  flex-wrap: nowrap;
 }
 
 .service-uav-dispatch-modal__footnote {
@@ -8565,11 +9008,30 @@ button:disabled {
   font-size: 11px;
   line-height: 1.45;
   color: #94a3b8;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .service-uav-dispatch-modal__actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.service-uav-dispatch-modal__actions > button {
+  white-space: nowrap;
+}
+
+.service-uav-dispatch-modal__detect-btn {
+  min-width: 0;
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 /* SAR 전개 직후, 함흥 축선에 띄우는 위성 소실 메시지 */
@@ -8621,6 +9083,7 @@ button:disabled {
   .service-uav-dispatch-modal__footer {
     flex-direction: column;
     align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .service-uav-dispatch-modal__body--enemy {
@@ -8629,10 +9092,13 @@ button:disabled {
 
   .service-uav-dispatch-modal__actions {
     width: 100%;
+    flex-wrap: nowrap;
+    justify-content: stretch;
   }
 
   .service-uav-dispatch-modal__actions > button {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
 
@@ -9020,6 +9486,69 @@ button:disabled {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* SAR 적 기동 알림 — 경고(긴급) 톤 · 빨간 계열 배경 */
+.service-sar-move-notice--warning {
+  border: 1px solid rgba(252, 165, 165, 0.75);
+  background: linear-gradient(
+    165deg,
+    rgba(127, 29, 29, 0.96) 0%,
+    rgba(185, 28, 28, 0.92) 42%,
+    rgba(69, 10, 10, 0.98) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(254, 202, 202, 0.15),
+    0 6px 22px rgba(127, 29, 29, 0.45);
+}
+
+.service-sar-move-notice--warning:hover {
+  border-color: rgba(254, 226, 226, 0.95);
+  background: linear-gradient(
+    165deg,
+    rgba(153, 27, 27, 0.98) 0%,
+    rgba(220, 38, 38, 0.94) 45%,
+    rgba(91, 15, 15, 0.99) 100%
+  );
+}
+
+.service-sar-move-notice--warning .service-sar-move-notice__head {
+  color: #fef2f2;
+}
+
+.service-sar-move-notice--warning .service-sar-move-notice__title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff7ed;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.service-sar-move-notice--warning .service-sar-move-notice__title::before {
+  content: '⚠ ';
+  margin-right: 2px;
+  font-weight: 900;
+  color: #fbbf24;
+  text-shadow: none;
+}
+
+.service-sar-move-notice__badge--warn {
+  font-size: 10px;
+  font-weight: 800;
+  color: #451a03;
+  background: linear-gradient(180deg, #fde68a, #f59e0b);
+  border: 1px solid rgba(251, 191, 36, 0.95);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.service-sar-move-notice--warning .service-sar-move-notice__body {
+  color: #fecaca;
+}
+
+.service-sar-move-notice--warning .service-sar-move-notice__body strong {
+  color: #ffffff;
 }
 
 .service-drone-inline-monitor {
