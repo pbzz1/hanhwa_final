@@ -1719,7 +1719,7 @@ const SAT_SAR_GMTI_EXPLAIN_IMAGE_URLS = [
   '/media/sar/sat-sar-gmti-5.png',
 ] as const
 /** Spotlight 팝업 — 주석 없는 SAR 샘플 */
-const SAR_SPOTLIGHT_CLEAN_PREVIEW_IMAGE_URL = '/media/sar/sar-grd-example.png'
+const SAR_SPOTLIGHT_CLEAN_PREVIEW_IMAGE_URL = '/media/sar/sar-spotlight-result.png'
 
 /** 위성 SAR 이동 검출 팝업 — 단일 기준 이미지 */
 const GRD_DETECTION_MODAL_IMAGE_URL = '/media/sar/grd-detection-modal.png'
@@ -11643,9 +11643,6 @@ function BattlefieldServicePage() {
       focusEntity ??
       scenarioEntitiesResolvedRef.current.find((entity) => entity.relation === 'ENEMY' && entity.kind === 'MBT')
     setSarZoneProbabilities(null)
-    setScenarioNotice(
-      `${BATTLEFIELD_SCENARIO_NOTICES.enterSarScan} 지도 뷰는 GRD 이동 픽셀 후보(파란 클러스터)가 모두 들어오도록 맞춥니다. 파란 영역을 호버하거나 클릭하면 분류·거리·출동 조건을 확인할 수 있고, 클릭 시 우측 패널에도 요약이 표시됩니다.`,
-    )
     const map = mapRef.current
     if (map) {
       const gb = computeGrdMotionDetectionsBounds()
