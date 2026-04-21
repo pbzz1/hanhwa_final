@@ -750,6 +750,11 @@ const IMMOBILE_ENEMY_ENTITY_IDS = new Set<number>()
 const BATTLEFIELD_SERVICE_MAP_INITIAL_CENTER: [number, number] = [80, 30]
 const BATTLEFIELD_SERVICE_MAP_INITIAL_ZOOM = 2.5
 
+/** MapLibre 카메라 ease-in-out (t ∈ [0,1]) — 시야 버튼 전환 시 가·감속 완만화 */
+function battlefieldMapCameraEaseInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
+}
+
 /** 적 MBT 핀은 남하 시뮬 좌표(`enemyBattlefieldPoses`)가 생긴 뒤에만 지도에 표시 — 집결지 정적 마커 제거 */
 function scenarioMbtEnemyVisibleOnMap(
   entity: ScenarioEntity,
@@ -1708,8 +1713,6 @@ const SERVICE_ORBITAL_SAR_FOOTPRINT_LINE_LAYER_ID = 'service-orbital-sar-footpri
 const ENEMY_UAV_DISPATCH_REFERENCE_IMAGE_URL = '/media/uav/drone-dispatch-mbt-atr-target.png'
 /** 파란 GRD(일반차량) 모달 1탭 — SAR 변화검출·차량 후보 시각화 */
 const GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL = '/media/sar/grd-blue-sar-change-detection.png'
-/** GRD 이동 검출(UAV 출동) 팝업 — 검출 박스·점수 라벨 없는 SAR 샘플 */
-const GRD_BLUE_SAR_POPUP_PREVIEW_IMAGE_URL = '/media/sar/sar-grd-example.png'
 /** 노란(전차) GRD 이동 검출 설명 이미지 시퀀스 */
 const SAT_SAR_GMTI_EXPLAIN_IMAGE_URLS = [
   '/media/sar/sat-sar-gmti-1.png',
@@ -9090,6 +9093,18 @@ function BattlefieldServicePage() {
   const sarLossNoticePopupRef = useRef<maplibregl.Popup | null>(null)
   const sarLossNoticeStartTimerRef = useRef<number | null>(null)
   const sarLossNoticeTimerRef = useRef<number | null>(null)
+  /** 연속 map.fitBounds/easeTo 충돌 방지 + 작전권역→SAR 카메라 체인 취소 */
+  const mapCameraOpGenRef = useRef(0)
+  const sarExpandMoveEndHandlerRef = useRef<((e: maplibregl.MapLibreEvent) => void) | null>(null)
+  const cancelMapSarExpandChain = useCallback(() => {
+    mapCameraOpGenRef.current += 1
+    const map = mapRef.current
+    const h = sarExpandMoveEndHandlerRef.current
+    if (map && h) {
+      map.off('moveend', h)
+    }
+    sarExpandMoveEndHandlerRef.current = null
+  }, [])
   const [assets, setAssets] = useState<ServiceAssetPoint[]>([])
   const [orbitalSimSeconds, setOrbitalSimSeconds] = useState(0)
   const [orbitalSarModes, setOrbitalSarModes] = useState<Record<number, SarObservationMode>>(() =>
@@ -11656,8 +11671,9 @@ function BattlefieldServicePage() {
           padding: { top: 138, bottom: 64, left: 60, right: 220 },
           // y 음수면 카메라 중심을 북쪽으로 올려 화면상의 대상이 아래로 보인다.
           offset: [0, -56],
-          duration: 1000,
+          duration: 1200,
           maxZoom: 6.7,
+          easing: battlefieldMapCameraEaseInOut,
         },
       )
       if (popupRef.current) {
@@ -11695,6 +11711,7 @@ function BattlefieldServicePage() {
 
   const enterSarScanPhase = useCallback(
     (focusEntity?: ScenarioEntity) => {
+      cancelMapSarExpandChain()
       setScenarioPhase(BattlefieldScenarioPhase.SAR_SCAN)
       setSensorState((prev) => ({
         ...prev,
@@ -11702,7 +11719,7 @@ function BattlefieldServicePage() {
       }))
       applyHamhungSarVisuals(focusEntity)
     },
-    [applyHamhungSarVisuals],
+    [applyHamhungSarVisuals, cancelMapSarExpandChain],
   )
 
   const selectOperationRegion = useCallback(() => {
@@ -11716,23 +11733,26 @@ function BattlefieldServicePage() {
           [KOREA_OPS_BOUNDS.west, KOREA_OPS_BOUNDS.south],
           [KOREA_OPS_BOUNDS.east, KOREA_OPS_BOUNDS.north],
         ],
-        { padding: 60, duration: 650, maxZoom: 7.4 },
+        { padding: 60, duration: 820, maxZoom: 7.4, easing: battlefieldMapCameraEaseInOut },
       )
     }
   }, [])
 
   const focusWorldMapView = useCallback(() => {
+    cancelMapSarExpandChain()
     const map = mapRef.current
     if (!map) return
     map.easeTo({
       center: BATTLEFIELD_SERVICE_MAP_INITIAL_CENTER,
       zoom: BATTLEFIELD_SERVICE_MAP_INITIAL_ZOOM,
-      duration: 650,
+      duration: 820,
+      easing: battlefieldMapCameraEaseInOut,
     })
     setScenarioNotice('전역 작전도 시야로 전환했습니다.')
-  }, [])
+  }, [cancelMapSarExpandChain])
 
   const focusKoreaOpsView = useCallback(() => {
+    cancelMapSarExpandChain()
     const map = mapRef.current
     if (!map) return
     map.fitBounds(
@@ -11740,12 +11760,13 @@ function BattlefieldServicePage() {
         [KOREA_OPS_BOUNDS.west, KOREA_OPS_BOUNDS.south],
         [KOREA_OPS_BOUNDS.east, KOREA_OPS_BOUNDS.north],
       ],
-      { padding: 60, duration: 650, maxZoom: 7.4 },
+      { padding: 60, duration: 820, maxZoom: 7.4, easing: battlefieldMapCameraEaseInOut },
     )
     setScenarioNotice('한반도 작전권역 시야로 전환했습니다.')
-  }, [])
+  }, [cancelMapSarExpandChain])
 
   const focusSarZoneByMode = useCallback((mode: 'WIDE' | 'SPOTLIGHT') => {
+    cancelMapSarExpandChain()
     setSarZoneViewMode(mode)
     const map = mapRef.current
     if (!map) return
@@ -11756,7 +11777,7 @@ function BattlefieldServicePage() {
           [SAR_SPOTLIGHT_ZONE_BOUNDS.west - pad, SAR_SPOTLIGHT_ZONE_BOUNDS.south - pad],
           [SAR_SPOTLIGHT_ZONE_BOUNDS.east + pad, SAR_SPOTLIGHT_ZONE_BOUNDS.north + pad],
         ],
-        { padding: 56, duration: 520, maxZoom: 10.9 },
+        { padding: 56, duration: 720, maxZoom: 10.9, easing: battlefieldMapCameraEaseInOut },
       )
       setScenarioNotice('집중 탐지(Spotlight) 영역으로 이동했습니다.')
       return
@@ -11785,18 +11806,33 @@ function BattlefieldServicePage() {
         [west, south],
         [east, north],
       ],
-      { padding: 56, duration: 520, maxZoom: 7.9 },
+      { padding: 56, duration: 720, maxZoom: 7.9, easing: battlefieldMapCameraEaseInOut },
     )
     setScenarioNotice('광역 탐지 영역으로 이동했습니다.')
-  }, [])
+  }, [cancelMapSarExpandChain])
 
   /** SAR 탐지 전개: IDLE이면 권역 확정 후 즉시 SAR 단계로(센서 모달·단계 게이트 없이) */
   const handleSarExpandAlways = useCallback(() => {
+    cancelMapSarExpandChain()
+    const map = mapRef.current
     if (scenarioPhaseRef.current === BattlefieldScenarioPhase.IDLE) {
+      if (map) {
+        const chainId = mapCameraOpGenRef.current
+        const handler = () => {
+          map.off('moveend', handler)
+          sarExpandMoveEndHandlerRef.current = null
+          if (mapCameraOpGenRef.current !== chainId) return
+          enterSarScanPhase(undefined)
+        }
+        sarExpandMoveEndHandlerRef.current = handler
+        map.on('moveend', handler)
+        selectOperationRegion()
+        return
+      }
       selectOperationRegion()
     }
     enterSarScanPhase(undefined)
-  }, [enterSarScanPhase, selectOperationRegion])
+  }, [cancelMapSarExpandChain, enterSarScanPhase, selectOperationRegion])
 
   const selectOperationRegionRef = useRef(selectOperationRegion)
   selectOperationRegionRef.current = selectOperationRegion
@@ -15989,12 +16025,13 @@ function BattlefieldServicePage() {
 
   const zoomBattlefieldMapStep = useCallback(
     (dir: 1 | -1) => {
+      cancelMapSarExpandChain()
       const map = mapRef.current
       if (!map || !mapReady) return
       if (dir === 1) map.zoomIn({ duration: 220 })
       else map.zoomOut({ duration: 220 })
     },
-    [mapReady],
+    [cancelMapSarExpandChain, mapReady],
   )
 
   const handlePlaybackTimelineChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -16904,18 +16941,13 @@ function BattlefieldServicePage() {
                 >
                   {uavDispatchRequest.kind === 'grd' && uavDispatchGrdPanel === 'sar' ? (
                     <div className="service-uav-dispatch-modal__grd-sar-panel">
-                      <p className="service-uav-dispatch-modal__section-label">SAR 변화 검출 · 차량 후보</p>
                       <div className="service-uav-dispatch-modal__grd-sar-frame">
                         <img
-                          src={GRD_BLUE_SAR_POPUP_PREVIEW_IMAGE_URL}
-                          alt="SAR 변화 검출 영상 샘플"
+                          src={GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL}
+                          alt="SAR 변화 검출 결과"
                           className="service-uav-dispatch-modal__grd-sar-img"
                         />
                       </div>
-                      <p className="service-uav-dispatch-modal__grd-sar-note">
-                        진폭 차분·변화 픽셀 클러스터에 대한 검출 결과입니다. UAV 출동 추천으로 이어지면 가용 자산·거리·준비태세를
-                        기준으로 부대를 제안합니다.
-                      </p>
                     </div>
                   ) : (
                     <>
@@ -17054,9 +17086,6 @@ function BattlefieldServicePage() {
                 <div className="service-uav-dispatch-modal__footer">
                   {uavDispatchRequest.kind === 'grd' && uavDispatchGrdPanel === 'sar' ? (
                     <>
-                      <p className="service-uav-dispatch-modal__footnote">
-                        SAR 기반 변화 검출 샘플 · 실제 운용 시에는 센서·궤적 메타데이터와 연동됩니다.
-                      </p>
                       <div className="service-uav-dispatch-modal__actions">
                         <button type="button" className="btn-secondary" onClick={closeUavDispatchModal}>
                           취소
