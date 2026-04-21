@@ -1,6 +1,6 @@
 # hanhwa_final
 
-한반도 전장을 가정한 **지휘·통제(C2) 데모 웹**, **NestJS API**, **Prisma(MySQL)**, **Python AI 추론·VoD 레이더 파이프라인**을 한 저장소에서 다루는 모노레포입니다.  
+한반도 전장을 가정한 **지휘·통제(C2) 데모 웹**, **NestJS API**, **Prisma(PostgreSQL)**, **Python AI 추론·VoD 레이더 파이프라인**을 한 저장소에서 다루는 모노레포입니다.  
 시연용으로 **지도·시나리오·센서(SAR/UAV/드론/FMCW)·위험 오버레이**를 연결하고, 필요 시 **YOLO·VoD FMCW live** 등 실추론 서비스와 붙일 수 있도록 구성되어 있습니다.
 
 ---
@@ -16,6 +16,7 @@
 - [실행 스크립트](#실행-스크립트)
 - [주요 URL·포트](#주요-url포트)
 - [데이터베이스](#데이터베이스)
+- [Vercel·Render 배포](#vercelrender-배포)
 - [문서](#문서)
 - [VoD·연구 노트북](#vod연구-노트북)
 - [Git에 올리지 않는 항목](#git에-올리지-않는-항목)
@@ -43,7 +44,7 @@
 | 영역 | 사용 기술 |
 |------|-----------|
 | 프론트 | React 19, Vite 7, TypeScript, react-router-dom, **maplibre-gl**, mgrs |
-| 백엔드 | NestJS 11, Prisma 6, MySQL, JWT(passport-jwt), bcrypt, class-validator |
+| 백엔드 | NestJS 11, Prisma 6, PostgreSQL, JWT(passport-jwt), bcrypt, class-validator |
 | 외부 HTTP(데모) | OSRM 도로 경로(`backend/src/map/map-routing.service.ts`) |
 | AI | Python FastAPI(`ai-inference`), 선택적으로 **radar-service** |
 
@@ -52,7 +53,7 @@
 ## 필수 요구 사항
 
 - **Node.js** (프론트·백엔드 빌드에 맞는 LTS 권장)
-- **MySQL** 및 `DATABASE_URL` (백엔드 `.env`)
+- **PostgreSQL** 및 `DATABASE_URL` (백엔드 `.env`)
 - (선택) **Python 3** + 가상환경 — `npm run dev:all` 또는 수동 `uvicorn` 시 필요
 
 ---
@@ -101,7 +102,7 @@ GitHub에는 **소스·스키마·재현 절차**만 두고, **빌드 산출물�
 
 1. 저장소 `git clone` 후 이 README의 [빠른 시작](#빠른-시작)대로 `npm install` → `npm run install:all`.
 2. `frontend/.env.example` → `frontend/.env`, `backend/.env.example` → `backend/.env` 복사 후 값 입력 (Windows: `copy` 명령).
-3. MySQL 기동 후 `backend`에서 `npx prisma migrate dev` 및 필요 시 `npx prisma db seed`.
+3. PostgreSQL 기동 후 `backend`에서 `npx prisma migrate dev` 및 필요 시 `npx prisma db seed`.
 4. **UAV EO/IR 데모 영상** (`frontend/public/media/uav/eo/*.mp4`, `.../ir/*.mp4`)은 루트 `.gitignore`로 Git 추적에서 제외됩니다. 저장소를 클론한 뒤에는 팀에서 공유하는 ZIP·NAS·드라이브 등으로 파일을 받아 **동일 경로·파일명**으로 두세요. 규칙은 각 폴더의 `README.md`를 따릅니다. (이미 Git에 올라가 있는 다른 데모용 `*.mp4`·PNG는 `clone`만으로 함께 받습니다.)
 5. 개발 서버: 루트에서 `npm run dev` (또는 AI까지 `npm run dev:all`).
 6. 커밋·푸시 전 `git status`로 `.env`, `node_modules`, `dist/`, 덤프·개인 데이터가 포함되지 않았는지 확인합니다.
@@ -163,6 +164,15 @@ HTTPS 터널(ngrok 등)을 쓸 때는 프론트가 **동일 오리진**으로 AP
 - **ORM**: Prisma — 모델: `User`, `Media`, `InferenceResult`, `Unit`, `InfiltrationPoint` 등 (`backend/prisma/schema.prisma`).
 - **전술 추천/저장**: Prisma 스키마 외에 `MapService`가 **`tactical_recommendation_profiles`**, **`tactical_decisions`** 테이블을 raw SQL로 생성·사용할 수 있습니다.
 - **ERD·구조 설명**: `docs/ERD.md`, `docs/ERD-viewer.html` 참고.
+
+---
+
+<h2 id="vercelrender-배포">Vercel·Render 배포</h2>
+
+1. **Render**: 저장소를 GitHub 등에 푸시한 뒤 [Render Blueprint](https://render.com/docs/infrastructure-as-code)로 루트의 `render.yaml`을 지정합니다. PostgreSQL과 `hanhwa-backend` 웹 서비스가 생성됩니다. 대시보드에서 **`FRONTEND_ORIGIN`**을 Vercel 배포 URL(예: `https://xxx.vercel.app`)으로 설정합니다. (첫 생성 시 `sync: false`로 입력을 요구합니다.)
+2. **Vercel**: New Project → 동일 저장소, **Root Directory**를 `frontend`로 지정합니다. **Environment Variables**에 `VITE_API_BASE_URL` = Render 백엔드 공개 URL(끝에 `/` 없이)을 넣고 배포합니다.
+3. 시드·데모 데이터가 필요하면 Render Shell에서 `backend` 디렉터리로 이동해 `npx prisma db seed`를 실행합니다.
+4. `frontend/vercel.json`은 SPA용 rewrite를 포함합니다.
 
 ---
 

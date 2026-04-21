@@ -13,7 +13,7 @@
 |------|------|
 | **실행** | 루트에서 `npm run dev` (또는 `npm run install:all` 후) — 프론트 기본 **5173**, 백엔드 **3308** (`backend/src/main.ts`, `frontend/vite.config.ts` 프록시). |
 | **접속 URL** | 브라우저에서 `http://localhost:5173` (또는 Vite가 안내한 주소). |
-| **DB** | MySQL + Prisma 마이그레이션·시드 적용 후 지도 자산 API가 동작해야 함 (`GET /map/units` 등). 시드 계정: `backend/prisma/seed.ts` — 예: **`demo@hanhwa.local` / `Demo1234!`**. |
+| **DB** | PostgreSQL + Prisma 마이그레이션·시드 적용 후 지도 자산 API가 동작해야 함 (`GET /map/units` 등). 시드 계정: `backend/prisma/seed.ts` — 예: **`demo@hanhwa.local` / `Demo1234!`**. |
 | **로그인 후 이동** | 로그인 성공 시 기본 경로 **`/`** (실시간 전장판). 사이드바 **「실시간 전장판」** (`AppLayout`의 `NavLink to="/"`). |
 
 ---

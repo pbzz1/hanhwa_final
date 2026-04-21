@@ -1,0 +1,43 @@
+# Render Blueprint — 저장소 연결 후 "New" → "Blueprint" 로 이 파일을 지정하면
+# PostgreSQL + Nest API 웹 서비스가 함께 생성됩니다.
+#
+# 첫 배포 후 대시보드에서 반드시 설정:
+# - FRONTEND_ORIGIN = Vercel 배포 URL (예: https://xxx.vercel.app)
+#   (쉼표로 여러 출처 가능. NODE_ENV=production 일 때 CORS에 사용됩니다.)
+#
+# Vercel(프론트) 빌드 환경 변수:
+# - VITE_API_BASE_URL = 이 백엔드의 공개 URL (예: https://hanhwa-backend.onrender.com)
+#
+# DB 시드(선택): Render Shell에서 backend 루트로 이동 후
+#   npx prisma db seed
+#
+version: "1"
+
+databases:
+  - name: hanhwa-db
+    databaseName: hanhwa
+    user: hanhwa
+    plan: free
+    region: oregon
+
+services:
+  - type: web
+    name: hanhwa-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && npm run start:prod
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hanhwa-db
+          property: connectionString

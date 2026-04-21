@@ -9,7 +9,7 @@
 
 | 구분 | 내용 |
 |------|------|
-| **무엇을 하는가** | 한반도 전장을 가정한 **지도·시나리오·센서·AI 추론을 한 흐름으로 보여 주는 웹 애플리케이션**입니다. 프론트는 **React(Vite)**, API는 **NestJS + Prisma(MySQL)**, 영상·레이더 심층 추론은 **별도 Python(`ai-inference`)**으로 이어집니다. |
+| **무엇을 하는가** | 한반도 전장을 가정한 **지도·시나리오·센서·AI 추론을 한 흐름으로 보여 주는 웹 애플리케이션**입니다. 프론트는 **React(Vite)**, API는 **NestJS + Prisma(PostgreSQL)**, 영상·레이더 심층 추론은 **별도 Python(`ai-inference`)**으로 이어집니다. |
 | **사용자가 보는 기능** | 로그인 후 **실시간 전장판(지도)**, **시나리오 재생(단계·타임라인)**, **YOLO 이미지/동영상 업로드**, **웹캠 모니터**, **센서 파이프라인 안내 UI**, **드론 EO/IR 전용 페이지**, (지도 위) **위험 후보 오버레이·실험 패널** 등을 씁니다. |
 | **핵심 목적** | **“센서 → 상황 인지 → 지도 표현 → (선택) AI/도로 기반 근거 → 의사결정 기록”**을 데모·발표 가능한 하나의 제품 흐름으로 묶는 것입니다. |
 
@@ -23,7 +23,7 @@
 |--------|-----------|
 | **프론트엔드** | `frontend/` — Vite, React 19, TypeScript, `react-router-dom`, `maplibre-gl`, `mgrs` 등 (`frontend/package.json`). |
 | **백엔드 API** | `backend/` — NestJS 11, 전역 `ValidationPipe`, CORS, 모듈: `AuthModule`, `PrismaModule`, `AiModule`, `MapModule` (`backend/src/app.module.ts`, `backend/src/main.ts`). |
-| **데이터** | MySQL + Prisma 스키마 `backend/prisma/schema.prisma` — 예: `User`, `Unit`, `InfiltrationPoint`, `Media`, `InferenceResult`. 데모 데이터는 `backend/prisma/seed.ts`. |
+| **데이터** | PostgreSQL + Prisma 스키마 `backend/prisma/schema.prisma` — 예: `User`, `Unit`, `InfiltrationPoint`, `Media`, `InferenceResult`. 데모 데이터는 `backend/prisma/seed.ts`. |
 | **외부 HTTP** | **OSRM** — `backend/src/map/map-routing.service.ts`에서 `fetch`로 `route/v1/driving/...` 호출. **Python AI** — `backend/src/ai/ai.service.ts`의 `AI_INFERENCE_URL`(기본 `http://localhost:8001`). |
 | **인증** | **JWT** — `backend/src/auth/auth.module.ts`의 `JwtModule.register`, `passport-jwt`의 `JwtStrategy` (`backend/src/auth/jwt.strategy.ts`). 프론트는 **`localStorage` 키 `accessToken`** (`frontend/src/App.tsx`의 `App`). |
 | **연구/오프라인 파이프라인** | `vod-devkit/` — 예: `vod-devkit/21_vod_hybrid_risk_pipeline_e2e_runall.ipynb` (위험·클러스터·suppression 등 실험 문서형 노트북). 웹의 위험 목 데이터와 **개념적으로 연결**될 수 있으나, 웹이 노트북을 직접 호출하지는 않습니다. |
@@ -84,7 +84,7 @@
 | **MapLibre GL** | `App.tsx` — `import maplibregl from 'maplibre-gl'`, `BattlefieldServicePage`의 `mapRef` 등. |
 | **mgrs** | `App.tsx` — `latLngToMgrsSafe` 등 `mgrsUtil` import. |
 | **NestJS** | `backend/package.json`, `backend/src/main.ts` — `NestFactory.create(AppModule)`. |
-| **Prisma + MySQL** | `backend/prisma/schema.prisma` — `datasource db { provider = "mysql" }`. |
+| **Prisma + PostgreSQL** | `backend/prisma/schema.prisma` — `datasource db { provider = "postgresql" }`. |
 | **JWT + Passport** | `backend/src/auth/auth.module.ts` — `JwtModule.register`, `JwtStrategy` — `ExtractJwt.fromAuthHeaderAsBearerToken()`. |
 | **bcrypt** | `backend/src/auth/auth.service.ts` — `bcrypt.hash`, `bcrypt.compare`. |
 | **class-validator** | `backend/src/auth/dto/login.dto.ts`, `signup.dto.ts`; `main.ts`의 `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })`. |
@@ -364,7 +364,7 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 ## 1분
 
-“화면은 **실시간 전장판**과 **시나리오 재생**, **YOLO 업로드**, **센서 파이프라인 설명**, **드론 EO/IR** 페이지로 나뉩니다. API는 개발 시 **Vite 프록시**로 Nest에 붙어 CORS·HTTPS 이슈를 줄였습니다. 지도 데이터는 **MySQL 시드**, 전술은 **추천 GET + 결정 POST**로 남깁니다. 레이더는 **기본 합성**에 **`source=live`일 때만** AI가 탐지를 덮어씁니다.”
+“화면은 **실시간 전장판**과 **시나리오 재생**, **YOLO 업로드**, **센서 파이프라인 설명**, **드론 EO/IR** 페이지로 나뉩니다. API는 개발 시 **Vite 프록시**로 Nest에 붙어 CORS·HTTPS 이슈를 줄였습니다. 지도 데이터는 **PostgreSQL 시드**, 전술은 **추천 GET + 결정 POST**로 남깁니다. 레이더는 **기본 합성**에 **`source=live`일 때만** AI가 탐지를 덮어씁니다.”
 
 ## 3분
 

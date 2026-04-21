@@ -470,35 +470,41 @@ export class MapService {
     if (this.tacticsTableReady) return;
     await this.prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS ${TACTIC_PROFILE_TABLE} (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         scenario_key VARCHAR(96) NOT NULL,
         unit_name VARCHAR(128) NOT NULL,
         suitability_pct DECIMAL(5,2) NOT NULL,
         rationale TEXT NULL,
-        payload_json JSON NULL,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        KEY idx_scenario_key (scenario_key)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        payload_json JSONB NULL,
+        created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await this.prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS tactical_recommendation_profiles_scenario_key_idx
+      ON ${TACTIC_PROFILE_TABLE} (scenario_key);
     `);
     await this.prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS ${TACTIC_DECISION_TABLE} (
-        id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         scenario_key VARCHAR(96) NOT NULL,
         selected_unit_name VARCHAR(128) NOT NULL,
         suitability_pct DECIMAL(5,2) NOT NULL,
         note TEXT NULL,
         source VARCHAR(32) NOT NULL DEFAULT 'web-ui',
-        raw_payload_json JSON NULL,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        KEY idx_scenario_key (scenario_key)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        raw_payload_json JSONB NULL,
+        created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await this.prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS tactical_decisions_scenario_key_idx
+      ON ${TACTIC_DECISION_TABLE} (scenario_key);
     `);
     this.tacticsTableReady = true;
   }
 
   private async seedTacticProfilesIfEmpty(scenarioKey: string) {
     const countRows = await this.prisma.$queryRawUnsafe<Array<{ cnt: bigint | number }>>(
-      `SELECT COUNT(*) as cnt FROM ${TACTIC_PROFILE_TABLE} WHERE scenario_key = ?`,
+      `SELECT COUNT(*)::bigint AS cnt FROM ${TACTIC_PROFILE_TABLE} WHERE scenario_key = $1`,
       scenarioKey,
     );
     const cntRaw = countRows[0]?.cnt ?? 0;
@@ -555,7 +561,7 @@ export class MapService {
       await this.prisma.$executeRawUnsafe(
         `INSERT INTO ${TACTIC_PROFILE_TABLE}
           (scenario_key, unit_name, suitability_pct, rationale, payload_json)
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
         scenarioKey,
         row.unitName,
         row.suitabilityPct,
@@ -571,7 +577,7 @@ export class MapService {
     const rows = await this.prisma.$queryRawUnsafe<TacticProfileRow[]>(
       `SELECT unit_name, suitability_pct, rationale, payload_json
        FROM ${TACTIC_PROFILE_TABLE}
-       WHERE scenario_key = ?
+       WHERE scenario_key = $1
        ORDER BY suitability_pct DESC, unit_name ASC`,
       scenarioKey,
     );
@@ -591,7 +597,7 @@ export class MapService {
     await this.prisma.$executeRawUnsafe(
       `INSERT INTO ${TACTIC_DECISION_TABLE}
         (scenario_key, selected_unit_name, suitability_pct, note, source, raw_payload_json)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
       input.scenarioKey,
       input.selectedUnitName,
       input.suitabilityPct,

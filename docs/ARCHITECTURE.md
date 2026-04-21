@@ -30,7 +30,7 @@ flowchart TB
   end
 
   subgraph Data["데이터"]
-    DB[("MySQL\nPrisma ORM")]
+    DB[("PostgreSQL\nPrisma ORM")]
   end
 
   subgraph External["외부·선택 서비스"]
@@ -62,7 +62,7 @@ flowchart LR
     AiM["AiModule\n(JwtAuthGuard)\nYOLO·VoD 프록시 등"]
   end
 
-  PrismaM --> DB[("MySQL")]
+  PrismaM --> DB[("PostgreSQL")]
   MapM --> OSRM["OSRM HTTP"]
   AiM --> PyAI["AI_INFERENCE_URL"]
 ```
@@ -98,7 +98,7 @@ flowchart LR
 sequenceDiagram
   participant B as Browser
   participant N as NestJS /auth
-  participant D as MySQL
+  participant D as PostgreSQL
 
   B->>N: POST /auth/login
   N->>D: 사용자 검증
@@ -113,7 +113,7 @@ sequenceDiagram
 sequenceDiagram
   participant B as Browser
   participant N as NestJS /map
-  participant D as MySQL
+  participant D as PostgreSQL
 
   B->>N: GET /map/units, /map/infiltrations 등
   N->>D: Prisma 조회(시드/DB)
@@ -155,7 +155,7 @@ sequenceDiagram
 
 | 변수 | 용도 |
 |------|------|
-| `DATABASE_URL` | Prisma → MySQL |
+| `DATABASE_URL` | Prisma → PostgreSQL |
 | `JWT_*` / Nest auth 설정 | 토큰 서명·만료 등 (백엔드 코드·env 참고) |
 | `PORT` / `HOST` | Nest 수신 (기본 3308) |
 | `FRONTEND_ORIGIN` | 프로덕션 CORS 허용 오리진 |
