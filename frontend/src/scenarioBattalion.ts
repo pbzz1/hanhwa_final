@@ -41,7 +41,7 @@ export const TANK_ROAD_MARCH_SPEED_KMH = 38
 export const TANK_INVASION_PATH_LENGTH_THRESHOLD_KM = 160
 
 export const SCENARIO_RANGES_KM = {
-  /** 군사분계선 인근 전술 권역 — 이보다 멀면 UAV SAR 광역 추적 단계로 표현 */
+  /** 군사분계선 인근 전술 권역 — 이보다 멀면 UAV SAR 광역 감시 단계로 표현 */
   TACTICAL_RANGE_KM: 40,
   FMCW_MAX: 45,
   /** 정찰 드론 출동·EO/IR — C2~주 적 거리 기준 (`droneEngagementConfig`와 동일 값) */
@@ -153,11 +153,26 @@ export function isEnemyNearDmz38(lat: number): boolean {
   return delta <= 0.125
 }
 
-/** 시드 `FriendlyUnit.name` 및 전장 지도 「아군 부대 위치」 버튼과 동일해야 함 */
+/** 레거시 시드 명칭(구버전 DB와의 호환). 최신 시드는 `pickBattalionHqGeoTarget`으로 TPC를 고름 */
 export const BATTALION_HQ_USER_ANCHOR_NAME = '대대 지휘소-01'
 
 export function isBattalionC2Unit(unit: { name: string }): boolean {
   return unit.name === BATTALION_HQ_USER_ANCHOR_NAME || unit.name.includes('지휘통제실')
+}
+
+/**
+ * 「아군 부대 위치」GPS 반영 대상 — 구 시드 명칭이 없어도 대대지휘소(TPC) 부대를 선택한다.
+ */
+export function pickBattalionHqGeoTarget<T extends { name: string; branch: string }>(
+  units: readonly T[],
+): T | undefined {
+  const exact = units.find((u) => u.name === BATTALION_HQ_USER_ANCHOR_NAME)
+  if (exact) return exact
+  const ctrl = units.find((u) => u.name.includes('지휘통제실'))
+  if (ctrl) return ctrl
+  const armorHq = units.find((u) => u.branch.includes('기갑·대대지휘소'))
+  if (armorHq) return armorHq
+  return units.find((u) => u.branch.includes('대대지휘소'))
 }
 
 /** 적–지휘통제실 거리 표시용 (첫 번째 접촉 표적 우선) */

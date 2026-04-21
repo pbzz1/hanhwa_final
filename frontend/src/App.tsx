@@ -1572,9 +1572,11 @@ const ENEMY_UAV_DISPATCH_REFERENCE_IMAGE_URL = '/media/uav/drone-dispatch-mbt-at
 /** 파란 GRD(일반차량) 모달 1탭 — SAR 변화검출·차량 후보 시각화 */
 const GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL = '/media/sar/grd-blue-sar-change-detection.png'
 const UAV_DETECTION_STEP_IMAGE_URLS = [
-  '/media/uav/uav-detection-step-1.png',
-  '/media/uav/uav-detection-step-2.png',
-  '/media/uav/uav-detection-step-3.png',
+  '/media/sar/sat-sar-gmti-1.png',
+  '/media/sar/sat-sar-gmti-2.png',
+  '/media/sar/sat-sar-gmti-3.png',
+  '/media/sar/sat-sar-gmti-4.png',
+  '/media/sar/sat-sar-gmti-5.png',
 ] as const
 
 const SERVICE_ASSET_SYMBOL_IMAGE_ID: Record<ServiceAssetCategory, string> = {
@@ -16758,9 +16760,6 @@ function BattlefieldServicePage() {
                       <h2 id={uavDetectionStepModalTitleId} className="map-video-modal-title">
                         움직임 감지
                       </h2>
-                      <p className="map-video-modal-sub muted">
-                        단계 {uavDetectionStepIndex + 1} / {UAV_DETECTION_STEP_IMAGE_URLS.length}
-                      </p>
                     </div>
                     <button
                       type="button"
@@ -16775,7 +16774,7 @@ function BattlefieldServicePage() {
                     <img
                       className="map-video-modal-video"
                       src={UAV_DETECTION_STEP_IMAGE_URLS[uavDetectionStepIndex]!}
-                      alt={`움직임 감지 ${uavDetectionStepIndex + 1}단계`}
+                      alt="움직임 감지 단계 이미지"
                     />
                   </div>
                   <div className="service-uav-dispatch-modal__footer">

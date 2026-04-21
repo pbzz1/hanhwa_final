@@ -19,7 +19,7 @@ const FMCW_CONSOLE_PIPELINE_STEPS: readonly { step: string; title: string; body:
   },
   {
     step: '3/6',
-    title: '추적',
+    title: '연계',
     body: 'Kalman(상수속도) 예측과 헝가리안 매칭으로 트랙 ID를 유지합니다. 트랙 신뢰도(track confidence)는 검출 신뢰도와 별도로 관리합니다.',
   },
   {
@@ -116,7 +116,7 @@ export function FmcwRadarIntroPage({ onContinue }: Props) {
       title="FMCW · VoD (근거리 레이더 운용)"
       lead={
         <>
-          <strong>레이더 단독</strong>으로 탐지·추적·단기 예측·위험 구역까지 처리하는 운용 콘솔 화면입니다. VoD{' '}
+          <strong>레이더 단독</strong>으로 탐지·연계·단기 예측·위험 구역까지 처리하는 운용 콘솔 화면입니다. VoD{' '}
           <strong>FMCW(3+1D)</strong> 포인트를 한 틱 단위로 수집하고, 웹·지도는{' '}
           <code>/map/radar/snapshot?source=live</code> 요약 또는 <code>radar-service</code>의 WebPayload JSON을
           소비합니다. 객체 종류는 레이더만으로 단정하지 않으며 <strong>target / unknown target</strong> 중심으로
@@ -132,7 +132,7 @@ export function FmcwRadarIntroPage({ onContinue }: Props) {
               3·5프레임 스택.
             </li>
             <li>
-              <strong>처리</strong> — 전처리 → DBSCAN → 후보 점수화·필터 → Kalman + 헝가리안 추적 → 1/2/3초 궤적 예측
+              <strong>처리</strong> — 전처리 → DBSCAN → 후보 점수화·필터 → Kalman + 헝가리안 연계 → 1/2/3초 궤적 예측
               → 위험도 → 예측 경로 주변 danger corridor.
             </li>
             <li>

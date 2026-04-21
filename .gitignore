@@ -23,10 +23,12 @@ build/
 
 # ===== Node =====
 node_modules/
+**/node_modules/.tmp/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.tsbuildinfo
 
 # ===== 빌드/배포 =====
 dist/
@@ -93,3 +95,21 @@ ai/radar-cruw/vendor/
 *.key
 *.pem
 credentials.json
+
+# ===== OS / 에디터 잡파일 =====
+Thumbs.db
+Desktop.ini
+
+# ===== 테스트 커버리지 =====
+coverage/
+.nyc_output/
+
+# ===== 로컬 DB 덤프(재현은 Prisma migrate/seed 사용) =====
+*.sqlite
+*.sqlite3
+*.db
+dumps/
+
+# ===== 프론트 데모 영상(용량 큼 — 팀 ZIP·NAS·Git LFS 등으로 공유, README 참고) =====
+frontend/public/media/uav/eo/*.mp4
+frontend/public/media/uav/ir/*.mp4

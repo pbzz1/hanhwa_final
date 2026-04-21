@@ -62,7 +62,7 @@ export function RiskDetailPanel({ visible, row }: RiskDetailPanelProps) {
             {rowLine('suppression', row.suppressionStage)}
           </dl>
           <p className="muted">
-            고위험 후보 / 우선 감시 구역 / 위험지역 후보 / 추적 기반 위험 우선순위 표현만 사용하고 단정 문구는
+            고위험 후보 / 우선 감시 구역 / 위험지역 후보 / 궤적 기반 위험 우선순위 표현만 사용하고 단정 문구는
             사용하지 않습니다.
           </p>
         </>

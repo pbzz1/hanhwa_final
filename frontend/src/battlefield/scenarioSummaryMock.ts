@@ -136,7 +136,7 @@ export function buildScenarioSummaryReport(input: {
     subtitle: '탐지(SAR) → 확인(UAV) → 근접(드론) → 위험분석(FMCW) 파이프라인이 완료되었습니다.',
     phaseResults,
     finalEnemyMbtCount: mbt,
-    finalEnemyMbtDetail: `적 전차(MBT) 군집 ${mbt}개가 파이프라인 전 구간에서 동일 축으로 추적되었습니다. 최종 확정 전차 표적 수: ${mbt}개 군집 기준.`,
+    finalEnemyMbtDetail: `적 전차(MBT) 군집 ${mbt}개가 파이프라인 전 구간에서 동일 축으로 관측·식별되었습니다. 최종 확정 전차 표적 수: ${mbt}개 군집 기준.`,
     movementPathTitle: '예상 이동 경로',
     movementPathSteps: [
       '평양·함흥 집결축 → 함흥 남하(동부)',

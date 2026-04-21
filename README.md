@@ -11,6 +11,7 @@
 - [기술 스택 요약](#기술-스택-요약)
 - [필수 요구 사항](#필수-요구-사항)
 - [빠른 시작](#빠른-시작)
+- [다른 PC에서 작업하기](#team-onboarding)
 - [환경 변수](#환경-변수)
 - [실행 스크립트](#실행-스크립트)
 - [주요 URL·포트](#주요-url포트)
@@ -92,6 +93,26 @@ npm run dev:all
 
 ---
 
+<h2 id="team-onboarding">다른 PC에서 작업하기</h2>
+
+GitHub에는 **소스·스키마·재현 절차**만 두고, **빌드 산출물·비밀키·로컬 DB 덤프·아주 큰 바이너리**는 올리지 않는 것을 기본으로 합니다.
+
+### 팀원 체크리스트
+
+1. 저장소 `git clone` 후 이 README의 [빠른 시작](#빠른-시작)대로 `npm install` → `npm run install:all`.
+2. `frontend/.env.example` → `frontend/.env`, `backend/.env.example` → `backend/.env` 복사 후 값 입력 (Windows: `copy` 명령).
+3. MySQL 기동 후 `backend`에서 `npx prisma migrate dev` 및 필요 시 `npx prisma db seed`.
+4. **UAV EO/IR 데모 영상** (`frontend/public/media/uav/eo/*.mp4`, `.../ir/*.mp4`)은 루트 `.gitignore`로 Git 추적에서 제외됩니다. 저장소를 클론한 뒤에는 팀에서 공유하는 ZIP·NAS·드라이브 등으로 파일을 받아 **동일 경로·파일명**으로 두세요. 규칙은 각 폴더의 `README.md`를 따릅니다. (이미 Git에 올라가 있는 다른 데모용 `*.mp4`·PNG는 `clone`만으로 함께 받습니다.)
+5. 개발 서버: 루트에서 `npm run dev` (또는 AI까지 `npm run dev:all`).
+6. 커밋·푸시 전 `git status`로 `.env`, `node_modules`, `dist/`, 덤프·개인 데이터가 포함되지 않았는지 확인합니다.
+
+### 대용량을 꼭 버전 관리하고 싶다면
+
+- [Git LFS](https://git-lfs.com/)로 특정 확장자만 LFS 대상으로 지정할 수 있습니다. 저장소·조직의 LFS 할당량을 확인하세요.
+- VoD 원본·학습 가중치 등은 이 저장소의 [Git에 올리지 않는 항목](#git에-올리지-않는-항목)과 `vod-devkit/README.md`, `ai/README.md`를 참고해 로컬 또는 별도 아티팩트 저장소에 둡니다.
+
+---
+
 ## 환경 변수
 
 | 파일 | 용도 |
@@ -167,7 +188,10 @@ HTTPS 터널(ngrok 등)을 쓸 때는 프론트가 **동일 오리진**으로 AP
 
 루트 **`.gitignore`** 요약:
 
-- `node_modules/`, `dist/`, `.env*`, Python `venv`/`.venv`
+- `node_modules/`, `dist/`, `.env*`(예시 `!.env.example` 제외), Python `venv`/`.venv`
+- TypeScript `*.tsbuildinfo`, 테스트 `coverage/`, OS 잡파일(`Thumbs.db` 등)
+- 로컬 DB 파일 패턴(`*.sqlite`, `*.db` 등) 및 `dumps/`
+- **UAV EO/IR** 대용량 클립: `frontend/public/media/uav/eo/*.mp4`, `.../ir/*.mp4` (배포는 빌드 파이프라인·정적 호스팅에서 별도 업로드하거나 팀 공유물 사용)
 - 대용량 **체크포인트·데이터·zip**, VoD 수신본 일부 경로
 - `ai/radar-cruw/vendor/` 등 외부 벤더/clone 디렉터리
 

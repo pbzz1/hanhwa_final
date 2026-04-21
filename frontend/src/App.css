@@ -74,6 +74,36 @@
   box-shadow: var(--hud-glow);
 }
 
+.sidebar-nav .sidebar-nav-action {
+  color: var(--hud-muted);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: all 0.18s ease;
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  background: transparent;
+  font-family: inherit;
+}
+
+.sidebar-nav .sidebar-nav-action:hover {
+  color: var(--hud-ink);
+  background: rgba(74, 222, 128, 0.08);
+  border-color: var(--hud-border);
+  box-shadow: var(--hud-glow);
+}
+
+.sidebar-nav-meta {
+  display: block;
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--hud-muted);
+  word-break: break-all;
+}
+
 .sidebar-nav-group-label {
   margin: 14px 0 2px;
   padding: 0 4px;
@@ -234,6 +264,29 @@
 .topbar-sidebar-toggle {
   padding: 7px 10px;
   font-size: 12px;
+}
+
+.topbar-sidebar-toggle--icon {
+  min-width: 40px;
+  padding: 6px 10px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.topbar-sidebar-toggle__menu-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+/* 제공 PNG(검정 막대) → 상단바에서 흰색으로 */
+.topbar-sidebar-toggle__menu-img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  filter: invert(1);
 }
 
 .user-email {
@@ -3581,6 +3634,11 @@
   background: #1e293b;
 }
 
+.map-video-modal-head__stack {
+  min-width: 0;
+  flex: 1;
+}
+
 .map-video-modal-title {
   margin: 0;
   font-size: 1.1rem;
@@ -3610,7 +3668,7 @@
   background: #475569;
 }
 
-/* 단대호 매뉴얼 팝업 ================================================= */
+/* 단대호 팝업 ================================================= */
 .unit-symbol-manual-modal {
   max-width: 560px;
   width: calc(100% - 48px);
@@ -3795,14 +3853,6 @@
   border-color: rgba(250, 204, 21, 0.5);
 }
 
-.unit-symbol-manual-footnote {
-  margin: 0;
-  padding: 0 2px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: #94a3b8;
-}
-
 .map-video-modal-body {
   padding: 12px 16px 16px;
   flex: 1;
@@ -3926,9 +3976,17 @@
   color: #e0f2fe;
 }
 
-.service-asset-stream-modal__caption {
-  margin: 0;
-  font-size: 12px;
+/* UAV·드론 스트림 모달 — 제목 바로 아래 준비태세·채널 표시 */
+.service-asset-stream-modal__head-status {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #e0f2fe;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.28), rgba(8, 47, 73, 0.55));
+  border: 1px solid rgba(56, 189, 248, 0.42);
 }
 
 .service-asset-stream-modal__footer {
@@ -5267,7 +5325,7 @@ button:disabled {
   }
 }
 
-/* UAV 단계: EO/IR 추적 시야(십자·락 박스·스캔라인) */
+/* UAV 단계: EO/IR 감시 시야(십자·락 박스·스캔라인) */
 .sensor-uav-viewport {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -8388,36 +8446,144 @@ button:disabled {
   color: #fde68a;
 }
 
-/* SAR 버튼 — GRD 데이터 시각화 팝업 */
+/* SAR 버튼 — SAR 관측 데이터 팝업(단일 이미지·지도 레이어 토글) */
 .service-sar-grd-viz-modal {
-  width: min(720px, 96vw);
-  max-height: min(90vh, 820px);
+  width: min(960px, 98vw);
+  max-height: min(96vh, 940px);
 }
 
 .service-sar-grd-viz-modal__body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   padding-bottom: 4px;
+  min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
 }
 
-.service-sar-grd-viz-modal__figure {
+.service-sar-grd-viz-modal.scenario-summary-modal .scenario-summary-modal__body.service-sar-grd-viz-modal__body {
+  flex-direction: column;
+  /* flex 자식(이미지 영역)이 basis 0에서 높이 0으로 붕괴되어 빈 검은 박스만 보이는 것 방지 */
+  min-height: min(520px, 62vh);
+}
+
+.service-sar-grd-viz-modal__step-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.service-sar-grd-viz-modal__step-toolbar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(72px, auto);
+  align-items: center;
+  gap: 10px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.service-sar-grd-viz-modal__step-nav {
+  min-width: 72px;
+}
+
+.service-sar-grd-viz-modal__step-counter {
+  justify-self: center;
+  text-align: center;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.service-sar-grd-viz-modal__step-dots {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.service-sar-grd-viz-modal__step-dot {
+  min-width: 36px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(71, 85, 105, 0.9);
+  background: rgba(15, 23, 42, 0.9);
+  color: #94a3b8;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.service-sar-grd-viz-modal__step-dot:hover:not(.is-active) {
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #e2e8f0;
+}
+
+.service-sar-grd-viz-modal__step-dot.is-active {
+  border-color: rgba(56, 189, 248, 0.75);
+  background: rgba(14, 165, 233, 0.22);
+  color: #f0f9ff;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+
+.service-sar-grd-viz-modal__step-figure {
   margin: 0;
+  flex: 1 1 0;
+  min-height: min(400px, 50vh);
   border-radius: 10px;
   overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
   border: 1px solid rgba(51, 65, 85, 0.75);
-  background: #0f172a;
+  background: #020617;
+  line-height: 0;
 }
 
-.service-sar-grd-viz-modal__figure img {
+/* flex 높이 안에 전체가 들어가도록 박스를 채운 뒤 object-fit: contain (6·7단 등 세로 긴 이미지 잘림 방지) */
+.service-sar-grd-viz-modal__step-figure img {
   display: block;
+  box-sizing: border-box;
   width: 100%;
-  height: auto;
-  max-height: min(52vh, 480px);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
+  object-position: center center;
+}
+
+.service-sar-grd-viz-modal__step-figure--single {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.service-sar-grd-viz-modal__footer {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.service-sar-grd-viz-modal__footer .service-sar-grd-viz-toggle {
+  flex: 1 1 auto;
+  min-width: min(220px, 100%);
 }
 
 .service-sar-grd-viz-toggle {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8459,17 +8625,68 @@ button:disabled {
   color: #f0f9ff;
 }
 
+/* FMCW 요약 모달 — 레이더 선택 탭 한 줄 */
+.service-fmcw-bev-radar-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.service-fmcw-bev-radar-row .service-fmcw-bev-radar-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 8px;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-fmcw-bev-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin-top: 12px;
+  align-items: start;
+}
+
+.service-fmcw-bev-stats__cell {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #e2e8f0;
+}
+
+.service-fmcw-bev-stats__cell--wide {
+  grid-column: 1 / -1;
+}
+
+.service-fmcw-bev-target-list {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.service-fmcw-summary-modal.scenario-summary-modal .scenario-summary-modal__footer .btn-secondary {
+  font-size: 13px;
+  padding: 8px 18px;
+}
+
+.service-fmcw-bev-frame-caption {
+  margin: 8px 0 0;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .service-fmcw-summary-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin: 10px 0 12px;
-}
-
-.service-fmcw-summary-view-caption {
-  margin: 10px 0 12px;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .service-fmcw-summary-mode-buttons {
@@ -8485,6 +8702,11 @@ button:disabled {
 }
 
 /* SAR Spotlight — 관측 구역 클릭 시 전체 화면 인식 결과(샘플 이미지) */
+/* 위성 SAR 상세에서 연 이미지 팝업 — 구역 Spotlight 모달(z-index 200) 위에 표시 */
+.sar-spotlight-root--panel {
+  z-index: 205;
+}
+
 .sar-spotlight-root {
   position: fixed;
   inset: 0;
@@ -8588,11 +8810,33 @@ button:disabled {
   background: #020617;
 }
 
-.sar-spotlight-modal__body img {
+.sar-spotlight-modal__figure {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.sar-spotlight-modal__figure img {
   display: block;
   width: 100%;
   height: auto;
   vertical-align: middle;
+}
+
+.sar-spotlight-modal__loss-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fef3c7;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  border-radius: 6px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
 }
 
 .sar-mbt-extraction-modal {
@@ -9028,12 +9272,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.service-uav-dispatch-modal__detect-btn {
-  min-width: 0;
-  padding-left: 12px;
-  padding-right: 12px;
-}
-
 /* SAR 전개 직후, 함흥 축선에 띄우는 위성 소실 메시지 */
 .service-sar-loss-map-popup .maplibregl-popup-content {
   padding: 0;
@@ -9280,12 +9518,11 @@ button:disabled {
   line-height: 1.35;
 }
 
-/* 지도 위 — 마우스 좌표(우하단) 바로 위에 선택 객체 상세 HUD (우측 정렬·콤팩트 폭) */
+/* 지도 위 — 선택 객체 상세 HUD (우하단, 좌표·범례는 좌하단으로 분리됨) */
 .service-selected-object-panel.service-selected-object-panel--map-overlay {
   position: absolute;
   right: 12px;
-  /* readout: bottom 12px + 약 2.6rem 높이 + 간격 */
-  bottom: calc(12px + 2.65rem + 10px);
+  bottom: 12px;
   z-index: 6;
   width: min(248px, calc(100% - 24px));
   max-width: min(248px, calc(100% - 24px));
@@ -9474,18 +9711,39 @@ button:disabled {
 .service-sar-move-notice__body {
   margin: 0;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.4;
   color: #cbd5e1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .service-sar-move-notice__body strong {
   color: #f8fafc;
 }
 
+.service-sar-move-notice__body-line {
+  display: block;
+}
+
+.service-sar-move-notice__body-line + .service-sar-move-notice__body-line {
+  margin-top: 3px;
+}
+
 .service-sar-move-notice__actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.service-sar-move-notice__actions .btn-secondary {
+  min-width: 78px;
+  height: 38px;
+  padding-inline: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* SAR 적 기동 알림 — 경고(긴급) 톤 · 빨간 계열 배경 */
@@ -9970,14 +10228,30 @@ button:disabled {
   line-height: 1.45;
 }
 
-.service-map-legend {
+/* 좌하단: 마우스 좌표(위) + 범례(아래) */
+.service-map-legend-stack {
   position: absolute;
   left: 12px;
   bottom: 12px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(calc(100% - 24px), 720px);
+  pointer-events: none;
+}
+
+.service-map-legend-stack .service-map-legend,
+.service-map-legend-stack .service-cursor-readout {
+  pointer-events: auto;
+}
+
+.service-map-legend {
+  position: static;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  z-index: 3;
 }
 
 .service-map-legend__item {
@@ -10000,10 +10274,7 @@ button:disabled {
 }
 
 .service-cursor-readout {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 3;
+  position: static;
   margin: 0;
   border: 1px solid rgba(148, 163, 184, 0.4);
   border-radius: 8px;
@@ -10011,7 +10282,8 @@ button:disabled {
   color: #e2e8f0;
   font-size: 11px;
   padding: 6px 8px;
-  max-width: min(65%, 520px);
+  max-width: 100%;
+  line-height: 1.35;
 }
 
 .service-layer-toggle {
@@ -10033,13 +10305,6 @@ button:disabled {
 .service-layer-toggle__master-btn--on {
   border-color: rgba(34, 197, 94, 0.55);
   box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.12) inset;
-}
-
-.service-layer-toggle__master-hint {
-  margin: 6px 0 0;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--hud-muted);
 }
 
 .service-layer-toggle__title {
@@ -12137,6 +12402,13 @@ button:disabled {
   margin-top: 4px;
 }
 
+.service-orbital-sar-mode-readout {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
 .service-orbital-sar-mode-row {
   display: flex;
   flex-wrap: wrap;
@@ -12242,13 +12514,6 @@ button:disabled {
 
 .battlefield-shortcuts-modal__close:hover {
   background: rgba(51, 65, 85, 0.95);
-}
-
-.battlefield-shortcuts-modal__hint {
-  margin: 0;
-  padding: 0 18px 10px;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .battlefield-shortcuts-table-wrap {

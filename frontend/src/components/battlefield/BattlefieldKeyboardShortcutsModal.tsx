@@ -18,15 +18,11 @@ export function BattlefieldKeyboardShortcutsModal({ open, onClose }: Battlefield
         onClick={(e) => e.stopPropagation()}
       >
         <div className="battlefield-shortcuts-modal__head">
-          <h2 id="battlefield-shortcuts-title">바로 가기 키</h2>
+          <h2 id="battlefield-shortcuts-title">단축키</h2>
           <button type="button" className="battlefield-shortcuts-modal__close" aria-label="닫기" onClick={onClose}>
             ×
           </button>
         </div>
-        <p className="battlefield-shortcuts-modal__hint muted">
-          입력란·채팅 포커스일 때는 지도 단축키가 동작하지 않습니다. 단축키 도움말은 <kbd>?</kbd> (Shift+/) 로
-          열 수 있습니다.
-        </p>
         <div className="battlefield-shortcuts-table-wrap">
           <table className="battlefield-shortcuts-table">
             <thead>

@@ -2,12 +2,12 @@ type Props = {
   onContinue: () => void
 }
 
-/** 2단계: 무인기(UAV) SAR 추적 — 지도와 분리된 전용 화면 */
+/** 2단계: 무인기(UAV) SAR 감시 — 지도와 분리된 전용 화면 */
 export function UavTrackingPhase({ onContinue }: Props) {
   return (
     <div className="uav-tracking-phase">
       <div className="uav-tracking-phase__head">
-        <h2 className="uav-tracking-phase__title">2단계 · 무인기(UAV) SAR 광역 추적</h2>
+        <h2 className="uav-tracking-phase__title">2단계 · 무인기(UAV) SAR 광역 감시</h2>
         <p className="muted uav-tracking-phase__lead">
           군사분계선(40km) <strong>밖</strong> 구간에서 UAV 탑재 SAR로 표적 남하를 <strong>광역·연속</strong>으로
           감시합니다.

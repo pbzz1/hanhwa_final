@@ -50,7 +50,7 @@ export function getEnemyStatusLabel(status: DetectionStatus | undefined): string
     case 'identified':
       return '식별'
     case 'tracking':
-      return '추적 중'
+      return '감시 중'
     case 'detected':
     default:
       return '탐지'

@@ -13,7 +13,6 @@ export const SAR_OBSERVATION_ZONE_GEOJSON = {
       properties: {
         id: 'sar2-wide-zone',
         name: 'ScanSAR 광역 탐지 지역',
-        note: 'Spotlight와 별도의 광역 탐지 보조 영역',
       },
       geometry: {
         type: 'Polygon' as const,
@@ -33,8 +32,7 @@ export const SAR_OBSERVATION_ZONE_GEOJSON = {
       type: 'Feature' as const,
       properties: {
         id: 'sar2-spotlight-zone',
-        name: '위성 SAR-spotlight 탐지 지역',
-        note: 'SAR-2 스팟라이트(15×15) 정밀 관측 구역',
+        name: '위성 SAR 탐지 지역',
       },
       geometry: {
         type: 'Polygon' as const,
@@ -58,6 +56,14 @@ export const SAR_SPOTLIGHT_ZONE_BOUNDS = {
   south: 39.58,
   east: 127.68,
   north: 39.8,
+} as const
+
+/** `sar2-wide-zone` 외접 사각형 — ScanSAR 광역 지도 포커스용 */
+export const SAR_WIDE_ZONE_BOUNDS = {
+  west: 125.188,
+  south: 38.136,
+  east: 128.212,
+  north: 39.864,
 } as const
 
 /** 겹침 구간에서 광역보다 스팟라이트 히트를 우선(맵 이벤트 features[0]이 광역인 경우 방지) */
@@ -134,6 +140,9 @@ export const GRD_FALLBACK_SAR_UAV_ORIGIN = { lat: 37.67, lng: 126.95 } as const
 /** 노란색(전차) GRD 링 가시성 강화 — 기존 대비 2배 확대 */
 export const GRD_TANK_MOTION_RING_SCALE = 2.56
 
+/** 파란색(일반차량) 이동 검출 링 — 기본 대비 2배 */
+export const GRD_BLUE_MOTION_RING_SCALE = 2
+
 export function grdMotionBlobRing(cx: number, cy: number, scale = 1): [number, number][] {
   // 중심점(cx, cy)을 기준으로 대칭 링을 사용해 마커와 시각 중심이 정확히 겹치도록 유지
   const rx = 0.038 * scale
@@ -160,7 +169,7 @@ export const GRD_DETECTION_SPEC = [
   { id: 'grd-mot-2', cx: 126.03, cy: 39.31, classLabel: '전차', probPercent: 89 }, // TRK58
   { id: 'grd-mot-3', cx: 126.04, cy: 38.99, classLabel: '전차', probPercent: 84 }, // TRK48
   { id: 'grd-mot-4', cx: 126.02, cy: 38.72, classLabel: '전차', probPercent: 82 }, // TRK52
-  { id: 'grd-mot-5', cx: 127.21, cy: 39.55, classLabel: '전차', probPercent: 88 }, // TRK49
+  { id: 'grd-mot-5', cx: 127.47, cy: 39.67, classLabel: '전차', probPercent: 88 }, // TRK49 (내동리 인근)
   { id: 'grd-mot-6', cx: 127.03, cy: 39.03, classLabel: '전차', probPercent: 81 }, // TRK50
   // 파란색(일반차량): 박스 하단 바깥으로 완전히 분리 배치
   { id: 'grd-mot-7', cx: 125.52, cy: 38.58, classLabel: '일반차량', probPercent: 70 },
@@ -183,7 +192,11 @@ export const GRD_MOTION_DETECTIONS_GEOJSON = {
     geometry: {
       type: 'Polygon' as const,
       coordinates: [
-        grdMotionBlobRing(row.cx, row.cy, row.classLabel === '전차' ? GRD_TANK_MOTION_RING_SCALE : 1),
+        grdMotionBlobRing(
+          row.cx,
+          row.cy,
+          row.classLabel === '전차' ? GRD_TANK_MOTION_RING_SCALE : GRD_BLUE_MOTION_RING_SCALE,
+        ),
       ],
     },
   })),

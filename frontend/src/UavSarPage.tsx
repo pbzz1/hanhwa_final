@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { SensorStagePipelineFrame } from './SensorStagePipelineFrame'
 
-const DEMO_UAV_VIDEO = '/media/uav/uav_ir.mp4'
+const DEMO_UAV_VIDEO = '/media/uav/eo/uav-eo-01.mp4'
 
 type Props = {
   onContinue: () => void
@@ -11,14 +11,14 @@ export function UavSarPage({ onContinue }: Props) {
   return (
     <SensorStagePipelineFrame
       activeStep="uav_sar"
-      title="UAV · SAR/EO 추적"
+      title="UAV · SAR/EO 감시"
       lead={
         <>
-          1단계 후보 좌표를 받아 <strong>저고도 SAR·EO/IR</strong>로 연속 추적합니다. 고해상 Spotlight·MSFA 분류와
+          1단계 후보 좌표를 받아 <strong>저고도 SAR·EO/IR</strong>로 연속 감시합니다. 고해상 Spotlight·MSFA 분류와
           영상계 <strong>YOLO+ByteTrack</strong>·경로 분석을 한 흐름으로 봅니다.
         </>
       }
-      detailTitle="추적 · 정밀 SAR · EO/IR"
+      detailTitle="감시 · 정밀 SAR · EO/IR"
       detail={
         <>
           <ul className="drone-eoir-band-list">
@@ -58,7 +58,7 @@ export function UavSarPage({ onContinue }: Props) {
           </p>
         </>
       }
-      demoTitle="EO/IR · 추적 시야"
+      demoTitle="EO/IR · 감시 시야"
       demoLead="통합 시나리오와 동일 계열 정찰 영상(드론 시점)."
       demoWrapClassName="sensor-drone-stage drone-eoir-stage"
       demo={

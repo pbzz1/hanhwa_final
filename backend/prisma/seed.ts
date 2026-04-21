@@ -9,6 +9,11 @@ const demoVideoUrl =
 /** YOLO 전차 인식 데모 영상 (public/media) */
 const yoloTankInfiltrationVideoUrl = '/media/uav/yolo-tank-1.mp4';
 const yoloTankSituationVideoUrl = '/media/uav/yolo-tank-3.mp4';
+/** UAV EO 표준 클립 — 프론트 `/media/uav/eo/uav-eo-NN.mp4`와 동일 규칙 */
+function uavEoSituationVideoUrl(index0: number): string {
+  const n = (index0 % 5) + 1;
+  return `/media/uav/eo/uav-eo-${String(n).padStart(2, '0')}.mp4`;
+}
 
 /**
  * 소형무인정찰 N소대 고정 클립 — `frontend/src/App.tsx`의 `droneFixedMediaVideoPath`와 동일 규칙:
@@ -166,7 +171,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankSituationVideoUrl,
+        situationVideoUrl: uavEoSituationVideoUrl(0),
       },
       {
         name: '무인항공기(EO/IR) 정찰 2소대',
@@ -181,7 +186,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankSituationVideoUrl,
+        situationVideoUrl: uavEoSituationVideoUrl(1),
       },
       {
         name: '무인항공기(EO/IR) 정찰 3소대',
@@ -196,7 +201,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankSituationVideoUrl,
+        situationVideoUrl: uavEoSituationVideoUrl(2),
       },
       {
         name: '무인항공기(EO/IR) 정찰 4소대',
@@ -205,13 +210,13 @@ async function main() {
         lat: 37.666,
         lng: 127.062,
         personnel: 19,
-        equipment: 'EO/IR 추적 모듈',
+        equipment: 'EO/IR 감시 모듈',
         readiness: '경계',
         mission: '저고도 정찰 4구역',
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankSituationVideoUrl,
+        situationVideoUrl: uavEoSituationVideoUrl(3),
       },
       {
         name: '무인항공기(EO/IR) 정찰 5소대',
@@ -226,7 +231,7 @@ async function main() {
         symbolType: 'RECON',
         locationStatus: 'CURRENT',
         strengthModifier: 'NONE',
-        situationVideoUrl: yoloTankSituationVideoUrl,
+        situationVideoUrl: uavEoSituationVideoUrl(4),
       },
 
       // 드론 (5) — 소형 무인기 정찰 소대
@@ -297,7 +302,7 @@ async function main() {
         lat: 37.594,
         lng: 127.206,
         personnel: 11,
-        equipment: '근접 추적 드론',
+        equipment: '근접 정찰 드론',
         readiness: '양호',
         mission: '근접 식별 5구역',
         symbolType: 'RECON',
@@ -616,35 +621,59 @@ async function main() {
     ],
   });
 
+  /** 표적 일람·지도 적 핀: `/map/infiltrations` 행 수 = 전장 MBT 매핑 상한(데모 10건)과 맞춤 */
+  const infiltrationThreatCycle = ['낮음', '중간', '높음'] as const;
+  const infiltrationSeedBase = [
+    {
+      codename: '적 제105기갑사단 예하 제1기갑대대 (북측 집결)',
+      /** 평양 시청 일대 근사 — 프론트 시뮬·SAR 소실 원과 동일 */
+      lat: 39.0392,
+      lng: 125.7625,
+      threatLevel: '중간' as const,
+      estimatedCount: 28,
+      observedAt: new Date('2026-03-26T10:40:00'),
+      riskRadiusMeter: 3800,
+      droneVideoUrl: yoloTankInfiltrationVideoUrl,
+      enemySymbol: 'ENEMY_UNIT' as const,
+      enemyBranch: '기갑(전차대대·분계 이북)',
+    },
+    {
+      codename: '적 제4기갑사단 예하 제2기갑여단 (함흥 집결)',
+      /** 요청 반영: 내동리 인근 시작 좌표(동부 축선) */
+      lat: 39.667,
+      lng: 127.433,
+      threatLevel: '높음' as const,
+      estimatedCount: 21,
+      observedAt: new Date('2026-03-26T11:15:00'),
+      riskRadiusMeter: 3200,
+      droneVideoUrl: yoloTankInfiltrationVideoUrl,
+      enemySymbol: 'ENEMY_UNIT' as const,
+      enemyBranch: '기갑(기갑여단·동부 축선)',
+    },
+  ];
+  const infiltrationExtraCount = 10 - infiltrationSeedBase.length;
+  const infiltrationExtra = Array.from({ length: infiltrationExtraCount }, (_, i) => {
+    const k = i + 1;
+    const angle = (k / (infiltrationExtraCount + 1)) * Math.PI * 2;
+    const lat = 39.15 + 0.55 * Math.sin(angle) + (k % 3) * 0.04;
+    const lng = 126.2 + 0.95 * Math.cos(angle) + (k % 5) * 0.03;
+    const threatLevel = infiltrationThreatCycle[k % infiltrationThreatCycle.length]!;
+    const baseMin = 5 + ((k * 7) % 12);
+    return {
+      codename: `적 전방·측면 집결 소부대 ${String(k + 2).padStart(2, '0')} (GRU 추정)`,
+      lat,
+      lng,
+      threatLevel,
+      estimatedCount: baseMin + (k % 4) * 3,
+      observedAt: new Date(`2026-03-26T${String(11 + (k % 8)).padStart(2, '0')}:${String((k * 5) % 60).padStart(2, '0')}:00`),
+      riskRadiusMeter: 1600 + (k * 137) % 3400,
+      droneVideoUrl: yoloTankInfiltrationVideoUrl,
+      enemySymbol: 'ENEMY_UNIT' as const,
+      enemyBranch: k % 3 === 0 ? '포병(야전포)' : k % 3 === 1 ? '기갑(전차소대)' : '기계화보병',
+    };
+  });
   await prisma.infiltrationPoint.createMany({
-    data: [
-      {
-        codename: '적 제105기갑사단 예하 제1기갑대대 (북측 집결)',
-        /** 평양 시청 일대 근사 — 프론트 시뮬·SAR 소실 원과 동일 */
-        lat: 39.0392,
-        lng: 125.7625,
-        threatLevel: '중간',
-        estimatedCount: 28,
-        observedAt: new Date('2026-03-26T10:40:00'),
-        riskRadiusMeter: 3800,
-        droneVideoUrl: yoloTankInfiltrationVideoUrl,
-        enemySymbol: 'ENEMY_UNIT',
-        enemyBranch: '기갑(전차대대·분계 이북)',
-      },
-      {
-        codename: '적 제4기갑사단 예하 제2기갑여단 (함흥 집결)',
-        /** 함흥시 도심권 근사 — 침공 주축(함흥→평양→서울) 시뮬 우선 표적 */
-        lat: 39.8417,
-        lng: 127.7264,
-        threatLevel: '높음',
-        estimatedCount: 21,
-        observedAt: new Date('2026-03-26T11:15:00'),
-        riskRadiusMeter: 3200,
-        droneVideoUrl: yoloTankInfiltrationVideoUrl,
-        enemySymbol: 'ENEMY_UNIT',
-        enemyBranch: '기갑(기갑여단·동부 축선)',
-      },
-    ],
+    data: [...infiltrationSeedBase, ...infiltrationExtra],
   });
 
   /** 38선 이남에 잘못 둔 적 표적 제거 */
