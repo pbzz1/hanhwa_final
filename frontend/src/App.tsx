@@ -17376,78 +17376,87 @@ function BattlefieldServicePage() {
         <ScenarioSidebar ref={battlefieldSidebarRef} hidden={droneSplitViewActive}>
           <section className="service-panel-section">
             <div className="service-sim-control">
-              <div className="service-sim-control__row service-sim-control__row--cta-dual">
-                <button
-                  type="button"
-                  className="service-start-scenario-btn service-start-scenario-btn--compact"
-                  onClick={focusWorldMapView}
-                  title="전역 작전도로 시야 전환"
-                >
-                  전역 시야
-                </button>
-                <button
-                  type="button"
-                  className="service-start-scenario-btn service-start-scenario-btn--compact"
-                  onClick={focusKoreaOpsView}
-                  title="한반도 작전권역(AOR)으로 시야 전환"
-                >
-                  아군
-                </button>
-                <button
-                  type="button"
-                  className="service-start-scenario-btn service-start-scenario-btn--compact"
-                  onClick={handleSarExpandAlways}
-                  title="작전권역 미확정 시 우선 확정 후 SAR 탐지 단계로 전환합니다"
-                >
-                  작전 권역
-                </button>
-              </div>
-              <div className="service-sim-control__row service-sim-control__row--cta-dual">
-                <button
-                  type="button"
-                  className={`service-start-scenario-btn service-start-scenario-btn--compact${
-                    sarZoneViewMode === 'SPOTLIGHT' ? ' service-start-scenario-btn--active' : ''
-                  }`}
-                  onClick={() => focusSarZoneByMode('SPOTLIGHT')}
-                  title="위성 SAR Spotlight 탐지 구역 점선 박스만 표시"
-                >
-                  집중 탐지
-                </button>
-                <button
-                  type="button"
-                  className={`service-start-scenario-btn service-start-scenario-btn--compact${
-                    sarZoneViewMode === 'WIDE' ? ' service-start-scenario-btn--active' : ''
-                  }`}
-                  onClick={() => focusSarZoneByMode('WIDE')}
-                  title="위성 SAR 광역 탐지 점선 박스만 표시"
-                >
-                  광역 탐지
-                </button>
-              </div>
-              <div className="service-sim-control__row">
-                <button
-                  type="button"
-                  className={`service-start-scenario-btn service-start-scenario-btn--compact${primaryScenarioCta.active ? ' service-start-scenario-btn--active' : ''}`}
-                  onClick={
-                    primaryScenarioCta.mode === 'speed'
-                      ? handleCycleBattlefieldSpeed
-                      : handlePrimaryScenarioAction
-                  }
-                  disabled={primaryScenarioCta.disabled}
-                  title={primaryScenarioCta.mode === 'speed' ? '클릭 시 배속 순환: x1 → x2 → x4' : undefined}
-                >
-                  {primaryScenarioCta.label}
-                </button>
-                {timelineControlEnabled && (
+              <div className="service-sim-control__group">
+                <p className="service-sim-control__group-title">시야 제어</p>
+                <div className="service-sim-control__row service-sim-control__row--cta-dual service-sim-control__row--view">
                   <button
                     type="button"
-                    className="btn-secondary service-sim-control__aux-btn"
-                    onClick={handleToggleSimulationPause}
-                    title={simulationPaused ? '시뮬레이션 재개' : '시뮬레이션 일시정지'}
+                    className="service-start-scenario-btn service-start-scenario-btn--compact service-start-scenario-btn--tight"
+                    onClick={focusWorldMapView}
+                    title="전역 작전도로 시야 전환"
                   >
-                    {simulationPaused ? '재개' : '일시정지'}
+                    전역 시야
                   </button>
-                )}
+                  <button
+                    type="button"
+                    className="service-start-scenario-btn service-start-scenario-btn--compact service-start-scenario-btn--tight"
+                    onClick={focusKoreaOpsView}
+                    title="한반도 작전권역(AOR)으로 시야 전환"
+                  >
+                    아군
+                  </button>
+                  <button
+                    type="button"
+                    className="service-start-scenario-btn service-start-scenario-btn--compact service-start-scenario-btn--tight"
+                    onClick={handleSarExpandAlways}
+                    title="작전권역 미확정 시 우선 확정 후 SAR 탐지 단계로 전환합니다"
+                  >
+                    작전 권역
+                  </button>
+                </div>
+              </div>
+              <div className="service-sim-control__group">
+                <p className="service-sim-control__group-title">SAR 탐지</p>
+                <div className="service-sim-control__row service-sim-control__row--cta-dual">
+                  <button
+                    type="button"
+                    className={`service-start-scenario-btn service-start-scenario-btn--compact${
+                      sarZoneViewMode === 'SPOTLIGHT' ? ' service-start-scenario-btn--active' : ''
+                    }`}
+                    onClick={() => focusSarZoneByMode('SPOTLIGHT')}
+                    title="위성 SAR Spotlight 탐지 구역 점선 박스만 표시"
+                  >
+                    집중 탐지
+                  </button>
+                  <button
+                    type="button"
+                    className={`service-start-scenario-btn service-start-scenario-btn--compact${
+                      sarZoneViewMode === 'WIDE' ? ' service-start-scenario-btn--active' : ''
+                    }`}
+                    onClick={() => focusSarZoneByMode('WIDE')}
+                    title="위성 SAR 광역 탐지 점선 박스만 표시"
+                  >
+                    광역 탐지
+                  </button>
+                </div>
+              </div>
+              <div className="service-sim-control__group">
+                <p className="service-sim-control__group-title">시뮬레이션</p>
+                <div className="service-sim-control__row">
+                  <button
+                    type="button"
+                    className={`service-start-scenario-btn service-start-scenario-btn--compact${primaryScenarioCta.active ? ' service-start-scenario-btn--active' : ''}`}
+                    onClick={
+                      primaryScenarioCta.mode === 'speed'
+                        ? handleCycleBattlefieldSpeed
+                        : handlePrimaryScenarioAction
+                    }
+                    disabled={primaryScenarioCta.disabled}
+                    title={primaryScenarioCta.mode === 'speed' ? '클릭 시 배속 순환: x1 → x2 → x4' : undefined}
+                  >
+                    {primaryScenarioCta.label}
+                  </button>
+                  {timelineControlEnabled && (
+                    <button
+                      type="button"
+                      className="btn-secondary service-sim-control__aux-btn"
+                      onClick={handleToggleSimulationPause}
+                      title={simulationPaused ? '시뮬레이션 재개' : '시뮬레이션 일시정지'}
+                    >
+                      {simulationPaused ? '재개' : '일시정지'}
+                    </button>
+                  )}
+                </div>
               </div>
               {timelineControlEnabled && (
                 <div className="service-sim-control__playback">

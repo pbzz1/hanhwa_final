@@ -9517,6 +9517,11 @@ button:disabled {
   flex: 1;
 }
 
+.service-start-scenario-btn--tight {
+  font-size: 11px;
+  padding: 7px 8px;
+}
+
 .service-start-scenario-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 0 14px rgba(250, 204, 21, 0.35);
@@ -9534,6 +9539,19 @@ button:disabled {
   margin-bottom: 10px;
 }
 
+.service-sim-control__group {
+  display: grid;
+  gap: 6px;
+}
+
+.service-sim-control__group-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
 .service-sim-control__row {
   display: flex;
   align-items: stretch;
@@ -9547,6 +9565,14 @@ button:disabled {
 .service-sim-control__row--cta-dual .service-start-scenario-btn {
   flex: 1 1 118px;
   min-width: 0;
+}
+
+.service-sim-control__row--view {
+  flex-wrap: nowrap;
+}
+
+.service-sim-control__row--view .service-start-scenario-btn {
+  flex-basis: 0;
 }
 
 .service-sim-control__aux-btn {
