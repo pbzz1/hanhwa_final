@@ -1568,6 +1568,7 @@ const SERVICE_ORBITAL_SAR_FOOTPRINT_LINE_LAYER_ID = 'service-orbital-sar-footpri
 const ENEMY_UAV_DISPATCH_REFERENCE_IMAGE_URL = '/media/uav/drone-dispatch-mbt-atr-target.png'
 /** 파란 GRD(일반차량) 모달 1탭 — SAR 변화검출·차량 후보 시각화 */
 const GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL = '/media/sar/grd-blue-sar-change-detection.png'
+const SAR_GRD_DETECTION_MODAL_IMAGE_URL = `${import.meta.env.BASE_URL}media/sar/sar-observation-data-modal.png`
 const UAV_DETECTION_STEP_IMAGE_URLS = [
   '/media/sar/sat-sar-gmti-1.png',
   '/media/sar/sat-sar-gmti-2.png',
@@ -1800,7 +1801,6 @@ function ensureScenarioEnemySymbolImage(map: maplibregl.Map) {
 }
 
 /** SAR·GRD 시각화 팝업용 샘플(위성/SAR 톤) — `public/media/sar/sar-grd-visualization.png` */
-const SAR_GRD_VISUALIZATION_IMAGE_URL = '/media/sar/sar-grd-visualization.png'
 
 /** SAR Spotlight(관측 구역 클릭 시 표시되는 인식 결과 샘플 이미지) */
 
@@ -15974,7 +15974,7 @@ function BattlefieldServicePage() {
                   className={`service-sensor-btn${running ? ' service-sensor-btn--active' : ''}`}
                   title={
                     sensorId === 'sar'
-                      ? 'GRD 데이터 시각화 · 지도 GRD 레이어 ON/OFF'
+                      ? 'SAR 관측 데이터 · 지도 GRD 레이어 ON/OFF'
                       : sensorId === 'uav' || sensorId === 'drone'
                         ? `${meta.label} DB 자산 영상 보기`
                         : sensorId === 'fmcw'
@@ -17797,25 +17797,22 @@ function BattlefieldServicePage() {
             <div className="scenario-summary-modal service-sar-grd-viz-modal">
               <div className="scenario-summary-modal__chrome">
                 <div className="scenario-summary-modal__head">
-                  <h2 id={sarGrdVizModalTitleId}>GRD 데이터 시각화</h2>
+                  <h2 id={sarGrdVizModalTitleId}>SAR 관측 데이터</h2>
                   <button
                     type="button"
                     className="scenario-summary-modal__close"
-                    aria-label="GRD 시각화 닫기"
+                    aria-label="SAR 관측 데이터 닫기"
                     onClick={() => setSarGrdVizModalOpen(false)}
                   >
                     ×
                   </button>
                 </div>
-                <p className="scenario-summary-modal__sub muted">
-                  SAR·GRD 데이터 시각화. 지도의 파란 이동 검출 면은 우측 토글로 켜고 끌 수 있습니다.
-                </p>
               </div>
               <div className="scenario-summary-modal__body service-sar-grd-viz-modal__body">
                 <div className="service-sar-grd-viz-modal__figure">
                   <img
-                    src={SAR_GRD_VISUALIZATION_IMAGE_URL}
-                    alt="SAR·GRD 데이터 시각화(연안·관심구역 표시)"
+                    src={SAR_GRD_DETECTION_MODAL_IMAGE_URL}
+                    alt="SAR 관측 데이터"
                   />
                 </div>
                 <div className="service-sar-grd-viz-toggle">
