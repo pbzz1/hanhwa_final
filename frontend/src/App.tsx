@@ -743,8 +743,8 @@ function normalizeEnemyIngressPoint(lat: number, lng: number): { lat: number; ln
   return snapEnemyMbtPoseToLandCorridor(boxed)
 }
 
-/** 요청 반영: 아래 두 적 MBT는 고정 표적으로 유지(좌표 갱신 제외) */
-const IMMOBILE_ENEMY_ENTITY_IDS = new Set<number>([9050])
+/** 모든 적 MBT는 OSRM 기반 경로로 이동 (고정 표적 없음) */
+const IMMOBILE_ENEMY_ENTITY_IDS = new Set<number>()
 
 /** 실시간 전장 서비스 — 전역 시야 기본 중심(버튼 복귀용) MapLibre [lng, lat] */
 const BATTLEFIELD_SERVICE_MAP_INITIAL_CENTER: [number, number] = [80, 30]
@@ -1710,6 +1710,14 @@ const ENEMY_UAV_DISPATCH_REFERENCE_IMAGE_URL = '/media/uav/drone-dispatch-mbt-at
 const GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL = '/media/sar/grd-blue-sar-change-detection.png'
 /** GRD 이동 검출(UAV 출동) 팝업 — 검출 박스·점수 라벨 없는 SAR 샘플 */
 const GRD_BLUE_SAR_POPUP_PREVIEW_IMAGE_URL = '/media/sar/sar-grd-example.png'
+/** 노란(전차) GRD 이동 검출 설명 이미지 시퀀스 */
+const SAT_SAR_GMTI_EXPLAIN_IMAGE_URLS = [
+  '/media/sar/sat-sar-gmti-1.png',
+  '/media/sar/sat-sar-gmti-2.png',
+  '/media/sar/sat-sar-gmti-3.png',
+  '/media/sar/sat-sar-gmti-4.png',
+  '/media/sar/sat-sar-gmti-5.png',
+] as const
 /** Spotlight 팝업 — 주석 없는 SAR 샘플 */
 const SAR_SPOTLIGHT_CLEAN_PREVIEW_IMAGE_URL = '/media/sar/sar-grd-example.png'
 
@@ -9356,6 +9364,8 @@ function BattlefieldServicePage() {
   /** SAR 관측 영역 표시 모드: 광역/집중 중 하나의 점선 박스만 노출 */
   const [sarZoneViewMode, setSarZoneViewMode] = useState<'WIDE' | 'SPOTLIGHT'>('WIDE')
   const [uavDispatchModalOpen, setUavDispatchModalOpen] = useState(false)
+  const [sarGmtiExplainModalOpen, setSarGmtiExplainModalOpen] = useState(false)
+  const [sarGmtiExplainImageIndex, setSarGmtiExplainImageIndex] = useState(0)
   /** 파란 GRD: SAR 탐지 이미지 → UAV 출동 추천(기존 본문) */
   const [uavDispatchGrdPanel, setUavDispatchGrdPanel] = useState<'sar' | 'dispatch'>('dispatch')
   const [uavDispatchRequest, setUavDispatchRequest] = useState<UavDispatchTarget | null>(null)
@@ -9532,6 +9542,8 @@ function BattlefieldServicePage() {
     setUavDispatchRequest(null)
     setSelectedUavDispatchId(null)
     setUavDispatchGrdPanel('dispatch')
+    setSarGmtiExplainModalOpen(false)
+    setSarGmtiExplainImageIndex(0)
     setEnemyDispatchPanelMode('dispatch')
     setSelectedEnemyTacticNames([])
   }, [])
@@ -16052,6 +16064,10 @@ function BattlefieldServicePage() {
         closeUavDispatchModal()
         return
       }
+      if (sarGmtiExplainModalOpen) {
+        setSarGmtiExplainModalOpen(false)
+        return
+      }
       if (uavVideoModal) {
         setUavVideoModal(null)
         return
@@ -16095,6 +16111,7 @@ function BattlefieldServicePage() {
     grdEnemyMotionAlert,
     sarGrdVizModalOpen,
     uavDispatchModalOpen,
+    sarGmtiExplainModalOpen,
     uavVideoModal,
     assetStreamModal,
     droneInlineVideoPanel,
@@ -17064,6 +17081,18 @@ function BattlefieldServicePage() {
                       : '추천 기준: 거리, 준비태세, EO/IR 임무 적합도, 운용 인원'}
                   </p>
                   <div className="service-uav-dispatch-modal__actions">
+                    {uavDispatchRequest.kind === 'grd' && uavDispatchRequest.grdModalEntry !== 'sar_detection' && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setSarGmtiExplainImageIndex(0)
+                          setSarGmtiExplainModalOpen(true)
+                        }}
+                      >
+                        움직임 감지
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn-secondary"
@@ -17095,6 +17124,68 @@ function BattlefieldServicePage() {
                 </div>
               </div>
             </div>,
+              document.body,
+            )}
+          {sarGmtiExplainModalOpen &&
+            createPortal(
+              <div
+                className="map-video-modal-backdrop"
+                role="presentation"
+                onClick={() => setSarGmtiExplainModalOpen(false)}
+              >
+                <div
+                  className="map-video-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="움직임 감지 이미지"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="map-video-modal-head">
+                    <div>
+                      <h2 className="map-video-modal-title">움직임 감지</h2>
+                    </div>
+                    <button
+                      type="button"
+                      className="map-video-modal-close"
+                      aria-label="닫기"
+                      onClick={() => setSarGmtiExplainModalOpen(false)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="map-video-modal-body">
+                    <img
+                      className="map-video-modal-video"
+                      src={SAT_SAR_GMTI_EXPLAIN_IMAGE_URLS[sarGmtiExplainImageIndex]!}
+                      alt=""
+                    />
+                  </div>
+                  <div className="service-uav-dispatch-modal__footer">
+                    <div className="service-uav-dispatch-modal__actions">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setSarGmtiExplainImageIndex((idx) => Math.max(0, idx - 1))}
+                        disabled={sarGmtiExplainImageIndex <= 0}
+                      >
+                        ◀
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        onClick={() =>
+                          setSarGmtiExplainImageIndex((idx) =>
+                            Math.min(SAT_SAR_GMTI_EXPLAIN_IMAGE_URLS.length - 1, idx + 1),
+                          )
+                        }
+                        disabled={sarGmtiExplainImageIndex >= SAT_SAR_GMTI_EXPLAIN_IMAGE_URLS.length - 1}
+                      >
+                        ▶
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>,
               document.body,
             )}
           {uavVideoModal &&
