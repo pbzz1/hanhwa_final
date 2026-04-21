@@ -25,10 +25,10 @@ export const BATTLEFIELD_PHASE_PANEL: Record<Phase, BattlefieldPhasePanelCopy> =
   [BattlefieldScenarioPhase.REGION_SELECTED]: {
     title: '작전권역 확정',
     description:
-      '함흥 축선 등 동부 관심 구역으로 시야를 맞춘 뒤 「작전 권역」을 눌러 SAR 탐지를 시작하세요. 적 마커 클릭으로도 스캔 단계로 들어갈 수 있습니다.',
+      '함흥 축선 등 동부 관심 구역으로 시야를 맞춘 뒤 SAR 탐지 전개를 시작하세요. SAR 버튼 또는 적 마커 클릭으로 스캔 단계로 들어갈 수 있습니다.',
     recommendedSensor: 'SAR 광역 관측',
     recommendDetail: '위성 링크 이상 시 SAR-2 예비 광역 채널로 전환합니다.',
-    mapHint: '「작전 권역」 버튼 또는 지도의 적 표적을 클릭해 SAR_SCAN으로 진입합니다.',
+    mapHint: '「SAR 탐지 전개」 버튼 또는 지도의 적 표적을 클릭해 SAR_SCAN으로 진입합니다.',
   },
   [BattlefieldScenarioPhase.SAR_SCAN]: {
     title: 'SAR 광역 스캔',
@@ -137,10 +137,10 @@ export {
 } from './sarMvp'
 
 export const BATTLEFIELD_SCENARIO_NOTICES = {
-  regionSelected: '작전권역이 확정되었습니다. 「작전 권역」으로 SAR 탐지를 진행하세요.',
+  regionSelected: '작전권역이 확정되었습니다. SAR 탐지 전개를 진행하세요.',
   enterSarScan: '함흥 방향 SAR 위성 링크 이상 감지. SAR-2 광역 관측으로 전환합니다.',
   uavDispatched:
-    'UAV-07이 GRD 후보 방향으로 출동했습니다. 경로상 적 전차가 탐지되면 동일 표적에 대해 감시·식별을 유지합니다.',
+    'UAV-07이 GRD 후보 방향으로 출동했습니다. 경로상 적 전차가 탐지되면 동일 표적을 추적합니다.',
   droneRecon: '드론 R-12가 근접 호버링을 시작했습니다.',
   fmcwAnalysis: 'FMCW 위험 윤곽 스캔을 수행 중입니다.',
   scenarioComplete: '시나리오 단계가 모두 완료되었습니다.',
@@ -157,7 +157,7 @@ export const SERVICE_SENSOR_SIMULATION_HELP: Record<
       '위성·광역 SAR 채널을 가정합니다. 붉은 관측 구역·남하 경로·GRD(이동 검출) 오버레이가 켜지고, 적 전차 표적이 항주 방향으로 이동하는 시뮬레이션이 재생됩니다.',
   },
   uav: {
-    title: 'UAV (EO/IR) 감시 시뮬레이션',
+    title: 'UAV (EO/IR) 추적 시뮬레이션',
     description:
       'SAR 후보 격자를 따라 저고도 UAV가 이동하는 경로를 지도에 표시합니다. GRD 영역을 가리키고 SAR/UAV 거점이 허용 거리 안에 있을 때만 다음 단계로 진행됩니다. EO/IR 패널·팝업은 영상·텍스트로 구성되어 있습니다.',
   },
@@ -196,12 +196,12 @@ export function getEntityPhasePopupNote(
       NEUTRAL: '[단계: 대기] 중립 이동체로 분류됩니다.',
     },
     REGION_SELECTED: {
-      ENEMY: '[단계: 권역 확정] 「작전 권역」 진입 시 우선 표적 후보입니다.',
+      ENEMY: '[단계: 권역 확정] SAR 탐지 전개 우선 표적 후보입니다.',
       ALLY: '[단계: 권역 확정] 연동 감시 자산입니다.',
       NEUTRAL: '[단계: 권역 확정] 민간 이동 구분 유지.',
     },
     SAR_SCAN: {
-      ENEMY: '[단계: SAR] 광역 IW 내 이동 에너지 후보로 분석 중.',
+      ENEMY: '[단계: SAR] 광역 IW 내 이동 에너지 후보로 추적 중.',
       ALLY: '[단계: SAR] 아군 필터 적용.',
       NEUTRAL: '[단계: SAR] 배경 클러터 억제 적용.',
     },

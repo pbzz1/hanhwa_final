@@ -5325,7 +5325,7 @@ button:disabled {
   }
 }
 
-/* UAV 단계: EO/IR 감시 시야(십자·락 박스·스캔라인) */
+/* UAV 단계: EO/IR 추적 시야(십자·락 박스·스캔라인) */
 .sensor-uav-viewport {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -8446,7 +8446,7 @@ button:disabled {
   color: #fde68a;
 }
 
-/* SAR 버튼 — SAR 관측 데이터 팝업(단일 이미지·지도 레이어 토글) */
+/* SAR 버튼 — 위성 SAR 이동 검출 제어 팝업 */
 .service-sar-grd-viz-modal {
   width: min(960px, 98vw);
   max-height: min(96vh, 940px);
@@ -8459,33 +8459,23 @@ button:disabled {
   padding-bottom: 4px;
   min-height: 0;
   overflow: hidden;
-  align-items: stretch;
-}
-
-.service-sar-grd-viz-modal.scenario-summary-modal .scenario-summary-modal__body.service-sar-grd-viz-modal__body {
-  flex-direction: column;
-  /* flex 자식(이미지 영역)이 basis 0에서 높이 0으로 붕괴되어 빈 검은 박스만 보이는 것 방지 */
-  min-height: min(520px, 62vh);
 }
 
 .service-sar-grd-viz-modal__step-view {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .service-sar-grd-viz-modal__step-toolbar {
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(72px, auto);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px 12px;
-  width: 100%;
-  box-sizing: border-box;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .service-sar-grd-viz-modal__step-nav {
@@ -8493,9 +8483,6 @@ button:disabled {
 }
 
 .service-sar-grd-viz-modal__step-counter {
-  justify-self: center;
-  text-align: center;
-  white-space: nowrap;
   font-size: 13px;
   font-weight: 600;
   color: #cbd5e1;
@@ -8507,8 +8494,6 @@ button:disabled {
   flex-wrap: wrap;
   gap: 6px;
   justify-content: center;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .service-sar-grd-viz-modal__step-dot {
@@ -8542,7 +8527,7 @@ button:disabled {
 .service-sar-grd-viz-modal__step-figure {
   margin: 0;
   flex: 1 1 0;
-  min-height: min(400px, 50vh);
+  min-height: 0;
   border-radius: 10px;
   overflow: hidden;
   display: flex;
@@ -8563,23 +8548,6 @@ button:disabled {
   min-height: 0;
   object-fit: contain;
   object-position: center center;
-}
-
-.service-sar-grd-viz-modal__step-figure--single {
-  flex: 1 1 auto;
-  width: 100%;
-}
-
-.service-sar-grd-viz-modal__footer {
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.service-sar-grd-viz-modal__footer .service-sar-grd-viz-toggle {
-  flex: 1 1 auto;
-  min-width: min(220px, 100%);
 }
 
 .service-sar-grd-viz-toggle {
@@ -8637,42 +8605,12 @@ button:disabled {
 .service-fmcw-bev-radar-row .service-fmcw-bev-radar-tab {
   flex: 1 1 0;
   min-width: 0;
-  padding: 7px 8px;
-  font-size: 13px;
-  line-height: 1.25;
+  padding: 5px 5px;
+  font-size: 11px;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.service-fmcw-bev-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 14px;
-  margin-top: 12px;
-  align-items: start;
-}
-
-.service-fmcw-bev-stats__cell {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #e2e8f0;
-}
-
-.service-fmcw-bev-stats__cell--wide {
-  grid-column: 1 / -1;
-}
-
-.service-fmcw-bev-target-list {
-  margin-top: 12px;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.service-fmcw-summary-modal.scenario-summary-modal .scenario-summary-modal__footer .btn-secondary {
-  font-size: 13px;
-  padding: 8px 18px;
 }
 
 .service-fmcw-bev-frame-caption {
@@ -8810,33 +8748,11 @@ button:disabled {
   background: #020617;
 }
 
-.sar-spotlight-modal__figure {
-  position: relative;
-  display: block;
-  width: 100%;
-}
-
-.sar-spotlight-modal__figure img {
+.sar-spotlight-modal__body img {
   display: block;
   width: 100%;
   height: auto;
   vertical-align: middle;
-}
-
-.sar-spotlight-modal__loss-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 6px 12px;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: #fef3c7;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(250, 204, 21, 0.55);
-  border-radius: 6px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
-  pointer-events: none;
 }
 
 .sar-mbt-extraction-modal {
@@ -12400,13 +12316,6 @@ button:disabled {
 
 .service-orbital-sar-detail {
   margin-top: 4px;
-}
-
-.service-orbital-sar-mode-readout {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #e2e8f0;
 }
 
 .service-orbital-sar-mode-row {

@@ -29,7 +29,7 @@ export function DroneEoIrIdentificationPanel({
       title={embedded ? '드론 EO/IR 식별 파이프라인' : '드론 EO/IR 식별'}
       lead={
         <>
-          기획 <strong>3단계</strong>(무인기 실시간 감시)·<strong>4단계</strong>(근접 드론 정밀 식별)에서 다루는 EO/IR
+          기획 <strong>3단계</strong>(무인기 실시간 추적)·<strong>4단계</strong>(근접 드론 정밀 식별)에서 다루는 EO/IR
           융합·정밀 파이프와 연계합니다. YOLO+ByteTrack 궤적, 저신뢰 검출 연결, 레이더와의 결과 통합, SAHI·BoT-SORT는
           근접·고고도 식별 단계에서 선택·보강합니다.{' '}
           <NavLink to="/sensor-pipeline?step=drone">센서 파이프라인</NavLink> 4단계
@@ -96,7 +96,7 @@ export function DroneEoIrIdentificationPanel({
             </table>
           </div>
           <p className="muted drone-eoir-footnote">
-            배치 YOLO 업로드는 <NavLink to="/identification">전차 식별·궤적</NavLink>, 벤치·Top-K UI 개념은 센서
+            배치 YOLO 업로드는 <NavLink to="/identification">전차 식별·추적</NavLink>, 벤치·Top-K UI 개념은 센서
             파이프라인 드론 단계 설명과 연동됩니다.
           </p>
         </>

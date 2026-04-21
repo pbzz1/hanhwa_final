@@ -32,7 +32,8 @@ export const SAR_OBSERVATION_ZONE_GEOJSON = {
       type: 'Feature' as const,
       properties: {
         id: 'sar2-spotlight-zone',
-        name: '위성 SAR 탐지 지역',
+        name: '위성 SAR 집중 탐지 지역',
+        note: 'SAR-2 스팟라이트(15×15) 정밀 관측 구역',
       },
       geometry: {
         type: 'Polygon' as const,
@@ -56,14 +57,6 @@ export const SAR_SPOTLIGHT_ZONE_BOUNDS = {
   south: 39.58,
   east: 127.68,
   north: 39.8,
-} as const
-
-/** `sar2-wide-zone` 외접 사각형 — ScanSAR 광역 지도 포커스용 */
-export const SAR_WIDE_ZONE_BOUNDS = {
-  west: 125.188,
-  south: 38.136,
-  east: 128.212,
-  north: 39.864,
 } as const
 
 /** 겹침 구간에서 광역보다 스팟라이트 히트를 우선(맵 이벤트 features[0]이 광역인 경우 방지) */

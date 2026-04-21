@@ -210,7 +210,7 @@ async function main() {
         lat: 37.666,
         lng: 127.062,
         personnel: 19,
-        equipment: 'EO/IR 감시 모듈',
+        equipment: 'EO/IR 추적 모듈',
         readiness: '경계',
         mission: '저고도 정찰 4구역',
         symbolType: 'RECON',
@@ -302,7 +302,7 @@ async function main() {
         lat: 37.594,
         lng: 127.206,
         personnel: 11,
-        equipment: '근접 정찰 드론',
+        equipment: '근접 추적 드론',
         readiness: '양호',
         mission: '근접 식별 5구역',
         symbolType: 'RECON',
@@ -621,7 +621,7 @@ async function main() {
     ],
   });
 
-  /** 표적 일람·지도 적 핀: `/map/infiltrations` 행 수 = 전장 MBT 매핑 상한(데모 10건)과 맞춤 */
+  /** 표적 일람·지도 적 핀: `/map/infiltrations` 행 수 = UI의 “적 표적” 건수 (데모 16건) */
   const infiltrationThreatCycle = ['낮음', '중간', '높음'] as const;
   const infiltrationSeedBase = [
     {
@@ -651,7 +651,7 @@ async function main() {
       enemyBranch: '기갑(기갑여단·동부 축선)',
     },
   ];
-  const infiltrationExtraCount = 10 - infiltrationSeedBase.length;
+  const infiltrationExtraCount = 16 - infiltrationSeedBase.length;
   const infiltrationExtra = Array.from({ length: infiltrationExtraCount }, (_, i) => {
     const k = i + 1;
     const angle = (k / (infiltrationExtraCount + 1)) * Math.PI * 2;

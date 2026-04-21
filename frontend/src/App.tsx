@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -92,11 +93,13 @@ import {
   GRD_MOTION_META,
 } from './battlefield/battlefieldScenarioMock'
 import {
+  GRD_BLUE_MOTION_RING_SCALE,
   GRD_DETECTION_SPEC,
   GRD_TANK_MOTION_RING_SCALE,
   grdMotionBlobRing,
 } from './battlefield/sarMvp/sarDetections'
 import {
+  BATTLEFIELD_BATTALION_HQ_GEO_REQUEST_EVENT,
   BATTLEFIELD_SHORTCUTS_HELP_OPEN_EVENT,
   isHotkeyTextInputTarget,
 } from './battlefield/battlefieldHotkeys'
@@ -109,7 +112,6 @@ import {
   SAR_ENEMY_MOVEMENT_ROUTE_GEOJSON,
   SAR_OBSERVATION_ZONE_GEOJSON,
   SAR_SPOTLIGHT_ZONE_BOUNDS,
-  SAR_SPOTLIGHT_RESULT_IMAGE_URL,
   SAR_ZONE_PASS_PROBABILITIES,
   type SarPassProbability,
   type SarMovementRouteTooltipProps,
@@ -149,6 +151,7 @@ import {
 import { buildScenarioSummaryReport } from './battlefield/scenarioSummaryMock'
 import {
   BATTALION_HAMHUNG_INVASION_ORIGIN,
+  BATTALION_HQ_USER_ANCHOR_NAME,
   BATTALION_PYONGYANG_INVASION_ORIGIN,
   BATTALION_ROUTE_CORRIDOR_REVEAL_MS,
   BATTALION_SCENARIO,
@@ -158,7 +161,6 @@ import {
   MDL_REFERENCE_ARTICLE_URL,
   isBattalionC2Unit,
   isEnemyNearDmz38,
-  pickBattalionHqGeoTarget,
   pickPrimaryEnemyForDistance,
   SAR_ENEMY_BLIP_PROGRESS,
   SAR_WIDE_SCAN_PAUSE_PROGRESS,
@@ -455,7 +457,7 @@ const INITIAL_SENSOR_STATE: ServiceSensorState = {
 }
 
 const LAYER_TOGGLE_LABEL: Record<LayerToggleKey, string> = {
-  friendly: '아군(DB 자산)',
+  friendly: '아군 부대 위치',
   enemy: '적',
   enemySymbol: '적 식별번호(지표)',
   ally: '우군',
@@ -548,6 +550,125 @@ const DUMMY_SCENARIO_ENTITIES: ReadonlyArray<ScenarioEntity> = [
     echelonLevel: '연대',
   },
   {
+    id: 9004,
+    name: '강계 권역 기동',
+    lat: 40.966,
+    lng: 126.584,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '남하 진행',
+    speedKph: 420,
+    headingDeg: 194,
+    riskLevel: '중간',
+    enemyCategory: 'armored_battalion',
+    detectionStatus: 'tracking',
+    confidence: 'suspected',
+    trackId: '49004',
+    echelonLevel: '대대',
+  },
+  {
+    id: 9005,
+    name: '신의주 축선 기동',
+    lat: 40.083,
+    lng: 124.401,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '서부 축선 남하',
+    speedKph: 420,
+    headingDeg: 186,
+    riskLevel: '중간',
+    enemyCategory: 'mechanized_battalion',
+    detectionStatus: 'identified',
+    confidence: 'suspected',
+    trackId: '49005',
+    echelonLevel: '연대',
+  },
+  {
+    id: 9006,
+    name: '원산 축선 기동',
+    lat: 39.161,
+    lng: 127.443,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '동해 축선 남하',
+    speedKph: 420,
+    headingDeg: 201,
+    riskLevel: '높음',
+    enemyCategory: 'armored_battalion',
+    detectionStatus: 'tracking',
+    confidence: 'suspected',
+    trackId: '49006',
+    echelonLevel: '대대',
+  },
+  {
+    id: 9007,
+    name: '청진 권역 집결',
+    lat: 41.766,
+    lng: 129.776,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '동북 축선 기동 준비',
+    speedKph: 420,
+    headingDeg: 212,
+    riskLevel: '중간',
+    enemyCategory: 'armored_battalion',
+    detectionStatus: 'detected',
+    confidence: 'suspected',
+    trackId: '49007',
+    echelonLevel: '중대',
+  },
+  {
+    id: 9008,
+    name: '해주 축선 기동',
+    lat: 38.0407,
+    lng: 125.7153,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '서해 축선 남하',
+    speedKph: 420,
+    headingDeg: 182,
+    riskLevel: '중간',
+    enemyCategory: 'mechanized_battalion',
+    detectionStatus: 'identified',
+    confidence: 'suspected',
+    trackId: '49008',
+    echelonLevel: '중대',
+  },
+  {
+    id: 9009,
+    name: '사리원 축선 기동',
+    lat: 38.507,
+    lng: 125.762,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '내륙 축선 남하',
+    speedKph: 420,
+    headingDeg: 189,
+    riskLevel: '높음',
+    enemyCategory: 'armored_battalion',
+    detectionStatus: 'tracking',
+    confidence: 'suspected',
+    trackId: '49009',
+    echelonLevel: '대대',
+  },
+  {
+    id: 9010,
+    name: '개성 권역 기동',
+    lat: 37.9705,
+    lng: 126.5542,
+    relation: 'ENEMY',
+    kind: 'MBT',
+    status: '남하 축선 전개',
+    speedKph: 420,
+    headingDeg: 178,
+    riskLevel: '중간',
+    enemyCategory: 'mechanized_battalion',
+    detectionStatus: 'identified',
+    confidence: 'suspected',
+    trackId: '49010',
+    echelonLevel: '연대',
+  },
+  {
     id: 9050,
     name: 'GRD 변화·접촉선 후보',
     // 시작 시점 즉시 GRD 검출영역 내부에 걸리지 않도록 북쪽으로 이격
@@ -623,7 +744,7 @@ function normalizeEnemyIngressPoint(lat: number, lng: number): { lat: number; ln
 }
 
 /** 요청 반영: 아래 두 적 MBT는 고정 표적으로 유지(좌표 갱신 제외) */
-const IMMOBILE_ENEMY_ENTITY_IDS = new Set<number>([9002, 9050])
+const IMMOBILE_ENEMY_ENTITY_IDS = new Set<number>([9050])
 
 /** 실시간 전장 서비스 — 전역 시야 기본 중심(버튼 복귀용) MapLibre [lng, lat] */
 const BATTLEFIELD_SERVICE_MAP_INITIAL_CENTER: [number, number] = [80, 30]
@@ -643,23 +764,38 @@ function scenarioMbtEnemyVisibleOnMap(
 /** UAV가 이 거리(km) 안에 들어오면 적 MBT를 추적 모드로 전환 */
 const BATTLEFIELD_UAV_ENEMY_ACQUIRE_KM = 52
 /** UAV 시뮬 1틱(센서 궤적 타이머와 동일) 이동 거리(km) */
-const BATTLEFIELD_UAV_SIM_STEP_KM = 0.11
+const BATTLEFIELD_UAV_SIM_STEP_KM = 0.22
 /** 사용자가 UAV 출동 후보를 명시 선택한 경우, 지도에서 움직임이 체감되도록 가속 */
-const BATTLEFIELD_UAV_DISPATCH_STEP_KM = 0.675
-const BATTLEFIELD_UAV_CLICK_VIDEO_URL = '/media/uav/eo/uav-eo-02.mp4'
+const BATTLEFIELD_UAV_DISPATCH_STEP_KM = 1.35
+const BATTLEFIELD_UAV_CLICK_VIDEO_URL = '/media/drone/demo-drone-map.mp4'
+/** UAV 영상 표준 경로(파일 교체만으로 유지): /public/media/uav/{eo|ir}/uav-{eo|ir}-0N.mp4 */
+const UAV_EO_VIDEO_URLS = [
+  '/media/uav/eo/uav-eo-01.mp4',
+  '/media/uav/eo/uav-eo-02.mp4',
+  '/media/uav/eo/uav-eo-03.mp4',
+  '/media/uav/eo/uav-eo-04.mp4',
+  '/media/uav/eo/uav-eo-05.mp4',
+] as const
+const UAV_IR_VIDEO_URLS = [
+  '/media/uav/ir/uav-ir-01.mp4',
+  '/media/uav/ir/uav-ir-02.mp4',
+  '/media/uav/ir/uav-ir-03.mp4',
+  '/media/uav/ir/uav-ir-04.mp4',
+  '/media/uav/ir/uav-ir-05.mp4',
+] as const
 const TACTIC_VIDEO_FALLBACK_URLS = [
-  '/media/uav/uav_ir.mp4',
-  '/media/uav/yolo-tank-2.mp4',
-  '/media/uav/yolo-tank-3.mp4',
+  UAV_EO_VIDEO_URLS[0],
+  UAV_EO_VIDEO_URLS[1],
+  UAV_EO_VIDEO_URLS[2],
 ] as const
 const TACTIC_VIDEO_URL_BY_NAME: Record<string, string> = {
-  '즉응 화력 차단': '/media/uav/uav_ir.mp4',
-  '우회 차단 기동': '/media/uav/yolo-tank-2.mp4',
-  '감시 지속·교란': '/media/uav/yolo-tank-3.mp4',
-  '감시 지속·추적': '/media/uav/uav_ir.mp4',
-  '선제 화력 경고사격': '/media/uav/yolo-tank-2.mp4',
-  '감시 유지': '/media/uav/uav_ir.mp4',
-  '예비대 대기': '/media/uav/yolo-tank-3.mp4',
+  '즉응 화력 차단': UAV_EO_VIDEO_URLS[0],
+  '우회 차단 기동': UAV_EO_VIDEO_URLS[1],
+  '감시 지속·교란': UAV_EO_VIDEO_URLS[2],
+  '감시 지속·추적': UAV_EO_VIDEO_URLS[0],
+  '선제 화력 경고사격': UAV_EO_VIDEO_URLS[1],
+  '감시 유지': UAV_EO_VIDEO_URLS[0],
+  '예비대 대기': UAV_EO_VIDEO_URLS[2],
 }
 
 function tacticVideoUrlForName(name: string): string {
@@ -672,15 +808,11 @@ function tacticVideoUrlForName(name: string): string {
 
 /** 드론도 UAV와 동일한 목표/추적 알고리즘으로 이동 */
 const BATTLEFIELD_DRONE_ENEMY_ACQUIRE_KM = 52
-const BATTLEFIELD_DRONE_SIM_STEP_KM = 0.675
+const BATTLEFIELD_DRONE_SIM_STEP_KM = 1.35
 /** 도로(OSRM) 궤적 추종 후 목표에 이 거리(km) 이내이면 직선 접근로 전환 */
 const BATTLEFIELD_DRONE_ROAD_TERMINAL_KM = 2.8
 const BATTLEFIELD_DRONE_ROUTE_REFRESH_MS = 12_000
-const UAV_ASSET_STREAM_FALLBACK_VIDEO_URLS = [
-  '/media/uav/uav_ir.mp4',
-  '/media/uav/yolo-tank-2.mp4',
-  '/media/uav/yolo-tank-3.mp4',
-] as const
+const UAV_ASSET_STREAM_FALLBACK_VIDEO_URLS = UAV_EO_VIDEO_URLS
 /**
  * `public/media/drone` 클립 목록(순서 고정).
  * 소형무인정찰 N소대 → `(N-1) % length`번째 URL. 다른 드론 부대명은 `unit.id % length`.
@@ -695,11 +827,17 @@ const DRONE_ASSET_STREAM_FALLBACK_VIDEO_URLS = [
 
 /** DB·시드에 남은 예전 public 루트 경로 → 폴더 정리 후 실제 경로 */
 const LEGACY_MEDIA_URL_TO_CURRENT: Record<string, string> = {
-  '/media/yolo-tank-1.mp4': '/media/uav/uav_ir.mp4',
-  '/media/yolo-tank-2.mp4': '/media/uav/yolo-tank-2.mp4',
-  '/media/yolo-tank-3.mp4': '/media/uav/yolo-tank-3.mp4',
-  '/media/yolo-tank-4.mp4': '/media/uav/yolo-tank-4.mp4',
-  '/media/yolo-tank-5.mp4': '/media/uav/yolo-tank-5.mp4',
+  '/media/yolo-tank-1.mp4': UAV_EO_VIDEO_URLS[0],
+  '/media/yolo-tank-2.mp4': UAV_EO_VIDEO_URLS[1],
+  '/media/yolo-tank-3.mp4': UAV_EO_VIDEO_URLS[2],
+  '/media/yolo-tank-4.mp4': UAV_EO_VIDEO_URLS[3],
+  '/media/yolo-tank-5.mp4': UAV_EO_VIDEO_URLS[4],
+  '/media/uav/uav_ir.mp4': UAV_IR_VIDEO_URLS[0],
+  '/media/uav/yolo-tank-1.mp4': UAV_EO_VIDEO_URLS[0],
+  '/media/uav/yolo-tank-2.mp4': UAV_EO_VIDEO_URLS[1],
+  '/media/uav/yolo-tank-3.mp4': UAV_EO_VIDEO_URLS[2],
+  '/media/uav/yolo-tank-4.mp4': UAV_EO_VIDEO_URLS[3],
+  '/media/uav/yolo-tank-5.mp4': UAV_EO_VIDEO_URLS[4],
 }
 
 function normalizeLegacyMediaUrl(url: string | null | undefined): string | null {
@@ -789,10 +927,12 @@ const GROUND_RADAR_SITES: readonly GroundRadarSite[] = [
   {
     id: 97003,
     name: '지상감시레이더-03',
-    axisLabel: '파주 감시축',
-    lat: 37.7765,
-    lng: 126.7799,
-    headingDeg: 325,
+    axisLabel: '강화 양도면 감시축',
+    // 인천 강화군 양도면 행정중심(개방지도 Nominatim administrative centroid)
+    lat: 37.66768,
+    lng: 126.42845,
+    // 서해안·강화 서부에서 북서~북 방향 위협축(개성·개경 방면)을 주 시야로
+    headingDeg: 335,
     fovDeg: 83,
     rangeKm: 80,
     reliabilityBase: 0.8,
@@ -864,9 +1004,9 @@ function buildGroundRadarCoverageGeojson(sites: readonly GroundRadarSite[]) {
 
 function buildGroundRadarServiceAssets(): ServiceAssetPoint[] {
   const videoById: Record<number, string> = {
-    97001: '/media/uav/yolo-tank-2.mp4',
-    97002: '/media/uav/yolo-tank-3.mp4',
-    97003: '/media/uav/uav_ir.mp4',
+    97001: UAV_EO_VIDEO_URLS[0],
+    97002: UAV_EO_VIDEO_URLS[1],
+    97003: UAV_EO_VIDEO_URLS[2],
   }
   return GROUND_RADAR_SITES.map((site) => ({
     id: site.id,
@@ -881,7 +1021,7 @@ function buildGroundRadarServiceAssets(): ServiceAssetPoint[] {
     mgrs: latLngToMgrsSafe(site.lat, site.lng),
     readiness: '최고',
     mission: '전방 감시축 상시 감시',
-    situationVideoUrl: videoById[site.id] ?? '/media/uav/uav_ir.mp4',
+    situationVideoUrl: videoById[site.id] ?? UAV_EO_VIDEO_URLS[0],
   }))
 }
 
@@ -1568,15 +1708,73 @@ const SERVICE_ORBITAL_SAR_FOOTPRINT_LINE_LAYER_ID = 'service-orbital-sar-footpri
 const ENEMY_UAV_DISPATCH_REFERENCE_IMAGE_URL = '/media/uav/drone-dispatch-mbt-atr-target.png'
 /** 파란 GRD(일반차량) 모달 1탭 — SAR 변화검출·차량 후보 시각화 */
 const GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL = '/media/sar/grd-blue-sar-change-detection.png'
-const SAR_GRD_DETECTION_MODAL_IMAGE_URL = `${import.meta.env.BASE_URL}media/sar/sar-observation-data-modal.png`
-const UAV_DETECTION_STEP_IMAGE_URLS = [
-  '/media/sar/sat-sar-gmti-1.png',
-  '/media/sar/sat-sar-gmti-2.png',
-  '/media/sar/sat-sar-gmti-3.png',
-  '/media/sar/sat-sar-gmti-4.png',
-  '/media/sar/sat-sar-gmti-5.png',
-] as const
+/** GRD 이동 검출(UAV 출동) 팝업 — 검출 박스·점수 라벨 없는 SAR 샘플 */
+const GRD_BLUE_SAR_POPUP_PREVIEW_IMAGE_URL = '/media/sar/sar-grd-example.png'
+/** Spotlight 팝업 — 주석 없는 SAR 샘플 */
+const SAR_SPOTLIGHT_CLEAN_PREVIEW_IMAGE_URL = '/media/sar/sar-grd-example.png'
 
+/** 위성 SAR 이동 검출 팝업 — 단일 기준 이미지 */
+const GRD_DETECTION_MODAL_IMAGE_URL = '/media/sar/grd-detection-modal.png'
+function computeGrdMotionZoomScale(zoom: number): number {
+  const minZoom = 7
+  const maxZoom = 12
+  const farScale = 0.775
+  const nearScale = 0.09
+  const clamped = Math.max(minZoom, Math.min(maxZoom, zoom))
+  const t = (clamped - minZoom) / (maxZoom - minZoom)
+  return farScale + (nearScale - farScale) * t
+}
+
+function ringSignedArea(ring: ReadonlyArray<[number, number]>): number {
+  if (ring.length < 3) return 0
+  let sum = 0
+  for (let i = 0; i < ring.length - 1; i += 1) {
+    const [x1, y1] = ring[i]!
+    const [x2, y2] = ring[i + 1]!
+    sum += x1 * y2 - x2 * y1
+  }
+  return sum / 2
+}
+
+function featureApproxArea(feature: { geometry?: { type?: string; coordinates?: unknown } } | null | undefined) {
+  const geom = feature?.geometry
+  if (!geom?.type) return Number.POSITIVE_INFINITY
+  if (geom.type === 'Polygon') {
+    const rings = (geom.coordinates as [number, number][][] | undefined) ?? []
+    if (rings.length === 0) return Number.POSITIVE_INFINITY
+    const outer = Math.abs(ringSignedArea(rings[0] ?? []))
+    const holes = rings
+      .slice(1)
+      .reduce((acc, ring) => acc + Math.abs(ringSignedArea(ring as [number, number][])), 0)
+    return Math.max(0, outer - holes)
+  }
+  if (geom.type === 'MultiPolygon') {
+    const polys = (geom.coordinates as [number, number][][][] | undefined) ?? []
+    if (polys.length === 0) return Number.POSITIVE_INFINITY
+    return polys.reduce((acc, poly) => {
+      const outer = Math.abs(ringSignedArea((poly?.[0] as [number, number][]) ?? []))
+      const holes = (poly ?? [])
+        .slice(1)
+        .reduce((s, ring) => s + Math.abs(ringSignedArea(ring as [number, number][])), 0)
+      return acc + Math.max(0, outer - holes)
+    }, 0)
+  }
+  return Number.POSITIVE_INFINITY
+}
+
+function pickNarrowestFeature<T extends { geometry?: { type?: string; coordinates?: unknown } }>(features: T[]): T | null {
+  if (features.length === 0) return null
+  let best: T | null = null
+  let bestArea = Number.POSITIVE_INFINITY
+  for (const f of features) {
+    const area = featureApproxArea(f)
+    if (area < bestArea) {
+      bestArea = area
+      best = f
+    }
+  }
+  return best ?? features[0] ?? null
+}
 const SERVICE_ASSET_SYMBOL_IMAGE_ID: Record<ServiceAssetCategory, string> = {
   SAR: 'service-asset-symbol-sar',
   UAV: 'service-asset-symbol-uav',
@@ -1800,8 +1998,6 @@ function ensureScenarioEnemySymbolImage(map: maplibregl.Map) {
   map.addImage(SERVICE_SCENARIO_ENEMY_SYMBOL_IMAGE_ID, imageData, { pixelRatio: 2 })
 }
 
-/** SAR·GRD 시각화 팝업용 샘플(위성/SAR 톤) — `public/media/sar/sar-grd-visualization.png` */
-
 /** SAR Spotlight(관측 구역 클릭 시 표시되는 인식 결과 샘플 이미지) */
 
 /** 지도 빈 곳 클릭 시 팝업을 닫지 않도록 제외할 레이어(객체·라벨·클러스터·SAR 구역 등) */
@@ -1884,7 +2080,7 @@ type MapVideoModalState = {
 }
 
 /** 적 핀 클릭 팝업용 — public/media 전차 검출 시연 영상 */
-const ENEMY_TANK_ASSEMBLY_VIDEO_URL = '/media/uav/uav_ir.mp4'
+const ENEMY_TANK_ASSEMBLY_VIDEO_URL = UAV_EO_VIDEO_URLS[0]
 
 function enemyIntelVideoModalState(enemy: {
   codename: string
@@ -7677,7 +7873,7 @@ function IdentificationTrackingPage() {
 /** 시나리오 우측 「YOLO 기반 전차 판별」 고정 클립 — Type-99 계열 근접 영상 */
 const YOLO_TANK_CORNER_VIDEO_URL = '/media/drone/china-type99.mp4'
 /** 센서 파이프라인 4단계(드론 EO/IR) 등 데모 루프 (yolo_tank_temp) */
-const DEMO_DRONE_VIDEO_URL = '/media/uav/yolo-tank-3.mp4'
+const DEMO_DRONE_VIDEO_URL = UAV_EO_VIDEO_URLS[2]
 
 type SensorStepDef = {
   id: 'sat_sar' | 'uav_sar' | 'fmcw' | 'drone'
@@ -8520,13 +8716,13 @@ function renderGrdMotionPopupHtml(
   const distLine =
     distKm != null
       ? `<div class="service-asset-popup__row"><dt>최근접 UAV</dt><dd>${distKm.toFixed(0)} km</dd></div>`
-      : `<div class="service-asset-popup__row"><dt>최근접 UAV</dt><dd>가용 자산 없음(DB)</dd></div>`
+      : `<div class="service-asset-popup__row"><dt>최근접 UAV</dt><dd>가용 자산 없음</dd></div>`
   const gateLine = hasDispatchableUav
     ? '<div class="service-asset-popup__row"><dt>출동</dt><dd>지시 우선 출동 가능(거리/준비태세 무관)</dd></div>'
-    : '<div class="service-asset-popup__row"><dt>출동</dt><dd>DB 자산 현황에 UAV가 없어 출동할 수 없습니다</dd></div>'
+    : '<div class="service-asset-popup__row"><dt>출동</dt><dd>자산 현황에 UAV가 없어 출동할 수 없습니다</dd></div>'
   return `
     <div class="service-asset-popup">
-      <h4 class="service-asset-popup__title">GRD 이동 검출(변화 픽셀)</h4>
+      <h4 class="service-asset-popup__title">이동 검출(변화 픽셀)</h4>
       <dl class="service-asset-popup__dl">
         ${idLine}
         <div class="service-asset-popup__row"><dt>분류·신뢰도</dt><dd>${escapeHtml(meta.classLabel)}: ${meta.probPercent}%</dd></div>
@@ -8567,7 +8763,7 @@ function renderSarRouteMovementTooltipHtml(p: SarMovementRouteTooltipProps): str
     <div class="service-asset-popup">
       <h4 class="service-asset-popup__title">${escapeHtml(p.name)}</h4>
       <dl class="service-asset-popup__dl">
-        <div class="service-asset-popup__row"><dt>적 전차 수</dt><dd>${p.tankCount}대</dd></div>
+        <div class="service-asset-popup__row"><dt>적 전차 수</dt><dd>약 ${p.tankCount}대</dd></div>
         <div class="service-asset-popup__row"><dt>이동 확률</dt><dd>${pct}%</dd></div>
         <div class="service-asset-popup__row"><dt>이동 방향</dt><dd>${escapeHtml(p.moveDirectionLabel)} (${p.moveHeadingDeg.toFixed(0)}°)</dd></div>
         ${target}
@@ -8584,7 +8780,7 @@ function renderSarZoneObservationTooltipHtml(input: {
   const route = input.route
   const tankCountLine =
     route != null
-      ? `<div class="service-asset-popup__row"><dt>적 전차 수</dt><dd>${route.tankCount}대</dd></div>`
+      ? `<div class="service-asset-popup__row"><dt>적 전차 수</dt><dd>약 ${route.tankCount}대</dd></div>`
       : '<div class="service-asset-popup__row"><dt>적 전차 수</dt><dd>추정 데이터 없음</dd></div>'
   const probabilityLine =
     route != null
@@ -8811,7 +9007,7 @@ function getSensorSimulationProceedState(
       }
       return {
         canProceed: false,
-        hint: '파란 GRD를 가리키거나 적 전차(MBT)를 선택한 뒤, DB 자산 현황에 UAV가 1개 이상 있어야 UAV 시뮬레이션을 진행할 수 있습니다.',
+        hint: '파란 GRD를 가리키거나 적 전차(MBT)를 선택한 뒤, 자산 현황에 UAV가 1개 이상 있어야 UAV 시뮬레이션을 진행할 수 있습니다.',
       }
     }
     return {
@@ -8855,6 +9051,7 @@ function getSensorSimulationProceedState(
 
 function BattlefieldServicePage() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  const battlefieldSidebarRef = useRef<HTMLElement | null>(null)
   const opsRegionSearchInputRef = useRef<HTMLInputElement | null>(null)
   const simTimelineSliderRef = useRef<HTMLInputElement | null>(null)
   const hotkeyGateRef = useRef({
@@ -8922,6 +9119,7 @@ function BattlefieldServicePage() {
   const [enemyBattlefieldPoses, setEnemyBattlefieldPoses] = useState<
     Record<number, { lat: number; lng: number }>
   >({})
+  const [grdMotionZoomLevel, setGrdMotionZoomLevel] = useState(8.6)
   const enemyBattlefieldPosesRef = useRef(enemyBattlefieldPoses)
   enemyBattlefieldPosesRef.current = enemyBattlefieldPoses
 
@@ -8979,6 +9177,7 @@ function BattlefieldServicePage() {
    * - blue 슬롯(일반차량): GRD_DETECTION_SPEC 기본 좌표 유지
    */
   const liveGrdMotion = useMemo(() => {
+    const zoomScale = computeGrdMotionZoomScale(grdMotionZoomLevel)
     const liveEnemies = scenarioEntitiesResolved
       .filter(
         (e) =>
@@ -9016,7 +9215,7 @@ function BattlefieldServicePage() {
         },
         geometry: {
           type: 'Polygon',
-          coordinates: [grdMotionBlobRing(cx, cy, GRD_TANK_MOTION_RING_SCALE)],
+          coordinates: [grdMotionBlobRing(cx, cy, GRD_TANK_MOTION_RING_SCALE * zoomScale)],
         },
       })
       meta[spec.id] = {
@@ -9037,7 +9236,10 @@ function BattlefieldServicePage() {
           centerLat: spec.cy,
           centerLng: spec.cx,
         },
-        geometry: { type: 'Polygon', coordinates: [grdMotionBlobRing(spec.cx, spec.cy, 1)] },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [grdMotionBlobRing(spec.cx, spec.cy, GRD_BLUE_MOTION_RING_SCALE * zoomScale)],
+        },
       })
       meta[spec.id] = {
         centerLat: spec.cy,
@@ -9050,7 +9252,7 @@ function BattlefieldServicePage() {
       geojson: { type: 'FeatureCollection' as const, features },
       meta,
     }
-  }, [scenarioEntitiesResolved, frozenYellowGrdMbtCentersByMotionId])
+  }, [scenarioEntitiesResolved, frozenYellowGrdMbtCentersByMotionId, grdMotionZoomLevel])
   const liveGrdMotionMetaRef = useRef(liveGrdMotion.meta)
   liveGrdMotionMetaRef.current = liveGrdMotion.meta
 
@@ -9127,10 +9329,10 @@ function BattlefieldServicePage() {
   const grdMotionAlertTitleId = useId()
   const uavDispatchModalTitleId = useId()
   const uavVideoModalTitleId = useId()
-  const uavDetectionStepModalTitleId = useId()
   const assetStreamModalTitleId = useId()
   const sarGrdVizModalTitleId = useId()
   const sarGrdMapToggleLabelId = useId()
+  const orbitalSarPreviewTitleId = useId()
   const opsRegionSearchInputId = useId()
   const fmcwCoverageToggleLabelId = useId()
   const fmcwRouteToggleLabelId = useId()
@@ -9151,6 +9353,8 @@ function BattlefieldServicePage() {
   const [fmcwSummarySection, setFmcwSummarySection] = useState<'point' | 'axis' | 'risk'>('point')
   const [fmcwBevRadarId, setFmcwBevRadarId] = useState<number>(GROUND_RADAR_SITES[0]?.id ?? 97001)
   const [sarGrdVizModalOpen, setSarGrdVizModalOpen] = useState(false)
+  /** SAR 관측 영역 표시 모드: 광역/집중 중 하나의 점선 박스만 노출 */
+  const [sarZoneViewMode, setSarZoneViewMode] = useState<'WIDE' | 'SPOTLIGHT'>('WIDE')
   const [uavDispatchModalOpen, setUavDispatchModalOpen] = useState(false)
   /** 파란 GRD: SAR 탐지 이미지 → UAV 출동 추천(기존 본문) */
   const [uavDispatchGrdPanel, setUavDispatchGrdPanel] = useState<'sar' | 'dispatch'>('dispatch')
@@ -9169,8 +9373,6 @@ function BattlefieldServicePage() {
     subtitle?: string
     videoUrl: string | null
   } | null>(null)
-  const [uavDetectionStepModalOpen, setUavDetectionStepModalOpen] = useState(false)
-  const [uavDetectionStepIndex, setUavDetectionStepIndex] = useState(0)
   const [assetStreamModal, setAssetStreamModal] = useState<{
     sensor: 'uav' | 'drone'
     selectedAssetId: number | null
@@ -9214,6 +9416,13 @@ function BattlefieldServicePage() {
   const [grdMotionMapOverlayOn, setGrdMotionMapOverlayOn] = useState(false)
 
   const [sarSpotlightEmphasis, setSarSpotlightEmphasis] = useState(false)
+  /** 위성 SAR 상세 패널 — Spotlight / 집중 탐지 결과 이미지 팝업 */
+  const [orbitalSarImagePreview, setOrbitalSarImagePreview] = useState<'spotlight' | 'intensive' | null>(null)
+  const orbitalSarImagePreviewRef = useRef<'spotlight' | 'intensive' | null>(null)
+  orbitalSarImagePreviewRef.current = orbitalSarImagePreview
+  const dismissOrbitalSarImagePreview = useCallback(() => {
+    setOrbitalSarImagePreview(null)
+  }, [])
 
   const [baseMapPreset, setBaseMapPreset] = useState<GoogleBasePresetId>('satellite')
   const [rasterTuning, setRasterTuning] = useState<MapRasterTuning>(DEFAULT_MAP_RASTER_TUNING)
@@ -9224,6 +9433,20 @@ function BattlefieldServicePage() {
     ...DEFAULT_LAYER_VISIBLE,
   }))
   const unitUpdatedAtRef = useRef<Record<number, string>>({})
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map) return
+    const handleZoomEnd = () => {
+      setGrdMotionZoomLevel(map.getZoom())
+    }
+    handleZoomEnd()
+    map.on('zoomend', handleZoomEnd)
+    return () => {
+      map.off('zoomend', handleZoomEnd)
+    }
+  }, [mapReady])
+
   const handleSelectRiskCandidate = useCallback(
     (candidateId: string) => {
       setSelectedRiskCandidateId(candidateId)
@@ -9263,6 +9486,8 @@ function BattlefieldServicePage() {
   } | null>(null)
   const enemyPrevInsideGrdRef = useRef<Record<number, Set<string>>>({})
   const grdOverlayActivePrevRef = useRef(false)
+  /** GRD 오버레이가 켜져 있는 동안 SAR 이동 경고 자동 표시는 1회만(재진입 시 반복·일시정지 방지) */
+  const grdSarEnemyMotionAlertAutoShownRef = useRef(false)
   const setGrdSelectedIdRef = useRef<(id: string | null) => void>(() => {})
   setGrdSelectedIdRef.current = setGrdSelectedId
   const assetsRef = useRef(assets)
@@ -9309,8 +9534,6 @@ function BattlefieldServicePage() {
     setUavDispatchGrdPanel('dispatch')
     setEnemyDispatchPanelMode('dispatch')
     setSelectedEnemyTacticNames([])
-    setUavDetectionStepModalOpen(false)
-    setUavDetectionStepIndex(0)
   }, [])
 
   const openUavVideoModal = useCallback(
@@ -9411,13 +9634,15 @@ function BattlefieldServicePage() {
     const ordered =
       category === 'DRONE' ? sortDroneAssetsByPlatoonName(filtered) : filtered
     return ordered.map((asset, index) => {
+      /**
+       * UAV EO: DB의 situationVideoUrl은 레거시 경로·깨진 교체 파일에 묶이기 쉬워 재생 실패가 난다.
+       * 스트림 모달은 데모 안정성을 위해 항상 표준 EO 클립 풀에서만 선택한다.
+       */
       const rawEo =
         category === 'DRONE'
           ? droneFixedMediaVideoPath(asset)
-          : asset.situationVideoUrl && asset.situationVideoUrl.trim().length > 0
-            ? asset.situationVideoUrl
-            : fallbackUrls[index % fallbackUrls.length] ?? null
-      const rawIr = category === 'UAV' ? '/media/uav/uav_ir.mp4' : rawEo
+          : (fallbackUrls[index % fallbackUrls.length] ?? null)
+      const rawIr = category === 'UAV' ? UAV_IR_VIDEO_URLS[index % UAV_IR_VIDEO_URLS.length] ?? null : rawEo
       return {
         ...asset,
         streamVideoUrl: resolvePlaybackMediaUrl(rawEo),
@@ -9512,12 +9737,14 @@ function BattlefieldServicePage() {
   useEffect(() => {
     enemyPrevInsideGrdRef.current = {}
     grdOverlayActivePrevRef.current = false
+    grdSarEnemyMotionAlertAutoShownRef.current = false
   }, [enemyMarchSession])
 
   useEffect(() => {
     const overlayOn = BATTLEFIELD_PHASE_MAP_FLAGS[scenarioPhase].showSarGrdPeninsulaOverlay
     if (!overlayOn) {
       grdOverlayActivePrevRef.current = false
+      grdSarEnemyMotionAlertAutoShownRef.current = false
       return
     }
     if (!grdOverlayActivePrevRef.current) {
@@ -9552,12 +9779,12 @@ function BattlefieldServicePage() {
     }
     grdOverlayActivePrevRef.current = true
     if (!alertPayload) return
+    if (grdSarEnemyMotionAlertAutoShownRef.current) return
+    grdSarEnemyMotionAlertAutoShownRef.current = true
     setGrdHoverId(null)
     setGrdSelectedId(alertPayload.motionId)
     setGrdEnemyMotionAlert(alertPayload)
     setGrdMotionMapOverlayOn(true)
-    setSimulationPaused(true)
-    setScenarioNotice('시뮬레이션 일시정지 · SAR 이동 경고')
   }, [enemyBattlefieldPoses, scenarioPhase, simulationPaused])
 
   useEffect(() => {
@@ -9897,9 +10124,10 @@ function BattlefieldServicePage() {
   }, [])
 
   const handleApplyBattalionHqToUserGeolocation = useCallback(() => {
-    const unit = pickBattalionHqGeoTarget(friendlyUnitsRaw)
+    if (userBattalionGeoLoading) return
+    const unit = friendlyUnitsRaw.find((u) => u.name === BATTALION_HQ_USER_ANCHOR_NAME)
     if (!unit) {
-      setScenarioNotice('아군 대대 본부(TPC 등) 부대를 찾을 수 없습니다. 자산 목록이 로드된 뒤 다시 시도하세요.')
+      setScenarioNotice(`「${BATTALION_HQ_USER_ANCHOR_NAME}」 부대를 찾을 수 없습니다. DB를 최신 시드로 맞춘 뒤 다시 시도하세요.`)
       return
     }
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -9939,7 +10167,7 @@ function BattlefieldServicePage() {
           })
         }
         setUserBattalionGeoLoading(false)
-        setScenarioNotice(`${unit.name} 위치를 현재 GPS 좌표로 반영했습니다.`)
+        setScenarioNotice(`${BATTALION_HQ_USER_ANCHOR_NAME} 위치를 현재 GPS 좌표로 반영했습니다.`)
       },
       (err: GeolocationPositionError) => {
         setUserBattalionGeoLoading(false)
@@ -9950,7 +10178,10 @@ function BattlefieldServicePage() {
       },
       { enableHighAccuracy: true, maximumAge: 60_000, timeout: 14_000 },
     )
-  }, [friendlyUnitsRaw])
+  }, [friendlyUnitsRaw, userBattalionGeoLoading])
+
+  const handleApplyBattalionHqToUserGeolocationRef = useRef(handleApplyBattalionHqToUserGeolocation)
+  handleApplyBattalionHqToUserGeolocationRef.current = handleApplyBattalionHqToUserGeolocation
 
   const handleOpsRegionSearchSubmit = useCallback(() => {
     const map = mapRef.current
@@ -10252,7 +10483,7 @@ function BattlefieldServicePage() {
 
   /** 우측 패널에서 카테고리를 펼쳐도 지도에는 DB 자산 전체를 유지(누락 방지) */
   const assetsForBattlefieldMap = useMemo(() => {
-    const withOrbit = assets.map((a) => {
+    return assets.map((a) => {
       if (a.category !== 'SATELLITE_SAR') return a
       const slot = ORBITAL_SLOT_BY_ID[a.id]
       if (slot == null) return a
@@ -10264,29 +10495,7 @@ function BattlefieldServicePage() {
         mgrs: latLngToMgrsSafe(pos.lat, pos.lng),
       }
     })
-    /** 출동 UAV·드론은 클러스터 핀에 묶이지 않고 `SERVICE_MOVERS` 전용 포인트로만 표시 */
-    return withOrbit.filter((a) => {
-      if (
-        a.category === 'UAV' &&
-        activeDispatchedUav != null &&
-        a.id === activeDispatchedUav.id &&
-        sensorState.uav.running &&
-        uavSimPos != null
-      ) {
-        return false
-      }
-      if (
-        a.category === 'DRONE' &&
-        activeDispatchedDroneId != null &&
-        a.id === activeDispatchedDroneId &&
-        sensorState.drone.running &&
-        droneSimPos != null
-      ) {
-        return false
-      }
-      return true
-    })
-  }, [assets, orbitalSimSeconds, activeDispatchedUav, sensorState.uav.running, uavSimPos, activeDispatchedDroneId, sensorState.drone.running, droneSimPos])
+  }, [assets, orbitalSimSeconds])
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -10979,12 +11188,18 @@ function BattlefieldServicePage() {
   const movingPointsForMap = useMemo(() => {
     return movingPoints.filter((row) => {
       if (row.category === 'MOVING_UAV') {
+        if (activeDispatchedUav != null) {
+          return false
+        }
         return uavSimPos != null && sensorState.uav.running
       }
       if (row.category === 'MOVING_UAV_TARGET') {
         return sensorState.uav.running
       }
       if (row.category === 'MOVING_DRONE') {
+        if (activeDispatchedDroneId != null) {
+          return false
+        }
         return sensorState.drone.running && droneSimPos != null
       }
       if (row.category === 'MOVING_FMCW') {
@@ -11000,6 +11215,8 @@ function BattlefieldServicePage() {
     sensorState.uav.running,
     sensorState.drone.running,
     droneSimPos,
+    activeDispatchedDroneId,
+    activeDispatchedUav,
   ])
 
   const dronePredictedRouteForMap = useMemo((): Parameters<GeoJSONSource['setData']>[0] => {
@@ -11362,6 +11579,38 @@ function BattlefieldServicePage() {
     return { nearestKm, farthestKm, avgDistanceKm, avgSpeedKph }
   }, [activeFmcwBevPointInfos])
 
+  /** FMCW BEV 격자 — 전방·횡방향(km) 눈금용(화면 좌표와 동일 스케일) */
+  const activeFmcwBevAxis = useMemo(() => {
+    if (!activeFmcwBev) return null
+    const fwdMax = Math.max(activeFmcwBev.bevMaxForwardKm, 1e-6)
+    const halfW = Math.max(activeFmcwBev.bevHalfWidthKm, 1e-6)
+    const gridTop = 18
+    const gridBot = 186
+    const gridLeft = 22
+    const gridRight = 308
+    const centerX = 165
+    const lateralScale = 138
+    const rowYs = [18, 60, 102, 144, 186] as const
+    const rowFwdKm = rowYs.map((y) => (fwdMax * (gridBot - y)) / (gridBot - gridTop))
+    const colN = 7
+    const colXs = Array.from({ length: colN }, (_, j) => gridLeft + (j * (gridRight - gridLeft)) / (colN - 1))
+    const colLatKm = colXs.map((x) => ((x - centerX) / lateralScale) * halfW)
+    return {
+      fwdMax,
+      halfW,
+      gridTop,
+      gridBot,
+      gridLeft,
+      gridRight,
+      centerX,
+      rowYs,
+      rowFwdKm,
+      colXs,
+      colLatKm,
+      axisLabel: activeFmcwBev.axisLabel,
+    }
+  }, [activeFmcwBev])
+
   const clearSarLossMapNotice = useCallback(() => {
     if (sarLossNoticeStartTimerRef.current != null) {
       window.clearTimeout(sarLossNoticeStartTimerRef.current)
@@ -11485,6 +11734,51 @@ function BattlefieldServicePage() {
       { padding: 60, duration: 650, maxZoom: 7.4 },
     )
     setScenarioNotice('한반도 작전권역 시야로 전환했습니다.')
+  }, [])
+
+  const focusSarZoneByMode = useCallback((mode: 'WIDE' | 'SPOTLIGHT') => {
+    setSarZoneViewMode(mode)
+    const map = mapRef.current
+    if (!map) return
+    if (mode === 'SPOTLIGHT') {
+      const pad = 0.02
+      map.fitBounds(
+        [
+          [SAR_SPOTLIGHT_ZONE_BOUNDS.west - pad, SAR_SPOTLIGHT_ZONE_BOUNDS.south - pad],
+          [SAR_SPOTLIGHT_ZONE_BOUNDS.east + pad, SAR_SPOTLIGHT_ZONE_BOUNDS.north + pad],
+        ],
+        { padding: 56, duration: 520, maxZoom: 10.9 },
+      )
+      setScenarioNotice('집중 탐지(Spotlight) 영역으로 이동했습니다.')
+      return
+    }
+    const wideFeature = SAR_OBSERVATION_ZONE_GEOJSON.features.find(
+      (f) => String((f.properties as Record<string, unknown> | undefined)?.id ?? '') === 'sar2-wide-zone',
+    )
+    const coords = wideFeature?.geometry?.type === 'Polygon' ? wideFeature.geometry.coordinates?.[0] : null
+    if (!coords || coords.length === 0) return
+    let west = Infinity
+    let south = Infinity
+    let east = -Infinity
+    let north = -Infinity
+    for (const pt of coords) {
+      const lng = Number(pt[0])
+      const lat = Number(pt[1])
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue
+      west = Math.min(west, lng)
+      south = Math.min(south, lat)
+      east = Math.max(east, lng)
+      north = Math.max(north, lat)
+    }
+    if (!Number.isFinite(west) || !Number.isFinite(south) || !Number.isFinite(east) || !Number.isFinite(north)) return
+    map.fitBounds(
+      [
+        [west, south],
+        [east, north],
+      ],
+      { padding: 56, duration: 520, maxZoom: 7.9 },
+    )
+    setScenarioNotice('광역 탐지 영역으로 이동했습니다.')
   }, [])
 
   /** SAR 탐지 전개: IDLE이면 권역 확정 후 즉시 SAR 단계로(센서 모달·단계 게이트 없이) */
@@ -13892,6 +14186,19 @@ function BattlefieldServicePage() {
       })
 
       map.on('click', SERVICE_SAR2_ZONE_FILL_LAYER_ID, (event) => {
+        const overlapPriorityLayers = [
+          SERVICE_GRD_MOTION_FILL_LAYER_ID,
+          SERVICE_SAR2_ZONE_FILL_LAYER_ID,
+        ].filter((id) => map.getLayer(id))
+        if (overlapPriorityLayers.length > 1) {
+          const overlappedHits = map.queryRenderedFeatures(event.point, {
+            layers: overlapPriorityLayers,
+          })
+          const narrowest = pickNarrowestFeature(overlappedHits)
+          if (narrowest?.layer?.id !== SERVICE_SAR2_ZONE_FILL_LAYER_ID) {
+            return
+          }
+        }
         const zoneFeature = pickSarObservationZoneHit(event.features)
         const zoneProps = (zoneFeature?.properties ?? {}) as Record<string, unknown>
         const zoneId = String(zoneProps.id ?? '')
@@ -13932,7 +14239,8 @@ function BattlefieldServicePage() {
             layers: [SERVICE_GRD_MOTION_FILL_LAYER_ID],
           })
           if (grdHits.length > 0) {
-            const motionIdRaw = grdHits[0]?.properties?.motionId
+            const grdTargetFeature = pickNarrowestFeature(grdHits) ?? grdHits[0]
+            const motionIdRaw = grdTargetFeature?.properties?.motionId
             if (motionIdRaw != null) {
               const motionIdStr = String(motionIdRaw)
               setGrdSelectedIdRef.current(motionIdStr)
@@ -13966,15 +14274,15 @@ function BattlefieldServicePage() {
                     popupRef.current = null
                   }
                   setSelectedDetailRef.current({
-                    title: `GRD 이동 후보 · ${motionIdStr}`,
+                    title: `이동 검출 후보 · ${motionIdStr}`,
                     affiliation: '적',
                     lat: meta.centerLat,
                     lng: meta.centerLng,
                     mgrs: latLngToMgrsSafe(meta.centerLat, meta.centerLng),
                     summary:
                       distKm == null
-                        ? `변화검출 클러스터(GRD) · ${meta.classLabel} 의심 · 신뢰도 ${meta.probPercent}% · 가용 UAV 없음`
-                        : `변화검출 클러스터(GRD) · ${meta.classLabel} 의심 · 신뢰도 ${meta.probPercent}% · 최근접 UAV 약 ${distKm.toFixed(0)} km${
+                        ? `이동 검출 · ${meta.classLabel} 의심 · 신뢰도 ${meta.probPercent}% · 가용 UAV 없음`
+                        : `이동 검출 · ${meta.classLabel} 의심 · 신뢰도 ${meta.probPercent}% · 최근접 UAV 약 ${distKm.toFixed(0)} km${
                             distKm <= GRD_DISPATCH_RANGE_KM
                               ? ' · 근거리'
                               : ' · 원거리(지시 출동 가능)'
@@ -14015,6 +14323,9 @@ function BattlefieldServicePage() {
         enemyScenarioPopupPinnedRef.current = false
         if (sarSpotlightOpenRef.current) {
           dismissSarSpotlight()
+        }
+        if (orbitalSarImagePreviewRef.current != null) {
+          dismissOrbitalSarImagePreview()
         }
         const clickLat = event.lngLat.lat
         const clickLng = event.lngLat.lng
@@ -14068,7 +14379,7 @@ function BattlefieldServicePage() {
       mapRef.current = null
       setMapReady(false)
     }
-  }, [dismissSarSpotlight])
+  }, [dismissSarSpotlight, dismissOrbitalSarImagePreview])
 
   useEffect(() => {
     const map = mapRef.current
@@ -14173,7 +14484,7 @@ function BattlefieldServicePage() {
     const framePredictionBaseVisible =
       layerVisible.friendly && layerVisible.enemy && groundRadarVodAnalytics.detectedCount > 0
     const shortestPredictionBaseVisible = framePredictionBaseVisible
-    applyVisibility(SERVICE_SAR2_ZONE_FILL_LAYER_ID, mapFlags.sar2Zone)
+    applyVisibility(SERVICE_SAR2_ZONE_FILL_LAYER_ID, false)
     applyVisibility(SERVICE_SAR2_ZONE_LINE_LAYER_ID, mapFlags.sar2Zone)
     applyVisibility(SERVICE_ENEMY_ROUTE_LAYER_ID, showEnemyRoute)
     applyVisibility(
@@ -14369,7 +14680,14 @@ function BattlefieldServicePage() {
       ['get', 'kind'],
       'future_point_5',
     ])
-  }, [mapReady])
+    setLayerFilter(
+      SERVICE_SAR2_ZONE_LINE_LAYER_ID,
+      sarZoneViewMode === 'WIDE'
+        ? ['==', ['coalesce', ['get', 'id'], ''], 'sar2-wide-zone']
+        : ['==', ['coalesce', ['get', 'id'], ''], 'sar2-spotlight-zone'],
+    )
+    setLayerFilter(SERVICE_SAR2_ZONE_FILL_LAYER_ID, ['==', ['get', 'id'], 'sar2-spotlight-zone'])
+  }, [mapReady, sarZoneViewMode])
 
   useEffect(() => {
     if (!mapReady) return
@@ -14435,9 +14753,17 @@ function BattlefieldServicePage() {
     }
 
     const onMove = (e: MapLayerMouseEvent) => {
-      const top = map.queryRenderedFeatures(e.point)[0]
+      const overlapPriorityLayers = [
+        SERVICE_GRD_MOTION_FILL_LAYER_ID,
+        SERVICE_SAR2_ZONE_FILL_LAYER_ID,
+      ].filter((id) => map.getLayer(id))
+      const overlapHits =
+        overlapPriorityLayers.length > 0
+          ? map.queryRenderedFeatures(e.point, { layers: overlapPriorityLayers })
+          : []
+      const top = pickNarrowestFeature(overlapHits)
       const lid = top?.layer?.id
-      if (lid !== SERVICE_GRD_MOTION_FILL_LAYER_ID) {
+      if (lid !== SERVICE_GRD_MOTION_FILL_LAYER_ID || !top) {
         clearGrdHoverUi()
         return
       }
@@ -14533,7 +14859,7 @@ function BattlefieldServicePage() {
         const dispatchTarget = pendingUavDispatchTargetRef.current
         if (!enemyBypass && !dispatchTarget && (!gate.focusId || !gate.eligible)) {
           setScenarioNotice(
-            '파란 GRD 검출 영역 또는 적 표적을 먼저 선택하고, DB 자산 현황에 UAV가 1개 이상 있어야 출동할 수 있습니다.',
+            '파란 GRD 검출 영역 또는 적 표적을 먼저 선택하고, 자산 현황에 UAV가 1개 이상 있어야 출동할 수 있습니다.',
           )
           return
         }
@@ -15046,26 +15372,25 @@ function BattlefieldServicePage() {
     setTargetRosterSendReceiverUnitId(null)
   }, [])
 
-  const handleOpenGrdEnemyMotionVideo = useCallback(() => {
-    if (!grdEnemyMotionAlert) return
+  const handleFocusSarSpotlightFromAlert = useCallback(() => {
+    const map = mapRef.current
     const openSpotlight = () => {
       setSarSpotlightSeen(false)
       setSarSpotlightEmphasis(true)
       setSarSpotlightOpen(true)
     }
-    const map = mapRef.current
     if (!map) {
       openSpotlight()
       return
     }
+    const pad = 0.032
     let finished = false
     const finish = () => {
       if (finished) return
       finished = true
       openSpotlight()
     }
-    const pad = 0.032
-    const fallbackTimer = window.setTimeout(finish, 1400)
+    const fallbackTimer = window.setTimeout(finish, 1120)
     map.once('moveend', () => {
       window.clearTimeout(fallbackTimer)
       finish()
@@ -15075,18 +15400,28 @@ function BattlefieldServicePage() {
         [SAR_SPOTLIGHT_ZONE_BOUNDS.west - pad, SAR_SPOTLIGHT_ZONE_BOUNDS.south - pad],
         [SAR_SPOTLIGHT_ZONE_BOUNDS.east + pad, SAR_SPOTLIGHT_ZONE_BOUNDS.north + pad],
       ],
-      { padding: 72, duration: 950, maxZoom: 10.85, essential: true },
+      { padding: 72, duration: 1050, maxZoom: 10.85, essential: true },
     )
-  }, [grdEnemyMotionAlert])
+  }, [])
 
-  const grdEnemyAlertCompactName = useMemo(() => {
-    if (!grdEnemyMotionAlert) return ''
-    const compact = grdEnemyMotionAlert.enemyName
-      .replace(/^적\s*/u, '')
-      .replace(/\s*\([^)]*\)\s*/gu, ' ')
-      .replace(/\s+/gu, ' ')
-      .trim()
-    return compact.length > 18 ? `${compact.slice(0, 18)}...` : compact
+  /** SAR 이동 경고 본문 — 한 줄 잘림 방지: `표시 | 상태 | TRK` 형식을 2줄로 분리 */
+  const grdEnemyAlertBodyLines = useMemo(() => {
+    if (!grdEnemyMotionAlert) return { line1: '', line2: '' }
+    const raw = grdEnemyMotionAlert.enemyName.replace(/\s+/gu, ' ').trim()
+    const parts = raw.split(/\s*\|\s*/).filter((p) => p.length > 0)
+    if (parts.length >= 3) {
+      return {
+        line1: `${parts[0]} | ${parts[1]}`,
+        line2: `${parts[2]} 남하 포착`,
+      }
+    }
+    if (parts.length === 2) {
+      return { line1: parts[0]!, line2: `${parts[1]!} 남하 포착` }
+    }
+    if (parts.length === 1) {
+      return { line1: parts[0]!, line2: '남하 포착' }
+    }
+    return { line1: raw, line2: '남하 포착' }
   }, [grdEnemyMotionAlert])
 
   const sensorSimProceed = useMemo(() => {
@@ -15449,6 +15784,7 @@ function BattlefieldServicePage() {
     setGrdHoverId(null)
     enemyPrevInsideGrdRef.current = {}
     grdOverlayActivePrevRef.current = false
+    grdSarEnemyMotionAlertAutoShownRef.current = false
     setSarGrdVizModalOpen(false)
     setGrdMotionMapOverlayOn(false)
     setFrozenYellowGrdMbtCentersByMotionId(null)
@@ -15692,14 +16028,18 @@ function BattlefieldServicePage() {
       !sarGrdVizModalOpen &&
       !uavDispatchModalOpen &&
       !uavVideoModal &&
-      !uavDetectionStepModalOpen &&
       !assetStreamModal &&
-      !droneInlineVideoPanel
+      !droneInlineVideoPanel &&
+      orbitalSarImagePreview == null
     ) {
       return undefined
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      if (orbitalSarImagePreviewRef.current != null) {
+        dismissOrbitalSarImagePreview()
+        return
+      }
       if (targetRosterChatUnitId != null) {
         setTargetRosterChatUnitId(null)
         return
@@ -15714,10 +16054,6 @@ function BattlefieldServicePage() {
       }
       if (uavVideoModal) {
         setUavVideoModal(null)
-        return
-      }
-      if (uavDetectionStepModalOpen) {
-        setUavDetectionStepModalOpen(false)
         return
       }
       if (assetStreamModal) {
@@ -15760,11 +16096,12 @@ function BattlefieldServicePage() {
     sarGrdVizModalOpen,
     uavDispatchModalOpen,
     uavVideoModal,
-    uavDetectionStepModalOpen,
     assetStreamModal,
     droneInlineVideoPanel,
     closeUavDispatchModal,
     dismissSarSpotlight,
+    dismissOrbitalSarImagePreview,
+    orbitalSarImagePreview,
     closeTargetRosterModal,
   ])
 
@@ -15840,6 +16177,14 @@ function BattlefieldServicePage() {
     const onOpenHelp = () => setKeyboardShortcutsHelpOpen(true)
     window.addEventListener(BATTLEFIELD_SHORTCUTS_HELP_OPEN_EVENT, onOpenHelp)
     return () => window.removeEventListener(BATTLEFIELD_SHORTCUTS_HELP_OPEN_EVENT, onOpenHelp)
+  }, [])
+
+  useEffect(() => {
+    const onBattalionHqGeo = () => {
+      handleApplyBattalionHqToUserGeolocationRef.current()
+    }
+    window.addEventListener(BATTLEFIELD_BATTALION_HQ_GEO_REQUEST_EVENT, onBattalionHqGeo)
+    return () => window.removeEventListener(BATTLEFIELD_BATTALION_HQ_GEO_REQUEST_EVENT, onBattalionHqGeo)
   }, [])
 
   useEffect(() => {
@@ -15944,6 +16289,18 @@ function BattlefieldServicePage() {
     }
   }, [])
 
+  useLayoutEffect(() => {
+    if (droneInlineVideoPanel != null) return
+    if (selectedAssetId == null || activeCategory == null) return
+    const panel = battlefieldSidebarRef.current
+    if (!panel) return
+    const target = panel.querySelector<HTMLElement>(
+      `[data-service-sidebar-asset-id="${selectedAssetId}"]`,
+    )
+    if (!target) return
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+  }, [activeCategory, droneInlineVideoPanel, selectedAssetId])
+
   const droneSplitViewActive = droneInlineVideoPanel != null
 
   return (
@@ -15974,11 +16331,11 @@ function BattlefieldServicePage() {
                   className={`service-sensor-btn${running ? ' service-sensor-btn--active' : ''}`}
                   title={
                     sensorId === 'sar'
-                      ? 'SAR 관측 데이터 · 지도 GRD 레이어 ON/OFF'
+                      ? '위성 SAR 이동 검출 제어 · 지도 레이어 ON/OFF'
                       : sensorId === 'uav' || sensorId === 'drone'
-                        ? `${meta.label} DB 자산 영상 보기`
+                        ? `${meta.label} 자산 영상 보기`
                         : sensorId === 'fmcw'
-                          ? `${meta.label} 결과 요약 보기`
+                          ? `${meta.label} 보기`
                         : `${meta.label} 시뮬레이션 설명 보기`
                   }
                   onClick={() => {
@@ -16009,18 +16366,9 @@ function BattlefieldServicePage() {
               type="button"
               className="service-sensor-btn service-unit-code-legend-btn"
               onClick={() => setTargetRosterModalOpen(true)}
-              title="DB 적·아군 표적 요약 일람"
+              title="적·아군 표적 요약 일람"
             >
               표적 일람표
-            </button>
-            <button
-              type="button"
-              className="service-sensor-btn service-unit-code-legend-btn"
-              onClick={handleApplyBattalionHqToUserGeolocation}
-              disabled={userBattalionGeoLoading || friendlyUnitsRaw.length === 0}
-              title="대대 본부(TPC 등) 아군 부대를 브라우저 현재 위치(GPS)로 옮깁니다"
-            >
-              {userBattalionGeoLoading ? '위치 확인 중…' : '아군 부대 위치'}
             </button>
           </div>
           <div
@@ -16058,55 +16406,57 @@ function BattlefieldServicePage() {
             </form>
           </div>
           <div ref={mapContainerRef} className="service-map-canvas" />
-          <div className="service-map-legend" aria-label="아군 적 우군 중립 범례">
-            <span className="service-map-legend__item">
-              <i style={{ backgroundColor: '#22c55e' }} />
-              아(아군)
-            </span>
-            <span className="service-map-legend__item">
-              <i style={{ backgroundColor: '#ca8a04' }} />
-              적
-            </span>
-            <span className="service-map-legend__item">
-              <i style={{ backgroundColor: '#38bdf8' }} />
-              우(우군)
-            </span>
-            <span className="service-map-legend__item">
-              <i style={{ backgroundColor: '#facc15' }} />
-              중립
-            </span>
-            <span className="service-map-legend__item">
-              <i style={{ backgroundColor: '#2563eb', opacity: 0.55 }} />
-              GRD 이동 검출
-            </span>
-            {phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.FMCW_ANALYSIS) && (
-              <>
-                <span className="service-map-legend__item">
-                  <i style={{ backgroundColor: '#f97316', opacity: 0.45 }} />
-                  지상감시 레이더(FMCW) 위험구역
-                </span>
-                <span className="service-map-legend__item">
-                  <i
-                    style={{
-                      backgroundColor: 'transparent',
-                      border: '2px dashed #fb923c',
-                      opacity: 0.95,
-                    }}
-                  />
-                  이동 가능 축
-                </span>
-                <span className="service-map-legend__item">
-                  <i style={{ backgroundColor: '#fb923c' }} />
-                  추정 트랙
-                </span>
-              </>
-            )}
+          <div className="service-map-legend-stack" aria-label="지도 좌표 및 범례">
+            <div className="service-map-legend" aria-label="아군 적 우군 중립 범례">
+              <span className="service-map-legend__item">
+                <i style={{ backgroundColor: '#22c55e' }} />
+                아(아군)
+              </span>
+              <span className="service-map-legend__item">
+                <i style={{ backgroundColor: '#ca8a04' }} />
+                적
+              </span>
+              <span className="service-map-legend__item">
+                <i style={{ backgroundColor: '#38bdf8' }} />
+                우(우군)
+              </span>
+              <span className="service-map-legend__item">
+                <i style={{ backgroundColor: '#facc15' }} />
+                중립
+              </span>
+              <span className="service-map-legend__item">
+                <i style={{ backgroundColor: '#2563eb', opacity: 0.55 }} />
+                이동 검출
+              </span>
+              {phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.FMCW_ANALYSIS) && (
+                <>
+                  <span className="service-map-legend__item">
+                    <i style={{ backgroundColor: '#f97316', opacity: 0.45 }} />
+                    지상감시 레이더(FMCW) 위험구역
+                  </span>
+                  <span className="service-map-legend__item">
+                    <i
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '2px dashed #fb923c',
+                        opacity: 0.95,
+                      }}
+                    />
+                    이동 가능 축
+                  </span>
+                  <span className="service-map-legend__item">
+                    <i style={{ backgroundColor: '#fb923c' }} />
+                    추정 트랙
+                  </span>
+                </>
+              )}
+            </div>
+            <p className="service-cursor-readout">
+              {cursorReadout
+                ? `LAT ${cursorReadout.lat.toFixed(5)} · LNG ${cursorReadout.lng.toFixed(5)} · MGRS ${cursorReadout.mgrs}`
+                : '지도 위 마우스 오버 시 좌표/MGRS 표시'}
+            </p>
           </div>
-          <p className="service-cursor-readout">
-            {cursorReadout
-              ? `LAT ${cursorReadout.lat.toFixed(5)} · LNG ${cursorReadout.lng.toFixed(5)} · MGRS ${cursorReadout.mgrs}`
-              : '지도 위 마우스 오버 시 좌표/MGRS 표시'}
-          </p>
           {selectedDetail ? (
             <section
               className="service-panel-section service-selected-object-panel service-selected-object-panel--map-overlay"
@@ -16191,14 +16541,21 @@ function BattlefieldServicePage() {
                                   ? 'is-active'
                                   : ''
                               }
-                              onClick={() =>
+                              onClick={() => {
                                 setOrbitalSarModes((m) => ({
                                   ...m,
                                   [selectedDetail.orbitalSarAssetId!]: 'SPOTLIGHT',
                                 }))
-                              }
+                                setOrbitalSarImagePreview('spotlight')
+                              }}
                             >
                               Spotlight (15×15 km)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrbitalSarImagePreview('intensive')}
+                            >
+                              집중 탐지
                             </button>
                             <button
                               type="button"
@@ -16473,7 +16830,7 @@ function BattlefieldServicePage() {
                   <div>
                     <p className="service-uav-dispatch-modal__eyebrow">
                       {uavDispatchRequest.kind === 'grd' && uavDispatchGrdPanel === 'sar'
-                        ? 'GRD 이동 검출'
+                        ? '이동 검출'
                         : `${dispatchAssetLabel} 출동 추천`}
                     </p>
                     <h2 id={uavDispatchModalTitleId} className="service-uav-dispatch-modal__title">
@@ -16536,8 +16893,8 @@ function BattlefieldServicePage() {
                       <p className="service-uav-dispatch-modal__section-label">SAR 변화 검출 · 차량 후보</p>
                       <div className="service-uav-dispatch-modal__grd-sar-frame">
                         <img
-                          src={GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL}
-                          alt="SAR 변화 검출로 식별된 차량 후보(바운딩 박스)"
+                          src={GRD_BLUE_SAR_POPUP_PREVIEW_IMAGE_URL}
+                          alt="SAR 변화 검출 영상 샘플"
                           className="service-uav-dispatch-modal__grd-sar-img"
                         />
                       </div>
@@ -16709,16 +17066,6 @@ function BattlefieldServicePage() {
                   <div className="service-uav-dispatch-modal__actions">
                     <button
                       type="button"
-                      className="btn-secondary service-uav-dispatch-modal__detect-btn"
-                      onClick={() => {
-                        setUavDetectionStepIndex(0)
-                        setUavDetectionStepModalOpen(true)
-                      }}
-                    >
-                      움직임 감지
-                    </button>
-                    <button
-                      type="button"
                       className="btn-secondary"
                       onClick={closeUavDispatchModal}
                     >
@@ -16748,74 +17095,6 @@ function BattlefieldServicePage() {
                 </div>
               </div>
             </div>,
-              document.body,
-            )}
-          {uavDetectionStepModalOpen &&
-            createPortal(
-              <div
-                className="map-video-modal-backdrop"
-                role="presentation"
-                onClick={() => setUavDetectionStepModalOpen(false)}
-              >
-                <div
-                  className="map-video-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby={uavDetectionStepModalTitleId}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="map-video-modal-head">
-                    <div>
-                      <h2 id={uavDetectionStepModalTitleId} className="map-video-modal-title">
-                        움직임 감지
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      className="map-video-modal-close"
-                      aria-label="닫기"
-                      onClick={() => setUavDetectionStepModalOpen(false)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="map-video-modal-body">
-                    <img
-                      className="map-video-modal-video"
-                      src={UAV_DETECTION_STEP_IMAGE_URLS[uavDetectionStepIndex]!}
-                      alt="움직임 감지 단계 이미지"
-                    />
-                  </div>
-                  <div className="service-uav-dispatch-modal__footer">
-                    <div className="service-uav-dispatch-modal__actions">
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() =>
-                          setUavDetectionStepIndex((prev) =>
-                            Math.max(0, prev - 1),
-                          )
-                        }
-                        disabled={uavDetectionStepIndex <= 0}
-                      >
-                        이전
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={() =>
-                          setUavDetectionStepIndex((prev) =>
-                            Math.min(UAV_DETECTION_STEP_IMAGE_URLS.length - 1, prev + 1),
-                          )
-                        }
-                        disabled={uavDetectionStepIndex >= UAV_DETECTION_STEP_IMAGE_URLS.length - 1}
-                      >
-                        다음
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>,
               document.body,
             )}
           {uavVideoModal &&
@@ -16890,14 +17169,16 @@ function BattlefieldServicePage() {
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="map-video-modal-head">
-                    <div>
+                    <div className="map-video-modal-head__stack">
                       <h2 id={assetStreamModalTitleId} className="map-video-modal-title">
                         {assetStreamModal.sensor === 'uav' ? 'UAV(EO/IR) 실시간 영상' : '드론 근접 실시간 영상'}
                       </h2>
-                      <p className="map-video-modal-sub muted">
-                        DB 자산 현황의 {assetStreamModal.sensor === 'uav' ? 'UAV' : '드론'} 자산별로 영상을 선택해 재생할 수
-                        있습니다.
-                      </p>
+                      {selectedAssetStream && (
+                        <p className="service-asset-stream-modal__head-status">
+                          {selectedAssetStream.name} · 준비태세 {selectedAssetStream.readiness}
+                          {assetStreamModal.sensor === 'uav' ? ` · 채널 ${assetStreamUavBand.toUpperCase()}` : ''}
+                        </p>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -16975,12 +17256,6 @@ function BattlefieldServicePage() {
                       ) : (
                         <p className="map-video-modal-empty muted">재생 가능한 영상 URL이 없습니다.</p>
                       )}
-                      {selectedAssetStream && (
-                        <p className="service-asset-stream-modal__caption muted">
-                          선택 자산: {selectedAssetStream.name} · 준비태세 {selectedAssetStream.readiness}
-                          {assetStreamModal.sensor === 'uav' ? ` · 채널 ${assetStreamUavBand.toUpperCase()}` : ''}
-                        </p>
-                      )}
                     </div>
                   </div>
                   <div className="service-asset-stream-modal__footer">
@@ -16999,7 +17274,7 @@ function BattlefieldServicePage() {
               </div>,
               document.body,
             )}
-          {assetLoading && <p className="service-overlay-message">DB 자산 로딩 중…</p>}
+          {assetLoading && <p className="service-overlay-message">자산 로딩 중…</p>}
           {assetError && <p className="service-overlay-message service-overlay-message--error">{assetError}</p>}
         </div>
         {phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.FMCW_ANALYSIS) && (
@@ -17007,7 +17282,7 @@ function BattlefieldServicePage() {
         )}
         </MapStage>
 
-        <ScenarioSidebar hidden={droneSplitViewActive}>
+        <ScenarioSidebar ref={battlefieldSidebarRef} hidden={droneSplitViewActive}>
           <section className="service-panel-section">
             <div className="service-sim-control">
               <div className="service-sim-control__row service-sim-control__row--cta-dual">
@@ -17025,7 +17300,7 @@ function BattlefieldServicePage() {
                   onClick={focusKoreaOpsView}
                   title="한반도 작전권역(AOR)으로 시야 전환"
                 >
-                  작전권역
+                  아군
                 </button>
                 <button
                   type="button"
@@ -17033,7 +17308,29 @@ function BattlefieldServicePage() {
                   onClick={handleSarExpandAlways}
                   title="작전권역 미확정 시 우선 확정 후 SAR 탐지 단계로 전환합니다"
                 >
-                  SAR 탐지 전개
+                  작전 권역
+                </button>
+              </div>
+              <div className="service-sim-control__row service-sim-control__row--cta-dual">
+                <button
+                  type="button"
+                  className={`service-start-scenario-btn service-start-scenario-btn--compact${
+                    sarZoneViewMode === 'SPOTLIGHT' ? ' service-start-scenario-btn--active' : ''
+                  }`}
+                  onClick={() => focusSarZoneByMode('SPOTLIGHT')}
+                  title="위성 SAR Spotlight 탐지 구역 점선 박스만 표시"
+                >
+                  집중 탐지
+                </button>
+                <button
+                  type="button"
+                  className={`service-start-scenario-btn service-start-scenario-btn--compact${
+                    sarZoneViewMode === 'WIDE' ? ' service-start-scenario-btn--active' : ''
+                  }`}
+                  onClick={() => focusSarZoneByMode('WIDE')}
+                  title="위성 SAR 광역 탐지 점선 박스만 표시"
+                >
+                  광역 탐지
                 </button>
               </div>
               <div className="service-sim-control__row">
@@ -17148,11 +17445,11 @@ function BattlefieldServicePage() {
                   role="button"
                   tabIndex={0}
                   aria-labelledby={grdMotionAlertTitleId}
-                  onClick={handleOpenGrdEnemyMotionVideo}
+                  onClick={handleFocusSarSpotlightFromAlert}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
-                      handleOpenGrdEnemyMotionVideo()
+                      handleFocusSarSpotlightFromAlert()
                     }
                   }}
                 >
@@ -17165,7 +17462,10 @@ function BattlefieldServicePage() {
                     </span>
                   </div>
                   <p className="service-sar-move-notice__body">
-                    <strong>{grdEnemyAlertCompactName}</strong> 남하 포착
+                    <span className="service-sar-move-notice__body-line">
+                      <strong>{grdEnemyAlertBodyLines.line1}</strong>
+                    </span>
+                    <span className="service-sar-move-notice__body-line">{grdEnemyAlertBodyLines.line2}</span>
                   </p>
                   <div className="service-sar-move-notice__actions">
                     <button
@@ -17178,16 +17478,6 @@ function BattlefieldServicePage() {
                     >
                       닫기
                     </button>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleOpenGrdEnemyMotionVideo()
-                      }}
-                    >
-                      재생
-                    </button>
                   </div>
                 </div>
               )}
@@ -17196,7 +17486,6 @@ function BattlefieldServicePage() {
 
           <section className="service-panel-section">
             <h2>자산 현황</h2>
-            <p className="service-asset-panel-intro muted">지상감시 레이더 · 위성 SAR · UAV · 드론(DB·지도 동기)</p>
             <ul className="service-asset-summary">
               {SERVICE_ASSET_STATUS_CATEGORIES.map((category) => {
                 const headLabel =
@@ -17233,7 +17522,7 @@ function BattlefieldServicePage() {
                           const isUavCategory = category === 'UAV'
                           const isInlineReturnCategory = isDroneCategory || isUavCategory
                           return (
-                            <li key={asset.id}>
+                            <li key={asset.id} data-service-sidebar-asset-id={asset.id}>
                               {isInlineReturnCategory ? (
                                 <div
                                   className={`service-asset-item-btn service-asset-item-btn--drone${selectedAssetId === asset.id ? ' service-asset-item-btn--active' : ''}`}
@@ -17318,7 +17607,6 @@ function BattlefieldServicePage() {
 
           <section className="service-panel-section">
             <h2>아군 현황</h2>
-            <p className="service-asset-panel-intro muted">사단 · 상급지휘소 · 포병부대 · 전차부대(DB 편제)</p>
             <ul className="service-asset-summary">
               {SERVICE_FRIENDLY_FORCE_CATEGORIES.map((category) => {
                 const headLabel =
@@ -17355,7 +17643,7 @@ function BattlefieldServicePage() {
                           const isUavCategory = category === 'UAV'
                           const isInlineReturnCategory = isDroneCategory || isUavCategory
                           return (
-                            <li key={asset.id}>
+                            <li key={asset.id} data-service-sidebar-asset-id={asset.id}>
                               {isInlineReturnCategory ? (
                                 <div
                                   className={`service-asset-item-btn service-asset-item-btn--drone${selectedAssetId === asset.id ? ' service-asset-item-btn--active' : ''}`}
@@ -17446,9 +17734,6 @@ function BattlefieldServicePage() {
                 >
                   {allMapLayersOn ? '지도 객체 전체 끄기' : '지도 객체 전체 켜기'}
                 </button>
-                <p className="service-layer-toggle__master-hint">
-                  아군·적·우군·중립 및 적 식별번호(지표) 레이어를 한 번에 켜거나 끕니다.
-                </p>
               </div>
               <p className="service-layer-toggle__title">레이어 on/off</p>
               <div className="service-layer-toggle__grid">
@@ -17759,7 +18044,7 @@ function BattlefieldServicePage() {
             <div className="sar-spotlight-modal sar-spotlight-modal--glow">
               <div className="sar-spotlight-modal__chrome">
                 <div className="sar-spotlight-modal__head" id="sar-spotlight-title">
-                  위성 SAR 탐지 지역
+                  Spotlight · SAR 관측 구역 강조
                 </div>
                 <button
                   type="button"
@@ -17770,11 +18055,62 @@ function BattlefieldServicePage() {
                   ×
                 </button>
               </div>
+              <p className="sar-spotlight-modal__sub">전차 4대 유실</p>
               <div className="sar-spotlight-modal__body">
-                <div className="sar-spotlight-modal__figure">
-                  <img src={SAR_SPOTLIGHT_RESULT_IMAGE_URL} alt="위성 SAR 탐지 지역" />
-                  <div className="sar-spotlight-modal__loss-badge">전차 4대 유실</div>
+                <img src={SAR_SPOTLIGHT_CLEAN_PREVIEW_IMAGE_URL} alt="SAR 적 인식 결과" />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {orbitalSarImagePreview != null &&
+        createPortal(
+          <div
+            className="sar-spotlight-root sar-spotlight-root--panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={orbitalSarPreviewTitleId}
+          >
+            <div
+              className="sar-spotlight-backdrop"
+              role="presentation"
+              onClick={dismissOrbitalSarImagePreview}
+            />
+            <div className="sar-spotlight-modal sar-spotlight-modal--glow">
+              <div className="sar-spotlight-modal__chrome">
+                <div className="sar-spotlight-modal__head" id={orbitalSarPreviewTitleId}>
+                  {orbitalSarImagePreview === 'spotlight'
+                    ? 'Spotlight — SAR 인식 결과'
+                    : '집중 탐지 — 변화 탐지(GRD)'}
                 </div>
+                <button
+                  type="button"
+                  className="sar-spotlight-modal__close"
+                  aria-label="닫기"
+                  onClick={dismissOrbitalSarImagePreview}
+                >
+                  ×
+                </button>
+              </div>
+              <p className="sar-spotlight-modal__sub">
+                {orbitalSarImagePreview === 'spotlight'
+                  ? '고해상도 소구역(약 15 km × 15 km) SAR 적 인식 샘플입니다.'
+                  : 'GRD 기반 변화 탐지(블루) 샘플 영상입니다.'}
+              </p>
+              <div className="sar-spotlight-modal__body">
+                <img
+                  src={
+                    orbitalSarImagePreview === 'spotlight'
+                      ? SAR_SPOTLIGHT_CLEAN_PREVIEW_IMAGE_URL
+                      : GRD_BLUE_SAR_CHANGE_DETECTION_IMAGE_URL
+                  }
+                  alt={
+                    orbitalSarImagePreview === 'spotlight'
+                      ? 'SAR Spotlight 적 인식 결과'
+                      : 'GRD SAR 변화 탐지 결과'
+                  }
+                />
               </div>
             </div>
           </div>,
@@ -17797,11 +18133,11 @@ function BattlefieldServicePage() {
             <div className="scenario-summary-modal service-sar-grd-viz-modal">
               <div className="scenario-summary-modal__chrome">
                 <div className="scenario-summary-modal__head">
-                  <h2 id={sarGrdVizModalTitleId}>SAR 관측 데이터</h2>
+                  <h2 id={sarGrdVizModalTitleId}>위성 SAR 이동 검출 제어</h2>
                   <button
                     type="button"
                     className="scenario-summary-modal__close"
-                    aria-label="SAR 관측 데이터 닫기"
+                    aria-label="위성 SAR 이동 검출 제어 닫기"
                     onClick={() => setSarGrdVizModalOpen(false)}
                   >
                     ×
@@ -17809,15 +18145,17 @@ function BattlefieldServicePage() {
                 </div>
               </div>
               <div className="scenario-summary-modal__body service-sar-grd-viz-modal__body">
-                <div className="service-sar-grd-viz-modal__figure">
-                  <img
-                    src={SAR_GRD_DETECTION_MODAL_IMAGE_URL}
-                    alt="SAR 관측 데이터"
-                  />
+                <div className="service-sar-grd-viz-modal__step-view" aria-label="SAR 이동 검출 처리 단계">
+                  <div className="service-sar-grd-viz-modal__step-figure">
+                    <img
+                      src={GRD_DETECTION_MODAL_IMAGE_URL}
+                      alt="위성 SAR 이동 검출 결과"
+                    />
+                  </div>
                 </div>
                 <div className="service-sar-grd-viz-toggle">
                   <span className="service-sar-grd-viz-toggle__label" id={sarGrdMapToggleLabelId}>
-                    GRD 이동 검출(파란색 박스)
+                    이동 검출
                   </span>
                   <button
                     type="button"
@@ -17857,11 +18195,11 @@ function BattlefieldServicePage() {
             <div className="scenario-summary-modal service-sensor-sim-modal">
               <div className="scenario-summary-modal__chrome">
                 <div className="scenario-summary-modal__head">
-                  <h2 id={fmcwSummaryModalTitleId}>지상감시 레이더(FMCW) 결과 요약</h2>
+                  <h2 id={fmcwSummaryModalTitleId}>지상감시 레이더</h2>
                   <button
                     type="button"
                     className="scenario-summary-modal__close"
-                    aria-label="FMCW 결과 요약 닫기"
+                    aria-label="지상감시 레이더 닫기"
                     onClick={() => setFmcwSummaryModalOpen(false)}
                   >
                     ×
@@ -17869,31 +18207,23 @@ function BattlefieldServicePage() {
                 </div>
               </div>
               <div className="scenario-summary-modal__body">
-                <p className="service-fmcw-summary-view-caption muted" role="note">
-                  탑뷰(BEV) 기준으로 선택 레이더의 탐지점을 요약합니다.
-                </p>
                 {fmcwSummarySection === 'point' && (
                 <section className="scenario-summary-section">
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 8,
-                      flexWrap: 'wrap',
-                      marginBottom: 10,
-                    }}
-                  >
+                  <div className="service-fmcw-bev-radar-row">
                     {fmcwSummarySnapshot.bevByRadar.map((row) => (
                       <button
                         key={row.radarId}
                         type="button"
-                        className={row.radarId === (activeFmcwBev?.radarId ?? -1) ? 'btn-primary' : 'btn-secondary'}
+                        className={`service-fmcw-bev-radar-tab${
+                          row.radarId === (activeFmcwBev?.radarId ?? -1) ? ' btn-primary' : ' btn-secondary'
+                        }`}
                         onClick={() => setFmcwBevRadarId(row.radarId)}
                       >
                         {row.radarName} ({row.pointCount})
                       </button>
                     ))}
                   </div>
-                  {activeFmcwBev && activeFmcwBevPointInfos.length > 0 ? (
+                  {activeFmcwBev ? (
                     <>
                       <div
                         style={{
@@ -17903,8 +18233,29 @@ function BattlefieldServicePage() {
                           padding: 8,
                         }}
                       >
-                        <svg viewBox="0 0 320 210" width="100%" role="img" aria-label="FMCW BEV 추정 좌표">
-                          <rect x="0" y="0" width="320" height="210" fill="transparent" />
+                        <svg
+                          viewBox="0 0 320 212"
+                          width="100%"
+                          role="img"
+                          aria-label={
+                            activeFmcwBevPointInfos.length > 0
+                              ? `FMCW BEV 탐지 ${activeFmcwBevPointInfos.length}개`
+                              : 'FMCW BEV — 탐지 없음(격자)'
+                          }
+                        >
+                          <rect x="0" y="0" width="320" height="212" fill="transparent" />
+                          {activeFmcwBevAxis && (
+                            <text
+                              x="165"
+                              y="11"
+                              textAnchor="middle"
+                              fill="#94a3b8"
+                              fontSize="9"
+                              fontWeight="600"
+                            >
+                              전방 거리(km) ↑ · 횡방향(km) →
+                            </text>
+                          )}
                           {[0, 1, 2, 3, 4].map((idx) => {
                             const y = 18 + idx * 42
                             return (
@@ -17937,6 +18288,33 @@ function BattlefieldServicePage() {
                           })}
                           <line x1="165" y1="18" x2="165" y2="186" stroke="#94a3b8" strokeWidth="1.2" />
                           <line x1="22" y1="186" x2="308" y2="186" stroke="#94a3b8" strokeWidth="1.2" />
+                          {activeFmcwBevAxis &&
+                            activeFmcwBevAxis.rowYs.map((y, i) => (
+                              <text
+                                key={`bev-fwd-${i}`}
+                                x="6"
+                                y={y + 4}
+                                fill="#94a3b8"
+                                fontSize="9"
+                                fontWeight="600"
+                              >
+                                {activeFmcwBevAxis.rowFwdKm[i]!.toFixed(0)}
+                              </text>
+                            ))}
+                          {activeFmcwBevAxis &&
+                            activeFmcwBevAxis.colXs.map((x, j) => (
+                              <text
+                                key={`bev-lat-${j}`}
+                                x={x}
+                                y="204"
+                                textAnchor="middle"
+                                fill="#94a3b8"
+                                fontSize="8"
+                                fontWeight="600"
+                              >
+                                {activeFmcwBevAxis.colLatKm[j]!.toFixed(0)}
+                              </text>
+                            ))}
                           {activeFmcwBevPointInfos.map((point, idx) => {
                             const xNorm =
                               165 + Math.max(-1, Math.min(1, point.yKm / (activeFmcwBev.bevHalfWidthKm || 1))) * 138
@@ -17960,54 +18338,64 @@ function BattlefieldServicePage() {
                             )
                           })}
                         </svg>
+                        {activeFmcwBevAxis && (
+                          <p className="service-fmcw-bev-frame-caption muted">
+                            감시축: {activeFmcwBevAxis.axisLabel} · 전방 0–{activeFmcwBevAxis.fwdMax.toFixed(0)} km ·
+                            횡방향 ±{activeFmcwBevAxis.halfW.toFixed(1)} km · 탐지 {activeFmcwBev.pointCount}개
+                          </p>
+                        )}
                       </div>
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                          gap: 8,
-                          marginTop: 10,
-                        }}
-                      >
-                        <div className="service-sensor-sim-modal__text">
-                          탐지 {activeFmcwBevPointInfos.length}개 · 최근접{' '}
-                          {activeFmcwBevStats.nearestKm != null ? `${activeFmcwBevStats.nearestKm.toFixed(1)}km` : '-'}
-                        </div>
-                        <div className="service-sensor-sim-modal__text">
-                          평균 거리{' '}
-                          {activeFmcwBevStats.avgDistanceKm != null
-                            ? `${activeFmcwBevStats.avgDistanceKm.toFixed(1)}km`
-                            : '-'}{' '}
-                          · 최원거리{' '}
-                          {activeFmcwBevStats.farthestKm != null
-                            ? `${activeFmcwBevStats.farthestKm.toFixed(1)}km`
-                            : '-'}
-                        </div>
-                        <div className="service-sensor-sim-modal__text">
-                          평균 속도{' '}
-                          {activeFmcwBevStats.avgSpeedKph != null
-                            ? `${activeFmcwBevStats.avgSpeedKph.toFixed(1)}km/h`
-                            : '-'}
-                        </div>
-                      </div>
-                      <ul className="scenario-summary-bullets" style={{ marginTop: 10 }}>
-                        {activeFmcwBevPointInfos.map((point, idx) => {
-                          const sideLabel =
-                            point.relativeBearingDeg >= 0
-                              ? `우측 ${Math.abs(point.relativeBearingDeg).toFixed(0)}°`
-                              : `좌측 ${Math.abs(point.relativeBearingDeg).toFixed(0)}°`
-                          return (
-                            <li key={`${point.name}-bev-info-${idx}`}>
-                              [{idx + 1}] {point.name} · 거리 {point.distanceKm.toFixed(1)}km · 방위 {sideLabel} · 속도{' '}
-                              {point.speedKph.toFixed(1)}km/h · 위험 {point.riskLevel} · 기동{' '}
-                              {headingToDirectionKo(point.headingDeg)}({point.headingDeg.toFixed(0)}°)
-                            </li>
-                          )
-                        })}
-                      </ul>
+                      {activeFmcwBevPointInfos.length > 0 ? (
+                        <>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                              gap: 8,
+                              marginTop: 10,
+                            }}
+                          >
+                            <div className="service-sensor-sim-modal__text">
+                              탐지 {activeFmcwBevPointInfos.length}개 · 최근접{' '}
+                              {activeFmcwBevStats.nearestKm != null ? `${activeFmcwBevStats.nearestKm.toFixed(1)}km` : '-'}
+                            </div>
+                            <div className="service-sensor-sim-modal__text">
+                              평균 거리{' '}
+                              {activeFmcwBevStats.avgDistanceKm != null
+                                ? `${activeFmcwBevStats.avgDistanceKm.toFixed(1)}km`
+                                : '-'}{' '}
+                              · 최원거리{' '}
+                              {activeFmcwBevStats.farthestKm != null
+                                ? `${activeFmcwBevStats.farthestKm.toFixed(1)}km`
+                                : '-'}
+                            </div>
+                            <div className="service-sensor-sim-modal__text">
+                              평균 속도{' '}
+                              {activeFmcwBevStats.avgSpeedKph != null
+                                ? `${activeFmcwBevStats.avgSpeedKph.toFixed(1)}km/h`
+                                : '-'}
+                            </div>
+                          </div>
+                          <ul className="scenario-summary-bullets" style={{ marginTop: 10 }}>
+                            {activeFmcwBevPointInfos.map((point, idx) => {
+                              const sideLabel =
+                                point.relativeBearingDeg >= 0
+                                  ? `우측 ${Math.abs(point.relativeBearingDeg).toFixed(0)}°`
+                                  : `좌측 ${Math.abs(point.relativeBearingDeg).toFixed(0)}°`
+                              return (
+                                <li key={`${point.name}-bev-info-${idx}`}>
+                                  [{idx + 1}] {point.name} · 거리 {point.distanceKm.toFixed(1)}km · 방위 {sideLabel} · 속도{' '}
+                                  {point.speedKph.toFixed(1)}km/h · 위험 {point.riskLevel} · 기동{' '}
+                                  {headingToDirectionKo(point.headingDeg)}({point.headingDeg.toFixed(0)}°)
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </>
+                      ) : null}
                     </>
                   ) : (
-                    <p className="muted service-sensor-sim-modal__text">현재 선택 레이더에 표시할 탐지 객체가 없습니다.</p>
+                    <p className="muted service-sensor-sim-modal__text">표시할 레이더 구성이 없습니다.</p>
                   )}
                 </section>
                 )}
@@ -18419,6 +18807,17 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
     }, 280)
   }, [location.pathname, navigate])
 
+  const requestBattalionHqGeolocation = useCallback(() => {
+    if (location.pathname === '/') {
+      window.dispatchEvent(new CustomEvent(BATTLEFIELD_BATTALION_HQ_GEO_REQUEST_EVENT))
+      return
+    }
+    void navigate('/')
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(BATTLEFIELD_BATTALION_HQ_GEO_REQUEST_EVENT))
+    }, 280)
+  }, [location.pathname, navigate])
+
   return (
     <div className={`app-shell${sidebarCollapsed ? ' app-shell--sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
@@ -18428,8 +18827,42 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
           <NavLink to="/" end>
             실시간 전장판
           </NavLink>
-          <p className="sidebar-nav-group-label">이론 설명</p>
-          <NavLink to="/theory">센서 이론 설명</NavLink>
+          <p className="sidebar-nav-group-label">도구</p>
+          <button
+            type="button"
+            className="sidebar-nav-action"
+            onClick={openBattlefieldShortcutsHelp}
+            title="단축키 도움말 (?)"
+          >
+            단축키
+          </button>
+          <button
+            type="button"
+            className="sidebar-nav-action"
+            onClick={() => setUnitSymbolManualOpen(true)}
+            title="단대호(부대 부호)"
+          >
+            단대호
+          </button>
+          <button
+            type="button"
+            className="sidebar-nav-action"
+            onClick={requestBattalionHqGeolocation}
+            title={`${BATTALION_HQ_USER_ANCHOR_NAME}을(를) 브라우저 현재 위치로 옮깁니다`}
+          >
+            아군 부대 위치
+          </button>
+          <p className="sidebar-nav-group-label">계정</p>
+          {user ? (
+            <button type="button" className="sidebar-nav-action" onClick={onLogout}>
+              로그아웃
+            </button>
+          ) : (
+            <>
+              <NavLink to="/login">로그인</NavLink>
+              <NavLink to="/signup">회원가입</NavLink>
+            </>
+          )}
         </nav>
       </aside>
 
@@ -18439,42 +18872,25 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
             <strong>제어와드</strong>
           </div>
           <div className="topbar-right">
+            {user ? <span className="user-email">한화님 안녕하세요</span> : null}
             <button
               type="button"
-              className="btn-secondary topbar-sidebar-toggle"
-              onClick={openBattlefieldShortcutsHelp}
-              title="바로 가기 키 도움말 (?)"
-            >
-              바로 가기 키
-            </button>
-            <button
-              type="button"
-              className="btn-secondary topbar-sidebar-toggle"
-              onClick={() => setUnitSymbolManualOpen(true)}
-              title="단대호(부대 부호) 매뉴얼"
-            >
-              단대호 매뉴얼
-            </button>
-            <button
-              type="button"
-              className="btn-secondary topbar-sidebar-toggle"
+              className="btn-secondary topbar-sidebar-toggle topbar-sidebar-toggle--icon"
               onClick={() => setSidebarCollapsed((prev) => !prev)}
+              aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+              title={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
             >
-              {sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+              <span className="topbar-sidebar-toggle__menu-wrap" aria-hidden="true">
+                <img
+                  className="topbar-sidebar-toggle__menu-img"
+                  src={`${import.meta.env.BASE_URL}icons/menu-hamburger.png`}
+                  alt=""
+                  width={22}
+                  height={22}
+                  decoding="async"
+                />
+              </span>
             </button>
-            {user ? (
-              <>
-                <span className="user-email">{user.email}</span>
-                <button type="button" className="btn-secondary" onClick={onLogout}>
-                  로그아웃
-                </button>
-              </>
-            ) : (
-              <nav className="auth-links">
-                <NavLink to="/login">로그인</NavLink>
-                <NavLink to="/signup">회원가입</NavLink>
-              </nav>
-            )}
           </div>
         </header>
         <main className="content">
@@ -18527,11 +18943,8 @@ function UnitSymbolManualModal({ onClose }: { onClose: () => void }) {
         <header className="unit-symbol-manual-modal__header">
           <div className="unit-symbol-manual-modal__headline">
             <h2 className="map-video-modal-title" id="unit-symbol-manual-title">
-              단대호 매뉴얼
+              단대호
             </h2>
-            <p className="map-video-modal-sub muted">
-              표준 군대 부호 — 부대 전술 마커의 프레임 상단에 찍히는 에셜론 부호
-            </p>
           </div>
           <button
             type="button"
@@ -18568,9 +18981,6 @@ function UnitSymbolManualModal({ onClose }: { onClose: () => void }) {
               ))}
             </tbody>
           </table>
-          <p className="unit-symbol-manual-footnote muted">
-            표기 위치: 프레임(사각형) 상단. 강화(REINFORCED)·감소(REDUCED)는 별도로 프레임 위 좌우에 + / − 보조 마크로 표기됩니다.
-          </p>
         </div>
       </div>
     </div>

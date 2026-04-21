@@ -196,7 +196,7 @@ export function SarComparePhase({
       {showContinueButton && (
         <div className="sar-compare-actions">
           <button type="button" className="btn-primary" onClick={onContinue}>
-            다음: 무인기(UAV) SAR 감시
+            다음: 무인기(UAV) SAR 추적
           </button>
         </div>
       )}

@@ -33,7 +33,7 @@ export const UAV_MVP_PLATFORM = {
     'SAR-2 광역 후보 격자(함흥 남하 축)에 대한 2차 확인 자산 — GRD 변화 셀과 동일 타깃 우선 관측',
   mediaKind: 'video' as const,
   mediaUrl: '/media/uav/eo/uav-eo-02.mp4',
-  mediaCaption: 'EO/IR 클립(전차 유사 목표 감시)',
+  mediaCaption: 'EO/IR 클립(전차 유사 목표 추적)',
   tankIdentification: 'MBT 유사 · T-72 계열',
   identificationConfidence: '신뢰도 0.82 (EO/IR 융합)',
   tankSpecLine: '추정 전차 스펙',
@@ -62,7 +62,7 @@ export function uavOpsStatusLabelKo(s: UavOperationalStatus): string {
   const m: Record<UavOperationalStatus, string> = {
     idle: '대기 (idle)',
     dispatched: '출동 (dispatched)',
-    tracking: '감시 (tracking)',
+    tracking: '추적 (tracking)',
     returning: '귀환 (returning)',
   }
   return m[s]
