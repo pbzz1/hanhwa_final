@@ -35,6 +35,9 @@ services:
     startCommand: npx prisma migrate deploy && npm run start:prod
     healthCheckPath: /
     envVars:
+      # Render가 engines만 보고 Node 25를 고르는 경우가 있어 LTS 20으로 고정합니다.
+      - key: NODE_VERSION
+        value: "20.18.1"
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
