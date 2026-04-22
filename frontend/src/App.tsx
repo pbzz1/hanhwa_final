@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useId,
@@ -27,6 +29,9 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import maplibregl from 'maplibre-gl'
+
+const Spline = lazy(() => import('@splinetool/react-spline'))
+const AUTH_SPLINE_SCENE_URL = 'https://prod.spline.design/FrNCIt-5bLJdNSC3/scene.splinecode'
 import type { GeoJSONSource, MapLayerMouseEvent, StyleSpecification } from 'maplibre-gl'
 import { DroneEoIrIdentificationPage, DroneEoIrIdentificationPanel } from './DroneEoIrIdentificationPage'
 import { RadarCharts2D } from './RadarCharts2D'
@@ -9130,6 +9135,13 @@ function BattlefieldServicePage() {
   const assetAutoCameraMoveUntilRef = useRef(0)
   const assetAutoFollowPauseUntilRef = useRef(0)
   const sarExpandMoveEndHandlerRef = useRef<((e: maplibregl.MapLibreEvent) => void) | null>(null)
+  /** 드론 분할 영상 열기 직전 카메라(작전권역 등 사용자 시야) — 돌아가기 시 복원 */
+  const droneSplitCameraBeforeOpenRef = useRef<{
+    center: [number, number]
+    zoom: number
+    bearing: number
+    pitch: number
+  } | null>(null)
   const cancelMapSarExpandChain = useCallback(() => {
     mapCameraOpGenRef.current += 1
     const map = mapRef.current
@@ -11898,6 +11910,36 @@ function BattlefieldServicePage() {
     )
     setScenarioNotice('한반도 작전권역 시야로 전환했습니다.')
   }, [cancelMapSarExpandChain])
+
+  const closeDroneInlineSplitView = useCallback(() => {
+    setDroneInlineVideoPanel(null)
+    setSelectedAssetId(null)
+    setSelectedDetail(null)
+    setTacticScores(null)
+    if (popupRef.current) {
+      popupRef.current.remove()
+      popupRef.current = null
+    }
+    enemyScenarioPopupPinnedRef.current = false
+
+    cancelMapSarExpandChain()
+    const map = mapRef.current
+    const snap = droneSplitCameraBeforeOpenRef.current
+    droneSplitCameraBeforeOpenRef.current = null
+    if (map && snap) {
+      assetAutoCameraMoveUntilRef.current = Date.now() + 900
+      map.easeTo({
+        center: snap.center,
+        zoom: snap.zoom,
+        bearing: snap.bearing,
+        pitch: snap.pitch,
+        duration: 820,
+        easing: battlefieldMapCameraEaseInOut,
+      })
+    } else if (map) {
+      focusKoreaOpsView()
+    }
+  }, [cancelMapSarExpandChain, focusKoreaOpsView])
 
   const focusSarZoneByMode = useCallback((mode: 'WIDE' | 'SPOTLIGHT') => {
     cancelMapSarExpandChain()
@@ -16093,6 +16135,18 @@ function BattlefieldServicePage() {
         setActiveDispatchedDroneId(asset.id)
         const fixedPath = droneFixedMediaVideoPath(asset)
         const resolvedVideoUrl = resolvePlaybackMediaUrl(fixedPath) ?? fixedPath
+        const mapBeforeDrone = mapRef.current
+        if (mapBeforeDrone) {
+          const c = mapBeforeDrone.getCenter()
+          droneSplitCameraBeforeOpenRef.current = {
+            center: [c.lng, c.lat],
+            zoom: mapBeforeDrone.getZoom(),
+            bearing: mapBeforeDrone.getBearing(),
+            pitch: mapBeforeDrone.getPitch(),
+          }
+        } else {
+          droneSplitCameraBeforeOpenRef.current = null
+        }
         setDroneInlineVideoPanel({
           assetId: asset.id,
           title: `${asset.name} 시야 영상`,
@@ -16171,6 +16225,7 @@ function BattlefieldServicePage() {
     setUavVideoModal(null)
     setAssetStreamModal(null)
     setDroneInlineVideoPanel(null)
+    droneSplitCameraBeforeOpenRef.current = null
     setScenarioPhase(BattlefieldScenarioPhase.IDLE)
     setSensorState(INITIAL_SENSOR_STATE)
     setBattlefieldSpeedIdx(0)
@@ -16484,7 +16539,7 @@ function BattlefieldServicePage() {
         return
       }
       if (droneInlineVideoPanel) {
-        setDroneInlineVideoPanel(null)
+        closeDroneInlineSplitView()
         return
       }
       if (sarGrdVizModalOpen) {
@@ -16522,6 +16577,7 @@ function BattlefieldServicePage() {
     uavVideoModal,
     assetStreamModal,
     droneInlineVideoPanel,
+    closeDroneInlineSplitView,
     closeUavDispatchModal,
     dismissSarSpotlight,
     dismissOrbitalSarImagePreview,
@@ -18473,18 +18529,7 @@ function BattlefieldServicePage() {
               <button
                 type="button"
                 className="btn-secondary service-drone-split-panel__back"
-                onClick={() => {
-                  setDroneInlineVideoPanel(null)
-                  setSelectedAssetId(null)
-                  setSelectedDetail(null)
-                  setTacticScores(null)
-                  if (popupRef.current) {
-                    popupRef.current.remove()
-                    popupRef.current = null
-                  }
-                  enemyScenarioPopupPinnedRef.current = false
-                  handleSarExpandAlways()
-                }}
+                onClick={closeDroneInlineSplitView}
               >
                 돌아가기
               </button>
@@ -19300,7 +19345,16 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
   return (
     <div className={`app-shell${sidebarCollapsed ? ' app-shell--sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
-        <h2 className="brand">전장 C2 서비스</h2>
+        <div className="brand brand--logo">
+          <img
+            className="brand__img"
+            src="/media/brand/pinkward-logo-full.png"
+            alt="핑크와드"
+            width={640}
+            height={160}
+            decoding="async"
+          />
+        </div>
         <nav className="sidebar-nav">
           <p className="sidebar-nav-group-label">운용</p>
           <NavLink to="/" end>
@@ -19348,7 +19402,7 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
       <div className="content-area">
         <header className="topbar">
           <div>
-            <strong>제어와드</strong>
+            <strong>{location.pathname === '/' ? '실시간 전장판' : '핑크와드'}</strong>
           </div>
           <div className="topbar-right">
             {user ? <span className="user-email">한화님 안녕하세요</span> : null}
@@ -19475,10 +19529,31 @@ function AuthLayout({
 }) {
   if (!authReady) {
     return (
-      <div className="auth-shell auth-shell--satellite">
-        <section className="page auth-page auth-page--center auth-page--glass auth-checking-page">
-          <h1>인증 상태 확인 중…</h1>
-        </section>
+      <div className="auth-shell auth-shell--split">
+        <div className="auth-shell__left">
+          <div className="auth-shell__left-stack">
+            <header className="auth-shell__brand">
+              <img
+                className="auth-shell__brand-img"
+                src="/media/brand/pinkward-logo-full.png"
+                alt="핑크와드"
+                width={640}
+                height={160}
+                decoding="async"
+              />
+            </header>
+            <section className="page auth-page auth-page--center auth-page--glass auth-checking-page">
+              <h1>인증 상태 확인 중…</h1>
+            </section>
+          </div>
+        </div>
+        <div className="auth-shell__right" aria-hidden="true">
+          <div className="auth-shell__spline-wrap">
+            <Suspense fallback={<div className="auth-shell__spline-fallback" />}>
+              <Spline scene={AUTH_SPLINE_SCENE_URL} className="auth-shell__spline" />
+            </Suspense>
+          </div>
+        </div>
       </div>
     )
   }
@@ -19488,10 +19563,31 @@ function AuthLayout({
   }
 
   return (
-    <div className="auth-shell auth-shell--satellite">
-      <section className="page auth-page auth-page--center auth-page--glass">
-        <Outlet />
-      </section>
+    <div className="auth-shell auth-shell--split">
+      <div className="auth-shell__left">
+        <div className="auth-shell__left-stack">
+          <header className="auth-shell__brand">
+            <img
+              className="auth-shell__brand-img"
+              src="/media/brand/pinkward-logo-full.png"
+              alt="핑크와드"
+              width={640}
+              height={160}
+              decoding="async"
+            />
+          </header>
+          <section className="page auth-page auth-page--center auth-page--glass">
+            <Outlet />
+          </section>
+        </div>
+      </div>
+      <div className="auth-shell__right" aria-hidden="true">
+        <div className="auth-shell__spline-wrap">
+          <Suspense fallback={<div className="auth-shell__spline-fallback" />}>
+            <Spline scene={AUTH_SPLINE_SCENE_URL} className="auth-shell__spline" />
+          </Suspense>
+        </div>
+      </div>
     </div>
   )
 }

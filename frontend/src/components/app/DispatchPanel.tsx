@@ -3,8 +3,6 @@ import { DispatchMessageBody } from './DispatchMessageBody'
 import type {
   DispatchAttachmentFlags,
   DispatchMessage,
-  DispatchMessageType,
-  DispatchPriority,
   FriendlyUnitTableRow,
 } from '../../types/commandCenter'
 
@@ -47,8 +45,6 @@ export function DispatchPanel({
   onClose,
 }: DispatchPanelProps) {
   const [receiverUnitId, setReceiverUnitId] = useState<number | null>(selectedUnitId)
-  const [messageType, setMessageType] = useState<DispatchMessageType>('INFO')
-  const [priority, setPriority] = useState<DispatchPriority>('MEDIUM')
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [attachments, setAttachments] = useState<DispatchAttachmentFlags>(DEFAULT_ATTACHMENTS)
@@ -82,8 +78,8 @@ export function DispatchPanel({
       receiverUnitId,
       title: title.trim(),
       content: content.trim(),
-      messageType,
-      priority,
+      messageType: 'INFO',
+      priority: 'MEDIUM',
       attachments,
     })
     setTitle('')
@@ -117,33 +113,6 @@ export function DispatchPanel({
             ))}
           </select>
         </label>
-
-        <div className="dispatch-panel__row">
-          <label>
-            유형
-            <select
-              value={messageType}
-              onChange={(event) => setMessageType(event.target.value as DispatchMessageType)}
-            >
-              <option value="INFO">INFO</option>
-              <option value="ALERT">ALERT</option>
-              <option value="ORDER">ORDER</option>
-              <option value="RECON">RECON</option>
-            </select>
-          </label>
-          <label>
-            우선순위
-            <select
-              value={priority}
-              onChange={(event) => setPriority(event.target.value as DispatchPriority)}
-            >
-              <option value="LOW">LOW</option>
-              <option value="MEDIUM">MEDIUM</option>
-              <option value="HIGH">HIGH</option>
-              <option value="URGENT">URGENT</option>
-            </select>
-          </label>
-        </div>
 
         <label>
           제목
