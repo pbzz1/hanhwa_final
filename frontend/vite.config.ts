@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite'
 import type { ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
-// 루트 스크립트(ESM) — 선언 파일 없음
-// @ts-expect-error 7016
-import { printDevAccessBanner } from '../scripts/dev-lan-urls.mjs'
+// `frontend/`만 배포(Vercel)할 때 상위 `scripts/`가 없으므로 동일 모듈은 `frontend/scripts/`에 둠
+// @ts-expect-error 7016 — .mjs 선언 없음
+import { printDevAccessBanner } from './scripts/dev-lan-urls.mjs'
 
 /** 로컬 Nest — `getApiBaseUrl()` 이 dev에서 '' 일 때 같은 오리진으로 요청되어 여기로 프록시됨 */
 const NEST_DEV_TARGET = 'http://127.0.0.1:3308'
