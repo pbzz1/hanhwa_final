@@ -769,9 +769,9 @@ function scenarioMbtEnemyVisibleOnMap(
 /** UAV가 이 거리(km) 안에 들어오면 적 MBT를 추적 모드로 전환 */
 const BATTLEFIELD_UAV_ENEMY_ACQUIRE_KM = 52
 /** UAV 시뮬 1틱(센서 궤적 타이머와 동일) 이동 거리(km) */
-const BATTLEFIELD_UAV_SIM_STEP_KM = 0.22
+const BATTLEFIELD_UAV_SIM_STEP_KM = 0.11
 /** 사용자가 UAV 출동 후보를 명시 선택한 경우, 지도에서 움직임이 체감되도록 가속 */
-const BATTLEFIELD_UAV_DISPATCH_STEP_KM = 1.35
+const BATTLEFIELD_UAV_DISPATCH_STEP_KM = 0.675
 const BATTLEFIELD_UAV_CLICK_VIDEO_URL = '/media/drone/demo-drone-map.mp4'
 /** UAV 영상 표준 경로(파일 교체만으로 유지): /public/media/uav/{eo|ir}/uav-{eo|ir}-0N.mp4 */
 const UAV_EO_VIDEO_URLS = [
@@ -813,7 +813,7 @@ function tacticVideoUrlForName(name: string): string {
 
 /** 드론도 UAV와 동일한 목표/추적 알고리즘으로 이동 */
 const BATTLEFIELD_DRONE_ENEMY_ACQUIRE_KM = 52
-const BATTLEFIELD_DRONE_SIM_STEP_KM = 1.35
+const BATTLEFIELD_DRONE_SIM_STEP_KM = 0.675
 /** 도로(OSRM) 궤적 추종 후 목표에 이 거리(km) 이내이면 직선 접근로 전환 */
 const BATTLEFIELD_DRONE_ROAD_TERMINAL_KM = 2.8
 const BATTLEFIELD_DRONE_ROUTE_REFRESH_MS = 12_000
@@ -1643,8 +1643,16 @@ const SERVICE_ASSETS_CLUSTER_RADIUS = 56
 const SERVICE_MOVERS_SOURCE_ID = 'service-movers-source'
 const SERVICE_MOVERS_LAYER_ID = 'service-movers-layer'
 const SERVICE_MOVERS_LABEL_LAYER_ID = 'service-movers-label-layer'
+const SERVICE_DRONE_PAST_ROUTE_SOURCE_ID = 'service-drone-past-route-source'
+const SERVICE_DRONE_PAST_ROUTE_LAYER_ID = 'service-drone-past-route-layer'
 const SERVICE_DRONE_PREDICT_ROUTE_SOURCE_ID = 'service-drone-predict-route-source'
+const SERVICE_DRONE_PREDICT_ROUTE_CASING_LAYER_ID = 'service-drone-predict-route-casing-layer'
 const SERVICE_DRONE_PREDICT_ROUTE_LAYER_ID = 'service-drone-predict-route-layer'
+const SERVICE_UAV_PAST_ROUTE_SOURCE_ID = 'service-uav-past-route-source'
+const SERVICE_UAV_PAST_ROUTE_LAYER_ID = 'service-uav-past-route-layer'
+const SERVICE_UAV_PREDICT_ROUTE_SOURCE_ID = 'service-uav-predict-route-source'
+const SERVICE_UAV_PREDICT_ROUTE_CASING_LAYER_ID = 'service-uav-predict-route-casing-layer'
+const SERVICE_UAV_PREDICT_ROUTE_LAYER_ID = 'service-uav-predict-route-layer'
 const SERVICE_SCENARIO_SOURCE_ID = 'service-scenario-source'
 const SERVICE_ENEMY_LAYER_ID = 'service-enemy-layer'
 /** 적 기갑(MB) 표준부호 프레임 — MapLibre `symbol` 아이콘 */
@@ -7899,7 +7907,7 @@ type SensorStepDef = {
 /** 센서 파이프라인 개요 (홈 1~4단계 — 기획 1·2·3·4단계 핵심을 웹 흐름에 대응) */
 const SENSOR_TECHNICAL_FLOW_OVERVIEW: string[] = [
   'Sentinel-1 IW·SLC/GRD, Burst 병합(위상 연속), Sub-Aperture 위상차로 기동 표적 분리, RCS·OSM 2차 필터.',
-  'Spotlight·SARDet-100K·MSFA+R-CNN 계열로 전차/차량 이진 분류 후 좌표 유도; UAV에서 YOLO+ByteTrack·경로·EO/IR 융합.',
+  'SAR 집중 관측 구역·SARDet-100K·MSFA+R-CNN 계열로 전차/차량 이진 분류 후 좌표 유도; UAV에서 YOLO+ByteTrack·경로·EO/IR 융합.',
   'VoD FMCW(3+1D) 점군 DBSCAN·연속 프레임 추적, LiDAR·Camera 교차검증, 규칙 기반 위험도→AI 위험지역 예측 확장.',
   '근접 드론 YOLOv8n·SAHI·BoT-SORT, 레이더·영상 융합, Top-K·HITL UI로 정밀 기종 식별.',
 ]
@@ -7933,9 +7941,9 @@ const SENSOR_PIPELINE_STEPS: SensorStepDef[] = [
     title: 'UAV',
     tag: '정밀 SAR · 추적',
     description:
-      '1단계 후보 좌표를 바탕으로 Spotlight 고해상 SAR에서 전차·차량을 구분하고, UAV로 실시간 추적·경로를 유지합니다.',
+      '1단계 후보 좌표를 바탕으로 SAR 집중 관측 구역 고해상 SAR에서 전차·차량을 구분하고, UAV로 실시간 추적·경로를 유지합니다.',
     technicalDetail:
-      '학습: SARDet-100K(Spotlight), Tank·Car 집중. 백본 ResNet-152·R-CNN 계열+MSFA 융합, ImageNet·DOTA·WST 사전학습 가중치, 최종층 파인튜닝. 위기 시 이진 분류, 평시 주둔지 전차 박스 카운트. UAV: YOLO 검출+ByteTrack 다중 추적, 프레임 중심 좌표로 경로·집단 패턴, ARMA3 기반 EO/IR 시뮬 학습 데이터, IR 열 대비 반영.',
+      '학습: SARDet-100K(SAR 집중 관측 구역), Tank·Car 집중. 백본 ResNet-152·R-CNN 계열+MSFA 융합, ImageNet·DOTA·WST 사전학습 가중치, 최종층 파인튜닝. 위기 시 이진 분류, 평시 주둔지 전차 박스 카운트. UAV: YOLO 검출+ByteTrack 다중 추적, 프레임 중심 좌표로 경로·집단 패턴, ARMA3 기반 EO/IR 시뮬 학습 데이터, IR 열 대비 반영.',
     scenarioDetail:
       '웹 2단계·통합: UAV 궤적·EO/IR 패널로 기획 ②고해상 SAR+MSFA 및 ③무인기 추적 흐름을 한 화면 흐름에 대응.',
     meta: [
@@ -8601,6 +8609,7 @@ function toDronePredictRouteSourceData(
   from: { lat: number; lng: number } | null,
   to: { lat: number; lng: number } | null,
   roadPolyline: MarchPoint[] | null = null,
+  routeKind: 'drone-predict-route' | 'uav-predict-route' = 'drone-predict-route',
 ): Parameters<GeoJSONSource['setData']>[0] {
   if (!from || !to) {
     return { type: 'FeatureCollection', features: [] } as Parameters<GeoJSONSource['setData']>[0]
@@ -8616,7 +8625,7 @@ function toDronePredictRouteSourceData(
             coordinates: roadPolyline.map((p) => [p.lng, p.lat]),
           },
           properties: {
-            kind: 'drone-predict-route',
+            kind: routeKind,
           },
         },
       ],
@@ -8635,8 +8644,30 @@ function toDronePredictRouteSourceData(
           ],
         },
         properties: {
-          kind: 'drone-predict-route',
+          kind: routeKind,
         },
+      },
+    ],
+  } as Parameters<GeoJSONSource['setData']>[0]
+}
+
+function toTrackTrailSourceData(
+  history: MarchPoint[],
+  kind: 'uav-past-route' | 'drone-past-route',
+): Parameters<GeoJSONSource['setData']>[0] {
+  if (!history || history.length < 2) {
+    return { type: 'FeatureCollection', features: [] } as Parameters<GeoJSONSource['setData']>[0]
+  }
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: history.map((p) => [p.lng, p.lat]),
+        },
+        properties: { kind },
       },
     ],
   } as Parameters<GeoJSONSource['setData']>[0]
@@ -9095,6 +9126,9 @@ function BattlefieldServicePage() {
   const sarLossNoticeTimerRef = useRef<number | null>(null)
   /** 연속 map.fitBounds/easeTo 충돌 방지 + 작전권역→SAR 카메라 체인 취소 */
   const mapCameraOpGenRef = useRef(0)
+  /** UAV/드론 자동 추적 카메라와 외부 focus 이동 충돌 방지용 타임스탬프 */
+  const assetAutoCameraMoveUntilRef = useRef(0)
+  const assetAutoFollowPauseUntilRef = useRef(0)
   const sarExpandMoveEndHandlerRef = useRef<((e: maplibregl.MapLibreEvent) => void) | null>(null)
   const cancelMapSarExpandChain = useCallback(() => {
     mapCameraOpGenRef.current += 1
@@ -9528,12 +9562,14 @@ function BattlefieldServicePage() {
   const [uavSimPos, setUavSimPos] = useState<{ lat: number; lng: number } | null>(null)
   const uavSimPosRef = useRef<{ lat: number; lng: number } | null>(null)
   uavSimPosRef.current = uavSimPos
+  const uavTrackHistoryRef = useRef<MarchPoint[]>([])
   const uavGrdMissionRef = useRef<{ centerLat: number; centerLng: number } | null>(null)
   const uavChasingEnemyIdRef = useRef<number | null>(null)
   /** 드론도 UAV와 같은 목표/추적 기반 이동 */
   const [droneSimPos, setDroneSimPos] = useState<{ lat: number; lng: number } | null>(null)
   const droneSimPosRef = useRef<{ lat: number; lng: number } | null>(null)
   droneSimPosRef.current = droneSimPos
+  const droneTrackHistoryRef = useRef<MarchPoint[]>([])
   const droneMissionRef = useRef<{ centerLat: number; centerLng: number } | null>(null)
   const droneChasingEnemyIdRef = useRef<number | null>(null)
   /** 드론 원거리 이동: OSRM(또는 폴백) 폴리라인 추종 */
@@ -10744,6 +10780,8 @@ function BattlefieldServicePage() {
     if (scenarioPhase !== BattlefieldScenarioPhase.IDLE) return undefined
     setUavSimPos(null)
     setDroneSimPos(null)
+    uavTrackHistoryRef.current = []
+    droneTrackHistoryRef.current = []
     uavReturnToBaseRef.current = null
     droneReturnToBaseRef.current = null
     uavChasingEnemyIdRef.current = null
@@ -10755,6 +10793,48 @@ function BattlefieldServicePage() {
     setActiveUavDispatchTarget(null)
     return undefined
   }, [scenarioPhase])
+
+  useEffect(() => {
+    if (!uavSimPos) {
+      uavTrackHistoryRef.current = []
+      return
+    }
+    const prev = uavTrackHistoryRef.current
+    if (prev.length === 0) {
+      uavTrackHistoryRef.current = [{ lat: uavSimPos.lat, lng: uavSimPos.lng }]
+      return
+    }
+    const last = prev[prev.length - 1]!
+    const deltaKm = haversineKm(last, uavSimPos)
+    if (deltaKm < 0.01) return
+    if (deltaKm > 35) {
+      uavTrackHistoryRef.current = [{ lat: uavSimPos.lat, lng: uavSimPos.lng }]
+      return
+    }
+    const next = [...prev, { lat: uavSimPos.lat, lng: uavSimPos.lng }]
+    uavTrackHistoryRef.current = next.length > 900 ? next.slice(next.length - 900) : next
+  }, [uavSimPos])
+
+  useEffect(() => {
+    if (!droneSimPos) {
+      droneTrackHistoryRef.current = []
+      return
+    }
+    const prev = droneTrackHistoryRef.current
+    if (prev.length === 0) {
+      droneTrackHistoryRef.current = [{ lat: droneSimPos.lat, lng: droneSimPos.lng }]
+      return
+    }
+    const last = prev[prev.length - 1]!
+    const deltaKm = haversineKm(last, droneSimPos)
+    if (deltaKm < 0.01) return
+    if (deltaKm > 20) {
+      droneTrackHistoryRef.current = [{ lat: droneSimPos.lat, lng: droneSimPos.lng }]
+      return
+    }
+    const next = [...prev, { lat: droneSimPos.lat, lng: droneSimPos.lng }]
+    droneTrackHistoryRef.current = next.length > 900 ? next.slice(next.length - 900) : next
+  }, [droneSimPos])
 
   /** UAV 출동 단계: GRD 목표로 접근하다 탐지 거리 내 적 MBT를 발견하면 해당 표적을 따라 이동 */
   useEffect(() => {
@@ -11215,18 +11295,14 @@ function BattlefieldServicePage() {
   const movingPointsForMap = useMemo(() => {
     return movingPoints.filter((row) => {
       if (row.category === 'MOVING_UAV') {
-        if (activeDispatchedUav != null) {
-          return false
-        }
+        // 출동 직후부터 UAV 비행 위치를 항상 표시
         return uavSimPos != null && sensorState.uav.running
       }
       if (row.category === 'MOVING_UAV_TARGET') {
         return sensorState.uav.running
       }
       if (row.category === 'MOVING_DRONE') {
-        if (activeDispatchedDroneId != null) {
-          return false
-        }
+        // 출동 직후부터 드론 비행 위치를 항상 표시
         return sensorState.drone.running && droneSimPos != null
       }
       if (row.category === 'MOVING_FMCW') {
@@ -11242,8 +11318,6 @@ function BattlefieldServicePage() {
     sensorState.uav.running,
     sensorState.drone.running,
     droneSimPos,
-    activeDispatchedDroneId,
-    activeDispatchedUav,
   ])
 
   const dronePredictedRouteForMap = useMemo((): Parameters<GeoJSONSource['setData']>[0] => {
@@ -11299,6 +11373,66 @@ function BattlefieldServicePage() {
 
     return toDronePredictRouteSourceData(null, null, null)
   }, [droneSimPos, sensorState.drone.running, enemyBattlefieldPoses, droneRoadPolyline])
+
+  /** UAV 출동·추적 시 드론 예측 경로와 동일하게 현재 위치→목표(또는 회항) 직선 경로 표시 */
+  const uavPredictedRouteForMap = useMemo((): Parameters<GeoJSONSource['setData']>[0] => {
+    if (!sensorState.uav.running || uavSimPos == null) {
+      return toDronePredictRouteSourceData(null, null, null, 'uav-predict-route')
+    }
+    const returnTarget = uavReturnToBaseRef.current
+    if (returnTarget) {
+      return toDronePredictRouteSourceData(uavSimPos, returnTarget, null, 'uav-predict-route')
+    }
+    const enemyPts = DUMMY_SCENARIO_ENTITIES.filter(
+      (entity) => entity.relation === 'ENEMY' && entity.kind === 'MBT',
+    ).map((entity) => {
+      const pose = enemyBattlefieldPoses[entity.id] ?? { lat: entity.lat, lng: entity.lng }
+      return { id: entity.id, lat: pose.lat, lng: pose.lng }
+    })
+    const chaseId = uavChasingEnemyIdRef.current
+    if (chaseId != null) {
+      const locked = enemyPts.find((x) => x.id === chaseId)
+      if (locked) {
+        return toDronePredictRouteSourceData(
+          uavSimPos,
+          { lat: locked.lat, lng: locked.lng },
+          null,
+          'uav-predict-route',
+        )
+      }
+    }
+    const mission = uavGrdMissionRef.current
+    if (mission) {
+      return toDronePredictRouteSourceData(
+        uavSimPos,
+        { lat: mission.centerLat, lng: mission.centerLng },
+        null,
+        'uav-predict-route',
+      )
+    }
+    const tgt = activeUavDispatchTarget
+    if (tgt) {
+      return toDronePredictRouteSourceData(uavSimPos, { lat: tgt.lat, lng: tgt.lng }, null, 'uav-predict-route')
+    }
+    return toDronePredictRouteSourceData(null, null, null, 'uav-predict-route')
+  }, [
+    sensorState.uav.running,
+    uavSimPos,
+    enemyBattlefieldPoses,
+    activeUavDispatchTarget,
+  ])
+
+  const dronePastRouteForMap = useMemo(
+    (): Parameters<GeoJSONSource['setData']>[0] =>
+      toTrackTrailSourceData(droneTrackHistoryRef.current, 'drone-past-route'),
+    [droneSimPos, sensorState.drone.running],
+  )
+
+  const uavPastRouteForMap = useMemo(
+    (): Parameters<GeoJSONSource['setData']>[0] =>
+      toTrackTrailSourceData(uavTrackHistoryRef.current, 'uav-past-route'),
+    [uavSimPos, sensorState.uav.running],
+  )
 
   const uavMvpHudSnapshot = useMemo((): UavMvpSnapshot | null => {
     if (!phaseAtLeast(scenarioPhase, BattlefieldScenarioPhase.UAV_DISPATCHED)) return null
@@ -11779,9 +11913,19 @@ function BattlefieldServicePage() {
         ],
         { padding: 56, duration: 720, maxZoom: 10.9, easing: battlefieldMapCameraEaseInOut },
       )
-      setScenarioNotice('집중 탐지(Spotlight) 영역으로 이동했습니다.')
+      setScenarioNotice('SAR 집중 관측 구역으로 이동했습니다.')
       return
     }
+    // 광역 탐지로 전환할 때는 UAV/드론 선택 추적 상태를 해제해
+    // 우측 사이드바의 "선택됨(활성)" 표시가 남지 않도록 처리
+    setSelectedAssetId(null)
+    setSelectedDetail(null)
+    setTacticScores(null)
+    if (popupRef.current) {
+      popupRef.current.remove()
+      popupRef.current = null
+    }
+    enemyScenarioPopupPinnedRef.current = false
     const wideFeature = SAR_OBSERVATION_ZONE_GEOJSON.features.find(
       (f) => String((f.properties as Record<string, unknown> | undefined)?.id ?? '') === 'sar2-wide-zone',
     )
@@ -11850,6 +11994,17 @@ function BattlefieldServicePage() {
       /** 위에서 내려다보는 정면 시점 유지(사용자가 기울이지 못하도록 상한 0) */
       maxPitch: 0,
     })
+    const handleMapMoveStart = () => {
+      const now = Date.now()
+      // 자동 추적 카메라가 만든 move는 외부 focus로 간주하지 않음
+      if (now <= assetAutoCameraMoveUntilRef.current) return
+      // 사용자/다른 기능의 focus 명령이 우선 적용되도록 자동 추적을 잠시 정지
+      const pauseUntil = now + 2600
+      if (pauseUntil > assetAutoFollowPauseUntilRef.current) {
+        assetAutoFollowPauseUntilRef.current = pauseUntil
+      }
+    }
+    map.on('movestart', handleMapMoveStart)
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
     let popupActionClickHandler: ((event: MouseEvent) => void) | null = null
 
@@ -12437,6 +12592,45 @@ function BattlefieldServicePage() {
           data: toDronePredictRouteSourceData(null, null, null),
         })
       }
+      if (!map.getSource(SERVICE_DRONE_PAST_ROUTE_SOURCE_ID)) {
+        map.addSource(SERVICE_DRONE_PAST_ROUTE_SOURCE_ID, {
+          type: 'geojson',
+          data: toTrackTrailSourceData([], 'drone-past-route'),
+        })
+      }
+      if (!map.getLayer(SERVICE_DRONE_PAST_ROUTE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_DRONE_PAST_ROUTE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_DRONE_PAST_ROUTE_SOURCE_ID,
+          paint: {
+            'line-color': '#f59e0b',
+            'line-width': 2.9,
+            'line-opacity': 0.76,
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_DRONE_PREDICT_ROUTE_CASING_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_DRONE_PREDICT_ROUTE_CASING_LAYER_ID,
+          type: 'line',
+          source: SERVICE_DRONE_PREDICT_ROUTE_SOURCE_ID,
+          paint: {
+            'line-color': 'rgba(15,23,42,0.86)',
+            'line-width': 5.2,
+            'line-opacity': 0.82,
+            'line-dasharray': [2.4, 1.25],
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        })
+      }
       if (!map.getLayer(SERVICE_DRONE_PREDICT_ROUTE_LAYER_ID)) {
         map.addLayer({
           id: SERVICE_DRONE_PREDICT_ROUTE_LAYER_ID,
@@ -12444,9 +12638,71 @@ function BattlefieldServicePage() {
           source: SERVICE_DRONE_PREDICT_ROUTE_SOURCE_ID,
           paint: {
             'line-color': '#facc15',
-            'line-width': 2.2,
-            'line-opacity': 0.92,
-            'line-dasharray': [1.5, 1.1],
+            'line-width': 3.15,
+            'line-opacity': 0.98,
+            'line-dasharray': [2.25, 1.2],
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        })
+      }
+      if (!map.getSource(SERVICE_UAV_PREDICT_ROUTE_SOURCE_ID)) {
+        map.addSource(SERVICE_UAV_PREDICT_ROUTE_SOURCE_ID, {
+          type: 'geojson',
+          data: toDronePredictRouteSourceData(null, null, null, 'uav-predict-route'),
+        })
+      }
+      if (!map.getSource(SERVICE_UAV_PAST_ROUTE_SOURCE_ID)) {
+        map.addSource(SERVICE_UAV_PAST_ROUTE_SOURCE_ID, {
+          type: 'geojson',
+          data: toTrackTrailSourceData([], 'uav-past-route'),
+        })
+      }
+      if (!map.getLayer(SERVICE_UAV_PAST_ROUTE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_UAV_PAST_ROUTE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_UAV_PAST_ROUTE_SOURCE_ID,
+          paint: {
+            'line-color': '#22d3ee',
+            'line-width': 2.95,
+            'line-opacity': 0.78,
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_UAV_PREDICT_ROUTE_CASING_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_UAV_PREDICT_ROUTE_CASING_LAYER_ID,
+          type: 'line',
+          source: SERVICE_UAV_PREDICT_ROUTE_SOURCE_ID,
+          paint: {
+            'line-color': 'rgba(15,23,42,0.86)',
+            'line-width': 5.3,
+            'line-opacity': 0.84,
+            'line-dasharray': [2.55, 1.3],
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        })
+      }
+      if (!map.getLayer(SERVICE_UAV_PREDICT_ROUTE_LAYER_ID)) {
+        map.addLayer({
+          id: SERVICE_UAV_PREDICT_ROUTE_LAYER_ID,
+          type: 'line',
+          source: SERVICE_UAV_PREDICT_ROUTE_SOURCE_ID,
+          paint: {
+            'line-color': '#38bdf8',
+            'line-width': 3.2,
+            'line-opacity': 0.98,
+            'line-dasharray': [2.4, 1.25],
           },
           layout: {
             'line-cap': 'round',
@@ -14399,6 +14655,7 @@ function BattlefieldServicePage() {
     mapRef.current = map
 
     return () => {
+      map.off('movestart', handleMapMoveStart)
       enemyScenarioPopupPinnedRef.current = false
       if (popupActionClickHandler) {
         map.getContainer().removeEventListener('click', popupActionClickHandler)
@@ -14465,11 +14722,38 @@ function BattlefieldServicePage() {
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
+    const source = map.getSource(SERVICE_DRONE_PAST_ROUTE_SOURCE_ID)
+    if (source && 'setData' in source) {
+      ;(source as GeoJSONSource).setData(dronePastRouteForMap)
+    }
+  }, [dronePastRouteForMap])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
     const source = map.getSource(SERVICE_DRONE_PREDICT_ROUTE_SOURCE_ID)
     if (source && 'setData' in source) {
       ;(source as GeoJSONSource).setData(dronePredictedRouteForMap)
     }
   }, [dronePredictedRouteForMap])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const source = map.getSource(SERVICE_UAV_PAST_ROUTE_SOURCE_ID)
+    if (source && 'setData' in source) {
+      ;(source as GeoJSONSource).setData(uavPastRouteForMap)
+    }
+  }, [uavPastRouteForMap])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const source = map.getSource(SERVICE_UAV_PREDICT_ROUTE_SOURCE_ID)
+    if (source && 'setData' in source) {
+      ;(source as GeoJSONSource).setData(uavPredictedRouteForMap)
+    }
+  }, [uavPredictedRouteForMap])
 
   useEffect(() => {
     const map = mapRef.current
@@ -14653,9 +14937,17 @@ function BattlefieldServicePage() {
     const pen = mapFlags.showSarGrdPeninsulaOverlay
     /** SAR 탐지 전개 직후에도 1단계(prep)에서 GRD가 가려지지 않도록, 반도 GRD 오버레이가 켜진 단계에서는 항상 표시 */
     const showMotion = pen
+    /** 집중 탐지(Spotlight)에서는 GRD 검출 구역 숨김, 광역 탐지에서만 표시 */
+    const grdDetectionRegionsVisible = sarZoneViewMode === 'WIDE'
 
-    applyVisibility(SERVICE_GRD_MOTION_FILL_LAYER_ID, showMotion && grdMotionMapOverlayOn)
-    applyVisibility(SERVICE_GRD_MOTION_LINE_LAYER_ID, showMotion && grdMotionMapOverlayOn)
+    applyVisibility(
+      SERVICE_GRD_MOTION_FILL_LAYER_ID,
+      showMotion && grdMotionMapOverlayOn && grdDetectionRegionsVisible,
+    )
+    applyVisibility(
+      SERVICE_GRD_MOTION_LINE_LAYER_ID,
+      showMotion && grdMotionMapOverlayOn && grdDetectionRegionsVisible,
+    )
     applyVisibility(SERVICE_ORBITAL_SAR_TRACE_LAYER_ID, layerVisible.friendly)
     applyVisibility(SERVICE_ORBITAL_SAR_FOOTPRINT_FILL_LAYER_ID, layerVisible.friendly)
     applyVisibility(SERVICE_ORBITAL_SAR_FOOTPRINT_LINE_LAYER_ID, layerVisible.friendly)
@@ -14663,6 +14955,7 @@ function BattlefieldServicePage() {
     layerVisible,
     scenarioPhase,
     grdMotionMapOverlayOn,
+    sarZoneViewMode,
     fmcwCoverageOn,
     fmcwPredictionRouteOn,
     fmcwPredictionRiskOn,
@@ -15418,6 +15711,8 @@ function BattlefieldServicePage() {
   }, [])
 
   const handleFocusSarSpotlightFromAlert = useCallback(() => {
+    cancelMapSarExpandChain()
+    setSarZoneViewMode('SPOTLIGHT')
     const map = mapRef.current
     const openSpotlight = () => {
       setSarSpotlightSeen(false)
@@ -15447,7 +15742,7 @@ function BattlefieldServicePage() {
       ],
       { padding: 72, duration: 1050, maxZoom: 10.85, essential: true },
     )
-  }, [])
+  }, [cancelMapSarExpandChain])
 
   /** SAR 이동 경고 본문 — 한 줄 잘림 방지: `표시 | 상태 | TRK` 형식을 2줄로 분리 */
   const grdEnemyAlertBodyLines = useMemo(() => {
@@ -15601,6 +15896,84 @@ function BattlefieldServicePage() {
     activeUavDispatchTargetText,
     sensorState.uav.running,
     uavSimPos,
+  ])
+
+  /** 아군 UAV·드론을 사이드바/지도에서 선택한 뒤 출동 시뮬이 돌아가면, 지도·팝업·상세가 위치를 계속 따라가도록 */
+  useEffect(() => {
+    if (selectedAssetId == null) return
+    const map = mapRef.current
+    if (!map) return
+
+    const followingUav =
+      activeDispatchedUav?.id === selectedAssetId &&
+      uavSimPos != null &&
+      sensorState.uav.running
+    const followingDrone =
+      activeDispatchedDroneId === selectedAssetId &&
+      droneSimPos != null &&
+      sensorState.drone.running
+
+    if (!followingUav && !followingDrone) return
+
+    const pos = followingUav ? uavSimPos! : droneSimPos!
+    const { lat, lng } = pos
+    const nextMgrs = latLngToMgrsSafe(lat, lng)
+
+    const cur = map.getCenter()
+    const distDeg = Math.hypot(cur.lng - lng, cur.lat - lat)
+    const autoFollowPaused = Date.now() < assetAutoFollowPauseUntilRef.current
+    if (!autoFollowPaused && distDeg > 0.00006) {
+      const z = map.getZoom()
+      assetAutoCameraMoveUntilRef.current = Date.now() + 350
+      map.jumpTo({
+        center: [lng, lat],
+        zoom: z < 10.8 ? 10.8 : z,
+      })
+    }
+
+    setSelectedDetail((prev) => {
+      if (!prev || prev.affiliation !== '아군') return prev
+      if (prev.lat === lat && prev.lng === lng && prev.mgrs === nextMgrs) return prev
+      return { ...prev, lat, lng, mgrs: nextMgrs }
+    })
+
+    const asset = assets.find((a) => a.id === selectedAssetId)
+    if (!asset || !popupRef.current) return
+
+    const isActiveUavFollow = followingUav
+    const missionLine =
+      isActiveUavFollow && activeUavDispatchTargetText != null
+        ? `사용중 · ${activeUavDispatchTargetText}`
+        : asset.mission
+
+    const html = renderServiceAssetPopupHtml({
+      name: asset.name,
+      category: asset.category,
+      lat,
+      lng,
+      unitCode: asset.unitCode,
+      level: asset.level,
+      formation: asset.formation,
+      elevationM: asset.elevationM,
+      mgrs: nextMgrs,
+      readiness: asset.readiness,
+      mission: missionLine,
+    })
+    try {
+      popupRef.current.setLngLat([lng, lat]).setHTML(html).addTo(map)
+    } catch {
+      /* noop */
+    }
+  }, [
+    selectedAssetId,
+    activeDispatchedUav,
+    activeDispatchedDroneId,
+    uavSimPos,
+    droneSimPos,
+    sensorState.uav.running,
+    sensorState.drone.running,
+    assets,
+    activeUavDispatchTargetText,
   ])
 
   const handleCategoryClick = useCallback(
@@ -16593,60 +16966,29 @@ function BattlefieldServicePage() {
                                   : ''
                               }
                               onClick={() => {
-                                setOrbitalSarModes((m) => ({
-                                  ...m,
-                                  [selectedDetail.orbitalSarAssetId!]: 'SPOTLIGHT',
-                                }))
-                                setOrbitalSarImagePreview('spotlight')
+                                const id = selectedDetail.orbitalSarAssetId!
+                                setOrbitalSarModes((m) => ({ ...m, [id]: 'SPOTLIGHT' }))
+                                dismissOrbitalSarImagePreview()
+                                focusSarZoneByMode('SPOTLIGHT')
                               }}
-                            >
-                              Spotlight (15×15 km)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setOrbitalSarImagePreview('intensive')}
                             >
                               집중 탐지
                             </button>
                             <button
                               type="button"
                               className={
-                                orbitalSarModes[selectedDetail.orbitalSarAssetId!] === 'WIDE'
-                                  ? 'is-active'
-                                  : ''
+                                orbitalSarModes[selectedDetail.orbitalSarAssetId!] === 'WIDE' ? 'is-active' : ''
                               }
-                              onClick={() =>
-                                setOrbitalSarModes((m) => ({
-                                  ...m,
-                                  [selectedDetail.orbitalSarAssetId!]: 'WIDE',
-                                }))
-                              }
+                              onClick={() => {
+                                const id = selectedDetail.orbitalSarAssetId!
+                                setOrbitalSarModes((m) => ({ ...m, [id]: 'WIDE' }))
+                                dismissOrbitalSarImagePreview()
+                                focusSarZoneByMode('WIDE')
+                              }}
                             >
-                              광역 탐지 (ScanSAR)
+                              광역 탐지
                             </button>
                           </div>
-                          <p className="muted service-orbital-sar-detail__hint">
-                            {orbitalSarModes[selectedDetail.orbitalSarAssetId!] === 'SPOTLIGHT'
-                              ? '고해상도 소구역 감시(약 15 km × 15 km).'
-                              : 'ScanSAR형 광역 스캔(스와스 폭 약 200–500 km급을 원형으로 단순화한 데모).'}
-                          </p>
-                          <button
-                            type="button"
-                            className="service-orbital-sar-korea-btn"
-                            onClick={() => {
-                              const map = mapRef.current
-                              if (!map) return
-                              map.fitBounds(
-                                [
-                                  [KOREA_OPS_BOUNDS.west, KOREA_OPS_BOUNDS.south],
-                                  [KOREA_OPS_BOUNDS.east, KOREA_OPS_BOUNDS.north],
-                                ],
-                                { padding: 56, duration: 750, maxZoom: 7.2 },
-                              )
-                            }}
-                          >
-                            한반도 작전권역으로
-                          </button>
                         </dd>
                       </div>
                     </div>
@@ -17440,7 +17782,7 @@ function BattlefieldServicePage() {
                       sarZoneViewMode === 'SPOTLIGHT' ? ' service-start-scenario-btn--active' : ''
                     }`}
                     onClick={() => focusSarZoneByMode('SPOTLIGHT')}
-                    title="위성 SAR Spotlight 탐지 구역 점선 박스만 표시"
+                    title="위성 SAR 집중 관측 구역 점선 박스만 표시"
                   >
                     집중 탐지
                   </button>
@@ -18131,7 +18473,18 @@ function BattlefieldServicePage() {
               <button
                 type="button"
                 className="btn-secondary service-drone-split-panel__back"
-                onClick={() => setDroneInlineVideoPanel(null)}
+                onClick={() => {
+                  setDroneInlineVideoPanel(null)
+                  setSelectedAssetId(null)
+                  setSelectedDetail(null)
+                  setTacticScores(null)
+                  if (popupRef.current) {
+                    popupRef.current.remove()
+                    popupRef.current = null
+                  }
+                  enemyScenarioPopupPinnedRef.current = false
+                  handleSarExpandAlways()
+                }}
               >
                 돌아가기
               </button>
@@ -18170,12 +18523,12 @@ function BattlefieldServicePage() {
             <div className="sar-spotlight-modal sar-spotlight-modal--glow">
               <div className="sar-spotlight-modal__chrome">
                 <div className="sar-spotlight-modal__head" id="sar-spotlight-title">
-                  Spotlight · SAR 관측 구역 강조
+                  SAR 집중 관측 구역 강조
                 </div>
                 <button
                   type="button"
                   className="sar-spotlight-modal__close"
-                  aria-label="Spotlight 닫기"
+                  aria-label="SAR 집중 관측 구역 닫기"
                   onClick={dismissSarSpotlight}
                 >
                   ×
@@ -18207,7 +18560,7 @@ function BattlefieldServicePage() {
               <div className="sar-spotlight-modal__chrome">
                 <div className="sar-spotlight-modal__head" id={orbitalSarPreviewTitleId}>
                   {orbitalSarImagePreview === 'spotlight'
-                    ? 'Spotlight — SAR 인식 결과'
+                    ? 'SAR 집중 관측 구역 — SAR 인식 결과'
                     : '집중 탐지 — 변화 탐지(GRD)'}
                 </div>
                 <button
@@ -18233,7 +18586,7 @@ function BattlefieldServicePage() {
                   }
                   alt={
                     orbitalSarImagePreview === 'spotlight'
-                      ? 'SAR Spotlight 적 인식 결과'
+                      ? 'SAR 집중 관측 구역 적 인식 결과'
                       : 'GRD SAR 변화 탐지 결과'
                   }
                 />
@@ -19331,7 +19684,7 @@ function SensorTheoryPage() {
     {
       title: '최종 SAR-GMTI 결과(ROI 포함)',
       imageUrl: '/media/sar/sat-sar-step-6.png',
-      caption: 'Spotlight ROI와 확정 표적을 함께 표시해 작전 집중 감시를 지원합니다.',
+      caption: 'SAR 집중 관측 구역 ROI와 확정 표적을 함께 표시해 작전 집중 감시를 지원합니다.',
     },
     {
       title: '최종 SAR-GMTI 결과(클린 뷰)',
