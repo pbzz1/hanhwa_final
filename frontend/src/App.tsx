@@ -1820,7 +1820,10 @@ const SERVICE_ASSETS_DRONE_CIRCLE_RADIUS = 5.2
 const SERVICE_ASSETS_UAV_CIRCLE_RADIUS = 5.4
 const SERVICE_ASSETS_DRONE_SYMBOL_ICON_SIZE = 1.06
 const SERVICE_ASSETS_UAV_SYMBOL_ICON_SIZE = 1.08
-const SERVICE_ASSETS_SYMBOL_ICON_SIZE_LAYOUT: maplibregl.ExpressionSpecification = [
+/** GPS「아군 부대 위치」반영 후 해당 자산만 크게 표시 */
+const SERVICE_ASSETS_GEO_HIGHLIGHT_SYMBOL_ICON_SIZE = 1.94
+const SERVICE_ASSETS_GEO_HIGHLIGHT_CIRCLE_RADIUS = 17
+const SERVICE_ASSETS_SYMBOL_ICON_SIZE_BY_CATEGORY: maplibregl.ExpressionSpecification = [
   'match',
   ['get', 'category'],
   'DRONE',
@@ -1828,6 +1831,84 @@ const SERVICE_ASSETS_SYMBOL_ICON_SIZE_LAYOUT: maplibregl.ExpressionSpecification
   'UAV',
   SERVICE_ASSETS_UAV_SYMBOL_ICON_SIZE,
   SERVICE_FRIENDLY_SYMBOL_ICON_SIZE,
+]
+const SERVICE_ASSETS_SYMBOL_ICON_SIZE_LAYOUT: maplibregl.ExpressionSpecification = [
+  'case',
+  ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+  SERVICE_ASSETS_GEO_HIGHLIGHT_SYMBOL_ICON_SIZE,
+  SERVICE_ASSETS_SYMBOL_ICON_SIZE_BY_CATEGORY,
+]
+const SERVICE_ASSETS_CIRCLE_RADIUS_BY_CATEGORY: maplibregl.ExpressionSpecification = [
+  'match',
+  ['get', 'category'],
+  'SATELLITE_SAR',
+  9.2,
+  'GROUND_RADAR',
+  7.8,
+  'DIVISION',
+  7.5,
+  'UPPER_COMMAND',
+  8.5,
+  'SAR',
+  6.2,
+  'UAV',
+  SERVICE_ASSETS_UAV_CIRCLE_RADIUS,
+  'DRONE',
+  SERVICE_ASSETS_DRONE_CIRCLE_RADIUS,
+  'ARTILLERY',
+  6.2,
+  'ARMOR',
+  6.2,
+  6.2,
+]
+const SERVICE_ASSETS_CIRCLE_RADIUS_LAYOUT: maplibregl.ExpressionSpecification = [
+  'case',
+  ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+  SERVICE_ASSETS_GEO_HIGHLIGHT_CIRCLE_RADIUS,
+  SERVICE_ASSETS_CIRCLE_RADIUS_BY_CATEGORY,
+]
+const SERVICE_ASSETS_CIRCLE_STROKE_LAYOUT: maplibregl.ExpressionSpecification = [
+  'case',
+  ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+  4.2,
+  1.3,
+]
+const SERVICE_ASSETS_CIRCLE_STROKE_COLOR_LAYOUT: maplibregl.ExpressionSpecification = [
+  'case',
+  ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+  '#fda4af',
+  '#0b1220',
+]
+const SERVICE_ASSETS_ECHELON_TEXT_SIZE_BY_LEVEL: maplibregl.ExpressionSpecification = [
+  'match',
+  ['get', 'level'],
+  '소대',
+  13,
+  '중대',
+  12,
+  '대대',
+  12,
+  '연대',
+  11,
+  '사단',
+  10,
+  '군단',
+  9.5,
+  '특수임무부대',
+  12,
+  11,
+]
+const SERVICE_ASSETS_ECHELON_TEXT_SIZE_LAYOUT: maplibregl.ExpressionSpecification = [
+  'case',
+  ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+  16,
+  SERVICE_ASSETS_ECHELON_TEXT_SIZE_BY_LEVEL,
+]
+const SERVICE_ASSETS_LABEL_TEXT_SIZE_LAYOUT: maplibregl.ExpressionSpecification = [
+  'case',
+  ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+  13.8,
+  12.2,
 ]
 
 function drawServiceSymbolFrame(ctx: CanvasRenderingContext2D, size: number, accentColor: string) {
@@ -8560,7 +8641,9 @@ function toMapSourceData(
     echelonRankMark?: string
     enemyEchelonLevel?: UnitLevel
   }>,
+  highlightAssetId?: number | null,
 ): Parameters<GeoJSONSource['setData']>[0] {
+  const highlightId = highlightAssetId ?? null
   return {
     type: 'FeatureCollection',
     features: points.map((point) => {
@@ -8568,6 +8651,7 @@ function toMapSourceData(
         typeof point.echelonRankMark === 'string' && point.echelonRankMark.length > 0
           ? point.echelonRankMark
           : echelonRankMarkFromLevel(point.level)
+      const geoHighlight = highlightId != null && point.id === highlightId ? 1 : 0
       return {
       type: 'Feature',
       geometry: {
@@ -8598,6 +8682,7 @@ function toMapSourceData(
         grdRiskScore: point.grdRiskScore ?? null,
         echelonRankMark: echelonRankMarkOut,
         enemyEchelonLevel: point.enemyEchelonLevel ?? '',
+        geoHighlight,
         ...(typeof point.scenario_label_multi === 'string'
           ? {
               scenario_label_multi: point.scenario_label_multi,
@@ -9500,6 +9585,11 @@ function BattlefieldServicePage() {
   const [mapReady, setMapReady] = useState(false)
   const [cursorReadout, setCursorReadout] = useState<{ lat: number; lng: number; mgrs: string } | null>(null)
   const [userBattalionGeoLoading, setUserBattalionGeoLoading] = useState(false)
+  /** 전장판 외에서 진입 후 자산이 아직 없을 때 「아군 부대 위치」 재시도용 */
+  const battalionHqGeoRetryCountRef = useRef(0)
+  /** GPS 반영 직후 지도에서 눈에 띄게 표시할 아군 자산 id */
+  const [battalionHqGeoHighlightAssetId, setBattalionHqGeoHighlightAssetId] = useState<number | null>(null)
+  const battalionHqHighlightClearTimerRef = useRef<number | null>(null)
   const [layerVisible, setLayerVisible] = useState<Record<LayerToggleKey, boolean>>(() => ({
     ...DEFAULT_LAYER_VISIBLE,
   }))
@@ -10200,11 +10290,32 @@ function BattlefieldServicePage() {
 
   const handleApplyBattalionHqToUserGeolocation = useCallback(() => {
     if (userBattalionGeoLoading) return
-    const unit = friendlyUnitsRaw.find((u) => u.name === BATTALION_HQ_USER_ANCHOR_NAME)
+
+    const unit =
+      friendlyUnitsRaw.find((u) => u.name === BATTALION_HQ_USER_ANCHOR_NAME) ??
+      friendlyUnitsRaw.find((u) => isBattalionC2Unit(u)) ??
+      null
+
     if (!unit) {
-      setScenarioNotice(`「${BATTALION_HQ_USER_ANCHOR_NAME}」 부대를 찾을 수 없습니다. DB를 최신 시드로 맞춘 뒤 다시 시도하세요.`)
+      if (assetLoading && battalionHqGeoRetryCountRef.current < 24) {
+        battalionHqGeoRetryCountRef.current += 1
+        window.setTimeout(() => {
+          handleApplyBattalionHqToUserGeolocationRef.current()
+        }, 320)
+        return
+      }
+      battalionHqGeoRetryCountRef.current = 0
+      if (friendlyUnitsRaw.length === 0) {
+        setScenarioNotice('아군 부대 정보를 불러오지 못했습니다. 백엔드와 DB 연결을 확인하세요.')
+      } else {
+        setScenarioNotice(
+          `「${BATTALION_HQ_USER_ANCHOR_NAME}」 부대를 찾을 수 없습니다. DB를 최신 시드로 맞춘 뒤 다시 시도하세요.`,
+        )
+      }
       return
     }
+
+    battalionHqGeoRetryCountRef.current = 0
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setScenarioNotice('이 환경에서는 위치 서비스(Geolocation)를 사용할 수 없습니다.')
       return
@@ -10242,7 +10353,16 @@ function BattlefieldServicePage() {
           })
         }
         setUserBattalionGeoLoading(false)
-        setScenarioNotice(`${BATTALION_HQ_USER_ANCHOR_NAME} 위치를 현재 GPS 좌표로 반영했습니다.`)
+        if (battalionHqHighlightClearTimerRef.current != null) {
+          window.clearTimeout(battalionHqHighlightClearTimerRef.current)
+          battalionHqHighlightClearTimerRef.current = null
+        }
+        setBattalionHqGeoHighlightAssetId(unit.id)
+        battalionHqHighlightClearTimerRef.current = window.setTimeout(() => {
+          setBattalionHqGeoHighlightAssetId(null)
+          battalionHqHighlightClearTimerRef.current = null
+        }, 14_000)
+        setScenarioNotice('아군 부대 표기')
       },
       (err: GeolocationPositionError) => {
         setUserBattalionGeoLoading(false)
@@ -10253,7 +10373,7 @@ function BattlefieldServicePage() {
       },
       { enableHighAccuracy: true, maximumAge: 60_000, timeout: 14_000 },
     )
-  }, [friendlyUnitsRaw, userBattalionGeoLoading])
+  }, [assetLoading, friendlyUnitsRaw, userBattalionGeoLoading])
 
   const handleApplyBattalionHqToUserGeolocationRef = useRef(handleApplyBattalionHqToUserGeolocation)
   handleApplyBattalionHqToUserGeolocationRef.current = handleApplyBattalionHqToUserGeolocation
@@ -12325,29 +12445,7 @@ function BattlefieldServicePage() {
           source: SERVICE_ASSETS_SOURCE_ID,
           filter: ['!', ['has', 'point_count']],
           paint: {
-            'circle-radius': [
-              'match',
-              ['get', 'category'],
-              'SATELLITE_SAR',
-              9.2,
-              'GROUND_RADAR',
-              7.8,
-              'DIVISION',
-              7.5,
-              'UPPER_COMMAND',
-              8.5,
-              'SAR',
-              6.2,
-              'UAV',
-              SERVICE_ASSETS_UAV_CIRCLE_RADIUS,
-              'DRONE',
-              SERVICE_ASSETS_DRONE_CIRCLE_RADIUS,
-              'ARTILLERY',
-              6.2,
-              'ARMOR',
-              6.2,
-              6.2,
-            ],
+            'circle-radius': SERVICE_ASSETS_CIRCLE_RADIUS_LAYOUT,
             'circle-color': [
               'match',
               ['get', 'category'],
@@ -12371,8 +12469,8 @@ function BattlefieldServicePage() {
               SERVICE_CATEGORY_COLOR.ARMOR,
               '#f8fafc',
             ],
-            'circle-stroke-width': 1.3,
-            'circle-stroke-color': '#0b1220',
+            'circle-stroke-width': SERVICE_ASSETS_CIRCLE_STROKE_LAYOUT,
+            'circle-stroke-color': SERVICE_ASSETS_CIRCLE_STROKE_COLOR_LAYOUT,
           },
         })
       }
@@ -12437,25 +12535,7 @@ function BattlefieldServicePage() {
           ],
           layout: {
             'text-field': ['get', 'echelonRankMark'],
-            'text-size': [
-              'match',
-              ['get', 'level'],
-              '소대',
-              13,
-              '중대',
-              12,
-              '대대',
-              12,
-              '연대',
-              11,
-              '사단',
-              10,
-              '군단',
-              9.5,
-              '특수임무부대',
-              12,
-              11,
-            ],
+            'text-size': SERVICE_ASSETS_ECHELON_TEXT_SIZE_LAYOUT,
             'text-letter-spacing': [
               'match',
               ['get', 'level'],
@@ -12481,7 +12561,12 @@ function BattlefieldServicePage() {
           paint: {
             'text-color': '#14532d',
             'text-halo-color': 'rgba(255, 255, 255, 0.94)',
-            'text-halo-width': 1.65,
+            'text-halo-width': [
+              'case',
+              ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+              2.5,
+              1.65,
+            ],
           },
         })
       }
@@ -12498,7 +12583,7 @@ function BattlefieldServicePage() {
               '\n식별번호 ',
               ['to-string', ['coalesce', ['get', 'unitCode'], '-']],
             ],
-            'text-size': 12.2,
+            'text-size': SERVICE_ASSETS_LABEL_TEXT_SIZE_LAYOUT,
             'text-offset': [0, 2.18],
             'text-line-height': 1.08,
             'text-allow-overlap': true,
@@ -12508,7 +12593,12 @@ function BattlefieldServicePage() {
           paint: {
             'text-color': '#e2e8f0',
             'text-halo-color': '#020617',
-            'text-halo-width': 1.4,
+            'text-halo-width': [
+              'case',
+              ['==', ['coalesce', ['get', 'geoHighlight'], 0], 1],
+              2.2,
+              1.4,
+            ],
           },
         })
       }
@@ -14731,13 +14821,26 @@ function BattlefieldServicePage() {
 
     const source = map.getSource(SERVICE_ASSETS_SOURCE_ID)
     if (source && 'setData' in source) {
-      ;(source as GeoJSONSource).setData(toMapSourceData(assetsForBattlefieldMap))
+      ;(source as GeoJSONSource).setData(
+        toMapSourceData(assetsForBattlefieldMap, battalionHqGeoHighlightAssetId),
+      )
     }
     const symbolSource = map.getSource(SERVICE_ASSETS_SYMBOL_SOURCE_ID)
     if (symbolSource && 'setData' in symbolSource) {
-      ;(symbolSource as GeoJSONSource).setData(toMapSourceData(assetsForBattlefieldMap))
+      ;(symbolSource as GeoJSONSource).setData(
+        toMapSourceData(assetsForBattlefieldMap, battalionHqGeoHighlightAssetId),
+      )
     }
-  }, [assetsForBattlefieldMap])
+  }, [assetsForBattlefieldMap, battalionHqGeoHighlightAssetId])
+
+  useEffect(() => {
+    return () => {
+      if (battalionHqHighlightClearTimerRef.current != null) {
+        window.clearTimeout(battalionHqHighlightClearTimerRef.current)
+        battalionHqHighlightClearTimerRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const map = mapRef.current
@@ -19339,7 +19442,7 @@ function AppLayout({ user, onLogout }: AppLayoutProps) {
     void navigate('/')
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent(BATTLEFIELD_BATTALION_HQ_GEO_REQUEST_EVENT))
-    }, 280)
+    }, 780)
   }, [location.pathname, navigate])
 
   return (

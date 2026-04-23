@@ -153,8 +153,8 @@ export function isEnemyNearDmz38(lat: number): boolean {
   return delta <= 0.125
 }
 
-/** 시드 `FriendlyUnit.name` 및 전장 지도 「아군 부대 위치」 버튼과 동일해야 함 */
-export const BATTALION_HQ_USER_ANCHOR_NAME = '대대 지휘소-01'
+/** 시드 `FriendlyUnit.name` 및 전장 지도 「아군 부대 위치」 버튼과 동일해야 함 (`backend/prisma/seed.ts` 연대 전방지휘소) */
+export const BATTALION_HQ_USER_ANCHOR_NAME = '제11기계화보병연대 전방지휘소-1'
 
 export function isBattalionC2Unit(unit: { name: string }): boolean {
   return unit.name === BATTALION_HQ_USER_ANCHOR_NAME || unit.name.includes('지휘통제실')
