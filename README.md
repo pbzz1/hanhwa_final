@@ -1,4 +1,6 @@
 # Pink Ward
+<img width="2859" height="1453" alt="image" src="https://github.com/user-attachments/assets/40f971c3-162c-449b-87df-d3b30312c630" />
+
 
 > SAR 위성, UAV 영상, FMCW 레이더,드론 데이터를 활용한 전장 상황 인식 및 지휘결심 지원 웹 플랫폼
 
@@ -27,6 +29,7 @@ React 기반 프론트엔드, NestJS API 서버, PostgreSQL 데이터베이스, 
 ## 주요 기능
 
 ### 1. 전장 상황판
+<img width="2842" height="1452" alt="image" src="https://github.com/user-attachments/assets/7049c4a6-887e-4c1f-9e2f-c39ac7a4ee11" />
 
 - MapLibre 기반 지도 시각화
 - 아군 부대, 적 표적, 침투 지점, 위험지역 오버레이 표시
@@ -60,12 +63,6 @@ React 기반 프론트엔드, NestJS API 서버, PostgreSQL 데이터베이스, 
 - Prisma ORM과 PostgreSQL을 활용한 데이터 모델링
 - 사용자, 미디어, 추론 결과, 부대, 침투 지점, 전술 판단 데이터 관리
 
-### 6. AI 추론 서버 연동 구조
-
-- Python FastAPI 기반 AI 추론 서버 분리
-- YOLO, 레이더 분석, 위험도 추론 등 외부 AI 모듈 연동 가능
-- 백엔드에서 AI 서버를 프록시 형태로 호출하는 구조 설계
-
 ---
 
 ## 기술 스택
@@ -95,12 +92,3 @@ React 기반 프론트엔드, NestJS API 서버, PostgreSQL 데이터베이스, 
         | Prisma ORM
         v
 [PostgreSQL Database]
-
-[Backend - NestJS]
-        |
-        | AI_INFERENCE_URL
-        v
-[Python AI Inference Server - FastAPI]
-        |
-        v
-[YOLO / FMCW Radar / VoD Pipeline]
