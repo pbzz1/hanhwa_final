@@ -183,7 +183,6 @@ drive.mount('/content/drive')
 | `scripts/prepare_tank_merged_scenes.py` | 전차별 scene 병합 |
 | `notebooks/colab_3d_tank_training.ipynb` | Colab 전차별 3D GS 학습 노트북 |
 | `run_colmap_and_train.sh` | WSL용 COLMAP + 3D GS (단일 scene) |
-| `run_ai_inference.bat` | ai-inference 서버 실행 (YOLO) |
 
 ---
 

@@ -9,7 +9,7 @@
 
 | 구분 | 내용 |
 |------|------|
-| **무엇을 하는가** | 한반도 전장을 가정한 **지도·시나리오·센서·AI 추론을 한 흐름으로 보여 주는 웹 애플리케이션**입니다. 프론트는 **React(Vite)**, API는 **NestJS + Prisma(PostgreSQL)**, 영상·레이더 심층 추론은 **별도 Python(`ai-inference`)**으로 이어집니다. |
+| **무엇을 하는가** | 한반도 전장을 가정한 **지도·시나리오·센서 흐름을 한 화면에서 보여 주는 웹 애플리케이션**입니다. 프론트는 **React(Vite)**, API는 **NestJS + Prisma(PostgreSQL)** 기반입니다. |
 | **사용자가 보는 기능** | 로그인 후 **실시간 전장판(지도)**, **시나리오 재생(단계·타임라인)**, **YOLO 이미지/동영상 업로드**, **웹캠 모니터**, **센서 파이프라인 안내 UI**, **드론 EO/IR 전용 페이지**, (지도 위) **위험 후보 오버레이·실험 패널** 등을 씁니다. |
 | **핵심 목적** | **“센서 → 상황 인지 → 지도 표현 → (선택) AI/도로 기반 근거 → 의사결정 기록”**을 데모·발표 가능한 하나의 제품 흐름으로 묶는 것입니다. |
 
@@ -24,9 +24,9 @@
 | **프론트엔드** | `frontend/` — Vite, React 19, TypeScript, `react-router-dom`, `maplibre-gl`, `mgrs` 등 (`frontend/package.json`). |
 | **백엔드 API** | `backend/` — NestJS 11, 전역 `ValidationPipe`, CORS, 모듈: `AuthModule`, `PrismaModule`, `AiModule`, `MapModule` (`backend/src/app.module.ts`, `backend/src/main.ts`). |
 | **데이터** | PostgreSQL + Prisma 스키마 `backend/prisma/schema.prisma` — 예: `User`, `Unit`, `InfiltrationPoint`, `Media`, `InferenceResult`. 데모 데이터는 `backend/prisma/seed.ts`. |
-| **외부 HTTP** | **OSRM** — `backend/src/map/map-routing.service.ts`에서 `fetch`로 `route/v1/driving/...` 호출. **Python AI** — `backend/src/ai/ai.service.ts`의 `AI_INFERENCE_URL`(기본 `http://localhost:8001`). |
+| **외부 HTTP** | **OSRM** — `backend/src/map/map-routing.service.ts`에서 `fetch`로 `route/v1/driving/...` 호출. |
 | **인증** | **JWT** — `backend/src/auth/auth.module.ts`의 `JwtModule.register`, `passport-jwt`의 `JwtStrategy` (`backend/src/auth/jwt.strategy.ts`). 프론트는 **`localStorage` 키 `accessToken`** (`frontend/src/App.tsx`의 `App`). |
-| **연구/오프라인 파이프라인** | `vod-devkit/` — 예: `vod-devkit/21_vod_hybrid_risk_pipeline_e2e_runall.ipynb` (위험·클러스터·suppression 등 실험 문서형 노트북). 웹의 위험 목 데이터와 **개념적으로 연결**될 수 있으나, 웹이 노트북을 직접 호출하지는 않습니다. |
+| **연구/오프라인 파이프라인** | 별도 실험 노트북으로 운영(현재 저장소에는 미포함). 웹의 위험 목 데이터와 **개념적으로 연결**되며, 웹이 노트북을 직접 호출하지는 않습니다. |
 
 ## 2.2 폴더 역할 (요약)
 
@@ -36,8 +36,7 @@
 - **`frontend/src/battlefield/`** — 시나리오 위상(`battlefieldScenarioPhase.ts`), SAR/UAV/FMCW MVP, **`enemyOsrmMarch.ts`**의 OSRM URL 조합 등.
 - **`frontend/src/mock/riskZoneE2EMock.ts`** — 위험 후보 **목업 데이터**.
 - **`backend/src/auth/`**, **`backend/src/map/`**, **`backend/src/ai/`**, **`backend/src/prisma/`** — REST·DB·AI 프록시.
-- **`ai-inference/`**, **`radar-service/`** — 루트 `package.json`의 `dev:all`이 `scripts/run-ai-server.mjs`, `scripts/run-radar-service.mjs`로 기동 가능한 Python 서비스.
-- **`vod-devkit/`** — VoD·위험 파이프라인 노트북·스크립트.
+- **`radar-service/`** — 루트 `package.json`의 `dev:all`에서 함께 기동 가능한 Python 서비스.
 
 ## 2.3 엔트리 → 실행 흐름
 
@@ -89,7 +88,7 @@
 | **bcrypt** | `backend/src/auth/auth.service.ts` — `bcrypt.hash`, `bcrypt.compare`. |
 | **class-validator** | `backend/src/auth/dto/login.dto.ts`, `signup.dto.ts`; `main.ts`의 `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })`. |
 | **OSRM(외부)** | `backend/src/map/map-routing.service.ts` — `fetch`로 OSRM 라우팅 JSON 파싱. |
-| **Python AI (uvicorn)** | `scripts/run-ai-server.mjs` — `ai-inference`에서 `uvicorn main:app --port 8001`. Nest는 `AiService`에서 `fetch`로 호출. |
+| **Python radar-service (uvicorn)** | `radar-service/app/main.py` — `uvicorn app.main:app --port 8090`. |
 | **차트/캔버스(프론트)** | `App.tsx`가 `RadarCharts2D`, `TacticalRadarCanvas` 등을 import — 패키지가 아닌 **로컬 컴포넌트** 기반 시각화가 중심. |
 
 ### 왜 이런 구조인가 (코드가 말해 주는 이유)
@@ -228,7 +227,7 @@
 | 항목 | 내용 |
 |------|------|
 | **사용자 동작** | Jupyter에서 섹션별 실행·결과를 `results/`에 저장 (노트북 서두 명시). |
-| **관련 파일** | `vod-devkit/21_vod_hybrid_risk_pipeline_e2e_runall.ipynb` |
+| **관련 파일** | 별도 연구 노트북(저장소 외부 관리) |
 | **핵심** | Section 가이드: clustering, suppression, tracking, rule risk, anti-leakage, hybrid score, ranking 등 **실험 보고서형** 구조. |
 | **데이터 흐름** | 노트북 내부 — 웹 API와 직접 연결되지 않음; 다만 **프론트 `RISK_ZONE_E2E_MOCK`이 설명하는 “E2E 위험” 개념과 발표에서 연결** 가능. |
 | **포트폴리오 포인트** | “웹은 **운영 UX 목업**, 노트북은 **재현 가능한 평가 파이프라인**” 이중 자산. |
@@ -352,7 +351,7 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
 | 7 | `frontend/src/battlefield/enemyOsrmMarch.ts` | OSRM URL·폴백 | 적 경로 실패 시 | `drivingRouteRequestUrl` |
 | 8 | `frontend/src/hooks/useRiskGeoJson.ts` + `components/risk/RiskOverlayLayer.tsx` | 목→GeoJSON→MapLibre | 위험 레이어 파이프라인 | 소스 ID 상수들 |
 | 9 | `backend/src/auth/auth.service.ts` | 인증 규칙 | JWT 내용 | `createAccessToken` payload `sub`, `email` |
-| 10 | `vod-devkit/21_vod_hybrid_risk_pipeline_e2e_runall.ipynb` | 오프라인 위험 실험 | 웹 mock과 **개념 연결** | Section 목차만 |
+| 10 | 별도 연구 노트북 | 오프라인 위험 실험 | 웹 mock과 **개념 연결** | 실험 섹션 목차 중심 |
 
 ---
 
@@ -372,7 +371,7 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
 2. **아키텍처**: SPA + Nest BFF + Prisma + 선택적 Python AI.  
 3. **프론트**: 메인 MapLibre, 시나리오는 카카오+인셋, 위험은 **mock+hooks+GeoJSON**.  
 4. **백엔드**: `/auth`, `/map`, `/ai` 분리; **live 레이더는 Map이 AiService 호출**로 오케스트레이션.  
-5. **연구**: `vod-devkit` 노트북으로 **anti-leakage·ranking** 등 평가 스토리 보강.  
+5. **연구**: 별도 실험 노트북으로 **anti-leakage·ranking** 등 평가 스토리 보강.  
 6. **한계**: `App.tsx` 비대, raw SQL 전술 테이블, 외부 OSRM — 개선 로드맵 언급.
 
 ## “본인 역할이 뭐냐” (예시 — 실제 기여에 맞게 수정)
@@ -397,7 +396,7 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 | 예상 질문 | 답변 방향 | 관련 파일 |
 |-----------|-----------|-----------|
-| 위험 지도 데이터는 실제인가? | **프론트 목업** `RISK_ZONE_E2E_MOCK` — 백엔드 위험 API 없음. 노트북은 **연구 파이프**. | `frontend/src/mock/riskZoneE2EMock.ts`, `vod-devkit/21_vod_hybrid_risk_pipeline_e2e_runall.ipynb` |
+| 위험 지도 데이터는 실제인가? | **프론트 목업** `RISK_ZONE_E2E_MOCK` — 백엔드 위험 API 없음. 연구 노트북은 별도 관리. | `frontend/src/mock/riskZoneE2EMock.ts` |
 | 왜 JWT를 localStorage에? | SPA에서 구현 단순; `/auth/me`로 검증. **XSS 리스크**는 인지하고 CSP 등과 병행 필요. | `frontend/src/App.tsx` |
 | Nest와 Python 역할 분리? | Nest: **인증·DB·업로드 수신·라우팅**; Python: **무거운 추론**. live 레이더는 **Nest가 Python 호출**. | `backend/src/ai/ai.service.ts`, `backend/src/map/map.service.ts` |
 | `source=live` 없으면? | **합성 스냅샷만** 반환 — AI 호출 없음. | `backend/src/map/map.service.ts` |

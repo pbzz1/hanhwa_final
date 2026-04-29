@@ -1,6 +1,6 @@
 # 전장 C2 웹 시스템 아키텍처
 
-본 문서는 저장소 기준으로 **현재 구현된** 프론트엔드·백엔드·연동 서비스의 구조를 정리합니다. (연구용 `vod-devkit` 등 오프라인 파이프라인은 런타임에 필수는 아님.)
+본 문서는 저장소 기준으로 **현재 구현된** 프론트엔드·백엔드·연동 서비스의 구조를 정리합니다.
 
 ---
 
@@ -36,7 +36,7 @@ flowchart TB
   subgraph External["외부·선택 서비스"]
     OSRM["OSRM 라우팅 API\n(기본: 공개 데모)\n환경변수 OSRM_BASE_URL"]
     Tiles["래스터 지도 타일\n(예: Kakao 등, 프론트 env)"]
-    PyAI["Python AI 추론 서비스\n(FastAPI/Uvicorn, 기본 :8001)\n환경변수 AI_INFERENCE_URL"]
+    RadarSvc["Python radar-service\n(FastAPI/Uvicorn, 기본 :8090)"]
   end
 
   Browser --> ViteDev
@@ -45,7 +45,7 @@ flowchart TB
   Static --> Nest
   Nest --> DB
   Nest --> OSRM
-  Nest --> PyAI
+  Browser --> RadarSvc
   Browser --> Tiles
 ```
 
@@ -64,7 +64,7 @@ flowchart LR
 
   PrismaM --> DB[("PostgreSQL")]
   MapM --> OSRM["OSRM HTTP"]
-  AiM --> PyAI["AI_INFERENCE_URL"]
+  AiM -. 선택 연동 .-> RadarSvc["radar-service"]
 ```
 
 | 모듈 | 역할 |
@@ -159,7 +159,6 @@ sequenceDiagram
 | `JWT_*` / Nest auth 설정 | 토큰 서명·만료 등 (백엔드 코드·env 참고) |
 | `PORT` / `HOST` | Nest 수신 (기본 3308) |
 | `FRONTEND_ORIGIN` | 프로덕션 CORS 허용 오리진 |
-| `AI_INFERENCE_URL` | Nest `AiService` → Python 서비스 베이스 URL (기본 `http://localhost:8001`) |
 | `OSRM_BASE_URL` | 주행 경로 OSRM 인스턴스 (미설정 시 공개 데모) |
 | `VITE_API_BASE_URL` | 프론트가 API를 호출할 절대 베이스 URL (선택) |
 | `VITE_KAKAO_MAP_APP_KEY` 등 | 지도 타일/키 (프론트) |

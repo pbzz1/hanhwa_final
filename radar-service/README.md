@@ -56,7 +56,7 @@ cd radar-service
 uvicorn app.main:app --reload --port 8090
 ```
 
-저장소 루트에서 `npm run dev:all`을 쓰면 백엔드·프론트·`ai-inference`(8001)와 함께 **동일 포트(8090)** 로 자동 기동됩니다(`scripts/run-radar-service.mjs`).
+저장소 루트에서 `npm run dev:all`을 쓰면 백엔드·프론트와 함께 **동일 포트(8090)** 로 자동 기동됩니다(`scripts/run-radar-service.mjs`).
 
 - `GET /health` — 상태
 - `POST /v1/radar/process` — multipart `file` = 단일 `.bin`, 쿼리 `frame_id`, `reset_tracks`, `save_output`

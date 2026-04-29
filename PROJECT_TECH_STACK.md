@@ -25,18 +25,13 @@
 
 ---
 
-## 3) AI/추론 서비스
+## 3) 레이더 서비스
 - **API 프레임워크**: FastAPI, Uvicorn
-- **비전/추론**: Ultralytics(YOLO), OpenCV
 - **수치/ML**: NumPy, SciPy, scikit-learn
-- **3D/노트북 환경(VoD)**: Open3D, Jupyter, Matplotlib, pyproj
-- **추가 모델 스택**: MASt3R / DUSt3R(서브 requirements 참조)
+- **입력 데이터 처리**: VoD 형식 레이더 `.bin` 파이프라인
 
 참고 파일:
-- `ai-inference/requirements.txt`
 - `radar-service/requirements.txt`
-- `ai/radar-cruw/requirements-cruw.txt`
-- `vod-devkit/environment.yml`
 
 ---
 
@@ -50,4 +45,4 @@
 ## 5) 한 줄 요약 (발표용)
 - **Frontend**: React + TypeScript + Vite + MapLibre
 - **Backend**: NestJS + Prisma + JWT Auth
-- **AI Service**: FastAPI + YOLO/Computer Vision + NumPy/Scikit-learn
+- **Radar Service**: FastAPI + NumPy/Scikit-learn

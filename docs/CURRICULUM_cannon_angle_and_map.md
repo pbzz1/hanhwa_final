@@ -13,8 +13,8 @@
 
 **제거할 기존 방식**: MASt3R 기반 멀티뷰 복원, ORB + triangulation 기반 2-view 복원 (`reconstruct-3d`, `reconstruct-3d-multi`).
 
-**기존 코드 변경 (ai-inference)**  
-- `main.py`에서 MASt3R 로딩/상태(`_load_mast3r_runtime`, `MAST3R_STATE`), `reconstruct-3d`, `reconstruct-3d-multi` 엔드포인트 및 관련 헬퍼 제거 또는 비활성화.  
+**기존 Python 추론 코드 변경**  
+- 추론 서버의 `main.py`에서 MASt3R 로딩/상태(`_load_mast3r_runtime`, `MAST3R_STATE`), `reconstruct-3d`, `reconstruct-3d-multi` 엔드포인트 및 관련 헬퍼 제거 또는 비활성화.  
 - 3D 복원은 **별도 3D GS 파이프라인**(COLMAP → 3D GS 학습 스크립트)으로 수행하고, 학습된 3D GS 결과(가우시안 파라미터 또는 export된 포인트/메쉬)를 API에서 로드해 포신 축 추출·각도 대조에 사용하도록 설계.
 
 **3D Gaussian Splatting 요약** [Kerbl et al., SIGGRAPH 2023]:
@@ -217,7 +217,7 @@ Phase 4 (통합)
 | 3D 장면 표현 | **3D Gaussian Splatting** (공식 구현 또는 diff-gaussian-rasterization), COLMAP(SfM) |
 | 3D 처리/정합 | Open3D (ICP, 포인트클라우드), numpy |
 | 탄도/좌표 | numpy, (선택) pyproj (좌표계 변환) |
-| 백엔드 | 기존 FastAPI (ai-inference) 확장 |
+| 백엔드 | 기존 FastAPI 추론 서버 확장 |
 | 지도 | Leaflet + React (또는 기존 프론트 스택에 맞춤) |
 | 3D 뷰어(검증용) | 기존 Three.js/PLY 뷰어에 포신 축 오버레이 |
 
